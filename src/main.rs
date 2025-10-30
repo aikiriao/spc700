@@ -1,0 +1,58 @@
+use spc::spc_file_parser::*;
+use std::env;
+use std::fmt::Error;
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let args: Vec<String> = env::args().collect();
+
+    // 引数が合っていないときは説明を表示
+    if args.len() != 2 {
+        println!("Usage: {} SPC_FILE", args[0]);
+        return Err(Box::new(Error));
+    }
+
+    // データ読み込み
+    let data = std::fs::read(&args[1])?;
+    if let Some(spcfile) = parse_spc_file(&data) {
+        println!(
+            "Info: {} \n\
+            SPC Register PC: {:#X} A: {:#X} X: {:#X} Y: {:#X} PSW: {:#X} \n\
+            Music Title: {} \n\
+            Game Title: {} \n\
+            Creator: {} \n\
+            Comment: {} \n\
+            Generate Date: {}/{}/{} \n\
+            Music Duration: {} (sec) \n\
+            Fadeout Time: {} (msec) \n\
+            Composer: {}",
+            std::str::from_utf8(&spcfile.header.info).unwrap(),
+            spcfile.header.spc_register.pc,
+            spcfile.header.spc_register.a,
+            spcfile.header.spc_register.x,
+            spcfile.header.spc_register.y,
+            spcfile.header.spc_register.psw,
+            std::str::from_utf8(&spcfile.header.music_title)
+                .unwrap()
+                .trim_end_matches('\0'),
+            std::str::from_utf8(&spcfile.header.game_title)
+                .unwrap()
+                .trim_end_matches('\0'),
+            std::str::from_utf8(&spcfile.header.creator)
+                .unwrap()
+                .trim_end_matches('\0'),
+            std::str::from_utf8(&spcfile.header.comment)
+                .unwrap()
+                .trim_end_matches('\0'),
+            spcfile.header.generate_date,
+            spcfile.header.generate_month,
+            spcfile.header.generate_year,
+            spcfile.header.duration,
+            spcfile.header.fadeout_time,
+            std::str::from_utf8(&spcfile.header.composer)
+                .unwrap()
+                .trim_end_matches('\0'),
+        );
+    }
+
+    Ok(())
+}
