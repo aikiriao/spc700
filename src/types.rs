@@ -74,21 +74,23 @@ pub enum SPCOprand {
     DirectPageToAccumlatorY { direct_page: u8 },
     AccumlatorYToDirectPage { direct_page: u8 },
     DirectPageYPCRelative { direct_page: u8 },
+    DirectPageBit { bit: u8 },
+    DirectPageBitPCRelative { bit: u8, pc_relative: i8 },
 }
 
 pub enum SPCOpcode {
     /// NOP
     NOP,
     /// TCALL (Table Call)
-    TCALL { table_index: u8, oprand: SPCOprand },
+    TCALL { table_index: u8 },
     /// SET1
     SET1 { direct_page: u8, oprand: SPCOprand },
     /// BBS (Branch on Bit Set)
-    BBS { direct_page: u8 },
+    BBS { direct_page: u8, oprand: SPCOprand },
     /// OR (Logical OR with Memory)
     OR { oprand: SPCOprand },
     /// OR1 (Logical OR Carry Flag and Memory Bit)
-    OR1 { oprand: SPCOprand, },
+    OR1 { oprand: SPCOprand },
     /// ASL (Arithmetic Left Shift Memory)
     ASL { oprand: SPCOprand },
     /// PUSH
@@ -195,4 +197,47 @@ pub enum SPCOpcode {
     DBNZ { oprand: SPCOprand },
     /// STOP (Stop the Processor)
     STOP,
+}
+
+fn parse_opcode(ram: &[u8]) -> (SPCOpcode, u8) {
+    match ram[0] {
+        0x00 => (SPCOpcode::NOP, 1),
+        0x01 | 0x11 | 0x21 | 0x31 | 0x41 | 0x51 | 0x61 | 0x71 | 0x81 | 0x91 | 0xA1 | 0xB1
+        | 0xC1 | 0xD1 | 0xE1 | 0xF1 => (
+            SPCOpcode::TCALL {
+                table_index: (ram[0] >> 4),
+            },
+            1,
+        ),
+        0x02 | 0x22 | 0x42 | 0x62 | 0x82 | 0xA2 | 0xC2 | 0xE2 => {
+            if ram.len() < 2 {
+                panic!("Insufficient instruction length: {}", ram[0]);
+            }
+            (
+                SPCOpcode::SET1 {
+                    direct_page: (ram[0] >> 5),
+                    oprand: SPCOprand::DirectPageBit { bit: ram[1] },
+                },
+                2,
+            )
+        }
+        0x03 | 0x23 | 0x43 | 0x63 | 0x83 | 0xA3 | 0xC3 | 0xE3 => {
+            if ram.len() < 3 {
+                panic!("Insufficient instruction length: {}", ram[0]);
+            }
+            (
+                SPCOpcode::BBS {
+                    direct_page: (ram[0] >> 5),
+                    oprand: SPCOprand::DirectPageBitPCRelative {
+                        bit: ram[1],
+                        pc_relative: ram[2] as i8,
+                    },
+                },
+                3,
+            )
+        }
+        _ => {
+            panic!("Unsupported opcode: {}", ram[0]);
+        }
+    }
 }
