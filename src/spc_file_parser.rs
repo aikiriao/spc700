@@ -1,3 +1,5 @@
+use crate::types::*;
+
 /// SPCファイルタグ
 pub enum SPCFileTag {
     /// ID666フォーマット
@@ -26,20 +28,6 @@ pub enum EmuratorType {
     Snes9xpp = 0x07,
     /// SNESGT
     SNESGT = 0x08,
-}
-
-/// SPCレジスタ
-pub struct SPCRegister {
-    /// PC（プログラムカウンタ）
-    pub pc: u16,
-    /// A（アキュムレータ）
-    pub a: u8,
-    /// X（インデックスレジスタ）
-    pub x: u8,
-    /// Y（インデックスレジスタ）
-    pub y: u8,
-    /// PSW（プログラムステータスワード）
-    pub psw: u8,
 }
 
 /// SPCファイルヘッダ
