@@ -21,15 +21,8 @@ pub enum SPCOprand {
     DirectPage { direct_page: u8 },
     DirectPageX { direct_page: u8 },
     Absolute { address: u16 },
-    ImmediateToA { immediate: u8 },
-    IndirectPageToA,
-    DirectPageToA { direct_page: u8 },
-    DirectPageXToA { direct_page: u8 },
-    AbsoluteToA { address: u16 },
-    AbsoluteXToA { address: u16 },
-    AbsoluteYToA { address: u16 },
-    DirectPageXIndirectToA { direct_page: u8 },
-    DirectPageIndirectYToA { direct_page: u8 },
+    DirectPageXIndirect { direct_page: u8 },
+    DirectPageIndirectY { direct_page: u8 },
     IndirectPageToIndirectPage,
     DirectPageToDirectPage { direct_page1: u8, direct_page2: u8 },
     ImmediateToDirectPage { direct_page: u8, immediate: u8 },
@@ -79,6 +72,8 @@ pub enum SPCOprand {
     IndirectPage,
     Immediate { immediate: u8 },
     AbsoluteXIndirect { address: u16 },
+    AbsoluteX { address: u16 },
+    AbsoluteY { address: u16 },
 }
 
 pub enum SPCOpcode {
