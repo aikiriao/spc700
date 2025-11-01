@@ -99,6 +99,7 @@ fn parse_spc_header(data: &[u8]) -> Option<SPCFileHeader> {
             x: data[0x28],
             y: data[0x29],
             psw: data[0x2A],
+            sp: data[0x2B],
         },
         music_title: data[0x2E..0x2E + 32].try_into().unwrap(),
         game_title: data[0x4E..0x4E + 32].try_into().unwrap(),

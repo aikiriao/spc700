@@ -9,7 +9,7 @@ fn naive_disassemble(ram: &[u8]) {
 
     while pc < ram.len() {
         let (opcode, len) = parse_opcode(&ram[pc..]);
-        println!("{:#4X}: {:?}", pc, opcode);
+        println!("{:#06X}: {:?}", pc, opcode);
         pc += len;
     }
 }
@@ -28,7 +28,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     if let Some(spcfile) = parse_spc_file(&data) {
         println!(
             "Info: {} \n\
-            SPC Register PC: {:#X} A: {:#X} X: {:#X} Y: {:#X} PSW: {:#X} \n\
+            SPC Register PC: {:#X} A: {:#X} X: {:#X} Y: {:#X} PSW: {:#X} SP: {:#X} \n\
             Music Title: {} \n\
             Game Title: {} \n\
             Creator: {} \n\
@@ -43,6 +43,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             spcfile.header.spc_register.x,
             spcfile.header.spc_register.y,
             spcfile.header.spc_register.psw,
+            spcfile.header.spc_register.sp,
             std::str::from_utf8(&spcfile.header.music_title)
                 .unwrap()
                 .trim_end_matches('\0'),
