@@ -67,7 +67,7 @@ fn parse_opcode(ram: &[u8]) -> (SPCOpcode, usize) {
         0x07 => create_opcode_with_length_check!(
             ram,
             SPCOpcode::OR {
-                oprand: SPCOprand::DirectPageXIndirect {
+                oprand: SPCOprand::DirectPageXIndirectToA {
                     direct_page: ram[1],
                 },
             },
@@ -173,7 +173,7 @@ fn parse_opcode(ram: &[u8]) -> (SPCOpcode, usize) {
         0x1B => create_opcode_with_length_check!(
             ram,
             SPCOpcode::ASL {
-                oprand: SPCOprand::DirectPageXIndirect {
+                oprand: SPCOprand::DirectPageX {
                     direct_page: ram[1]
                 }
             },
@@ -308,6 +308,273 @@ fn parse_opcode(ram: &[u8]) -> (SPCOpcode, usize) {
             ram,
             SPCOpcode::DEC {
                 oprand: SPCOprand::YIndexRegister,
+            },
+            1
+        ),
+        0x1E => create_opcode_with_length_check!(
+            ram,
+            SPCOpcode::CMP {
+                oprand: SPCOprand::Immediate { immediate: ram[1] },
+            },
+            2
+        ),
+        0x3E => create_opcode_with_length_check!(
+            ram,
+            SPCOpcode::CMP {
+                oprand: SPCOprand::DirectPage {
+                    direct_page: ram[1]
+                },
+            },
+            2
+        ),
+        0x5E => create_opcode_with_length_check!(
+            ram,
+            SPCOpcode::CMP {
+                oprand: SPCOprand::Absolute {
+                    address: make_u16_from_u8(&ram[1..3])
+                },
+            },
+            3
+        ),
+        0x64 => create_opcode_with_length_check!(
+            ram,
+            SPCOpcode::CMP {
+                oprand: SPCOprand::DirectPageToA {
+                    direct_page: ram[1]
+                },
+            },
+            2
+        ),
+        0x65 => create_opcode_with_length_check!(
+            ram,
+            SPCOpcode::CMP {
+                oprand: SPCOprand::AbsoluteToA {
+                    address: make_u16_from_u8(&ram[1..3])
+                },
+            },
+            3
+        ),
+        0x66 => create_opcode_with_length_check!(
+            ram,
+            SPCOpcode::CMP {
+                oprand: SPCOprand::IndirectPageToA
+            },
+            1
+        ),
+        0x67 => create_opcode_with_length_check!(
+            ram,
+            SPCOpcode::CMP {
+                oprand: SPCOprand::DirectPageXIndirectToA {
+                    direct_page: ram[1]
+                }
+            },
+            2
+        ),
+        0x68 => create_opcode_with_length_check!(
+            ram,
+            SPCOpcode::CMP {
+                oprand: SPCOprand::Immediate { immediate: ram[1] }
+            },
+            2
+        ),
+        0x69 => create_opcode_with_length_check!(
+            ram,
+            SPCOpcode::CMP {
+                oprand: SPCOprand::DirectPageToDirectPage {
+                    direct_page1: ram[1],
+                    direct_page2: ram[2],
+                }
+            },
+            3
+        ),
+        0x74 => create_opcode_with_length_check!(
+            ram,
+            SPCOpcode::CMP {
+                oprand: SPCOprand::DirectPageXToA {
+                    direct_page: ram[1]
+                },
+            },
+            2
+        ),
+        0x75 => create_opcode_with_length_check!(
+            ram,
+            SPCOpcode::CMP {
+                oprand: SPCOprand::AbsoluteXToA {
+                    address: make_u16_from_u8(&ram[1..3])
+                },
+            },
+            3
+        ),
+        0x76 => create_opcode_with_length_check!(
+            ram,
+            SPCOpcode::CMP {
+                oprand: SPCOprand::AbsoluteYToA {
+                    address: make_u16_from_u8(&ram[1..3])
+                },
+            },
+            3
+        ),
+        0x77 => create_opcode_with_length_check!(
+            ram,
+            SPCOpcode::CMP {
+                oprand: SPCOprand::DirectPageIndirectYToA {
+                    direct_page: ram[1]
+                },
+            },
+            2
+        ),
+        0x78 => create_opcode_with_length_check!(
+            ram,
+            SPCOpcode::CMP {
+                oprand: SPCOprand::ImmediateToDirectPage {
+                    direct_page: ram[1],
+                    immediate: ram[2]
+                },
+            },
+            3
+        ),
+        0x79 => create_opcode_with_length_check!(
+            ram,
+            SPCOpcode::CMP {
+                oprand: SPCOprand::IndirectPageToIndirectPage
+            },
+            1
+        ),
+        0x7E => create_opcode_with_length_check!(
+            ram,
+            SPCOpcode::CMP {
+                oprand: SPCOprand::DirectPageToY {
+                    direct_page: ram[1]
+                }
+            },
+            2
+        ),
+        0xAD => create_opcode_with_length_check!(
+            ram,
+            SPCOpcode::CMP {
+                oprand: SPCOprand::ImmediateToY { immediate: ram[1] }
+            },
+            2
+        ),
+        0xC8 => create_opcode_with_length_check!(
+            ram,
+            SPCOpcode::CMP {
+                oprand: SPCOprand::ImmediateToX { immediate: ram[1] }
+            },
+            2
+        ),
+        0x1F => create_opcode_with_length_check!(
+            ram,
+            SPCOpcode::JMP {
+                oprand: SPCOprand::AbsoluteXIndirect {
+                    address: make_u16_from_u8(&ram[1..3])
+                }
+            },
+            3
+        ),
+        0x5F => create_opcode_with_length_check!(
+            ram,
+            SPCOpcode::JMP {
+                oprand: SPCOprand::Absolute {
+                    address: make_u16_from_u8(&ram[1..3])
+                }
+            },
+            3
+        ),
+        0x20 => create_opcode_with_length_check!(ram, SPCOpcode::CLRP, 1),
+        0x24 => create_opcode_with_length_check!(
+            ram,
+            SPCOpcode::AND {
+                oprand: SPCOprand::DirectPageToA {
+                    direct_page: ram[1]
+                }
+            },
+            2
+        ),
+        0x25 => create_opcode_with_length_check!(
+            ram,
+            SPCOpcode::AND {
+                oprand: SPCOprand::AbsoluteToA {
+                    address: make_u16_from_u8(&ram[1..3])
+                }
+            },
+            3
+        ),
+        0x26 => create_opcode_with_length_check!(
+            ram,
+            SPCOpcode::AND {
+                oprand: SPCOprand::IndirectPageToA
+            },
+            1
+        ),
+        0x27 => create_opcode_with_length_check!(
+            ram,
+            SPCOpcode::AND {
+                oprand: SPCOprand::DirectPageXIndirectToA {
+                    direct_page: ram[1]
+                }
+            },
+            2
+        ),
+        0x28 => create_opcode_with_length_check!(
+            ram,
+            SPCOpcode::AND {
+                oprand: SPCOprand::ImmediateToA {
+                    immediate: ram[1]
+                }
+            },
+            2
+        ),
+        0x34 => create_opcode_with_length_check!(
+            ram,
+            SPCOpcode::AND {
+                oprand: SPCOprand::DirectPageXToA {
+                    direct_page: ram[1]
+                }
+            },
+            2
+        ),
+        0x35 => create_opcode_with_length_check!(
+            ram,
+            SPCOpcode::AND {
+                oprand: SPCOprand::AbsoluteXToA {
+                    address: make_u16_from_u8(&ram[1..3])
+                }
+            },
+            3
+        ),
+        0x36 => create_opcode_with_length_check!(
+            ram,
+            SPCOpcode::AND {
+                oprand: SPCOprand::AbsoluteYToA {
+                    address: make_u16_from_u8(&ram[1..3])
+                }
+            },
+            3
+        ),
+        0x37 => create_opcode_with_length_check!(
+            ram,
+            SPCOpcode::AND {
+                oprand: SPCOprand::DirectPageIndirectYToA {
+                    direct_page: ram[1]
+                }
+            },
+            2
+        ),
+        0x38 => create_opcode_with_length_check!(
+            ram,
+            SPCOpcode::AND {
+                oprand: SPCOprand::ImmediateToDirectPage {
+                    direct_page: ram[1],
+                    immediate: ram[2]
+                }
+            },
+            3
+        ),
+        0x39 => create_opcode_with_length_check!(
+            ram,
+            SPCOpcode::AND {
+                oprand: SPCOprand::IndirectPageToIndirectPage
             },
             1
         ),

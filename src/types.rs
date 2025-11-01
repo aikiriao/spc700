@@ -33,7 +33,7 @@ pub enum SPCOprand {
     IndirectPageToIndirectPage,
     DirectPageToDirectPage { direct_page1: u8, direct_page2: u8 },
     ImmediateToDirectPage { direct_page: u8, immediate: u8 },
-    ImmediateToX { immdiate: u8 },
+    ImmediateToX { immediate: u8 },
     AbsoluteMemoryBit { address_bit: u16 },
     AbsoluteInverseMemoryBit { address_bit: u16 },
     DirectPagePCRelative { direct_page: u8, pc_relative: i8 },
@@ -77,8 +77,8 @@ pub enum SPCOprand {
     DirectPageBit { bit: u8 },
     DirectPageBitPCRelative { bit: u8, pc_relative: i8 },
     IndirectPage,
-    DirectPageXIndirect { direct_page: u8 },
     Immediate { immediate: u8 },
+    AbsoluteXIndirect { address: u16 },
 }
 
 pub enum SPCOpcode {
@@ -114,6 +114,8 @@ pub enum SPCOpcode {
     DEC { oprand: SPCOprand },
     /// CMP (Compare)
     CMP { oprand: SPCOprand },
+    /// JMP (Address Jump)
+    JMP { oprand: SPCOprand },
     /// CLRP (Clear Direct Page Flag)
     CLRP,
     /// AND (Logical AND with Memory)
