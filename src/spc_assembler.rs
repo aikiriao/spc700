@@ -1,5 +1,6 @@
 use crate::types::*;
 
+/// オペコード長チェック付き命令生成マクロ
 macro_rules! create_opcode_with_length_check {
     ($ram:expr, $opcode:expr, $length:expr) => {{
         if $ram.len() < $length {
@@ -9,7 +10,8 @@ macro_rules! create_opcode_with_length_check {
     }};
 }
 
-fn parse_opcode(ram: &[u8]) -> (SPCOpcode, usize) {
+/// RAMからオペコードを解釈
+pub fn parse_opcode(ram: &[u8]) -> (SPCOpcode, usize) {
     match ram[0] {
         0x00 => create_opcode_with_length_check!(ram, SPCOpcode::NOP, 1),
         0x01 | 0x11 | 0x21 | 0x31 | 0x41 | 0x51 | 0x61 | 0x71 | 0x81 | 0x91 | 0xA1 | 0xB1
@@ -1323,11 +1325,7 @@ fn parse_opcode(ram: &[u8]) -> (SPCOpcode, usize) {
             },
             2
         ),
-        0x6F => create_opcode_with_length_check!(
-            ram,
-            SPCOpcode::RET,
-            1
-        ),
+        0x6F => create_opcode_with_length_check!(ram, SPCOpcode::RET, 1),
         0x70 => create_opcode_with_length_check!(
             ram,
             SPCOpcode::BVS {

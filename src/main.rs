@@ -1,6 +1,18 @@
 use spc::spc_file_parser::*;
+use spc::spc_assembler::*;
 use std::env;
 use std::fmt::Error;
+
+/// バイナリをディスアセンブル
+fn naive_disassemble(ram: &[u8]) {
+    let mut pc = 0;
+
+    while pc < ram.len() {
+        let (opcode, len) = parse_opcode(&ram[pc..]);
+        println!("{:#X}: {:?}", pc, opcode);
+        pc += len;
+    }
+}
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<String> = env::args().collect();
@@ -52,6 +64,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .unwrap()
                 .trim_end_matches('\0'),
         );
+        naive_disassemble(&spcfile.ram);
     }
 
     Ok(())

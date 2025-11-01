@@ -12,6 +12,8 @@ pub struct SPCRegister {
     pub psw: u8,
 }
 
+/// SPCオペランド
+#[derive(Debug)]
 pub enum SPCOprand {
     Accumulator,
     XIndexRegister,
@@ -85,6 +87,8 @@ pub enum SPCOprand {
     YPCRelative { pc_relative: i8 },
 }
 
+/// SPCオペコード
+#[derive(Debug)]
 pub enum SPCOpcode {
     /// NOP
     NOP,
