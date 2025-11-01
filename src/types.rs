@@ -52,8 +52,8 @@ pub enum SPCOprand {
     AToDirectPage { direct_page: u8 },
     AToDirectPageX { direct_page: u8 },
     AToAbsolute { address: u16 },
-    AToAbosluteX { address: u16 },
-    AToAbosluteY { address: u16 },
+    AToAbsoluteX { address: u16 },
+    AToAbsoluteY { address: u16 },
     AToDirectPageXIndirect { direct_page: u8 },
     AToDirectPageIndirectY { direct_page: u8 },
     XToDirectPage { direct_page: u8 },
@@ -76,6 +76,9 @@ pub enum SPCOprand {
     DirectPageYPCRelative { direct_page: u8 },
     DirectPageBit { bit: u8 },
     DirectPageBitPCRelative { bit: u8, pc_relative: i8 },
+    IndirectPage,
+    DirectPageXIndirect { direct_page: u8 },
+    Immediate { immediate: u8 },
 }
 
 pub enum SPCOpcode {
@@ -96,7 +99,7 @@ pub enum SPCOpcode {
     /// PUSH
     PUSH { oprand: SPCOprand },
     /// TSET1 (Test and set memory bits)
-    TEST1 { oprand: SPCOprand },
+    TSET1 { oprand: SPCOprand },
     /// BRK (Trigger a software interrupt)
     BRK,
     /// BPL (Branch if Plus)
@@ -106,7 +109,7 @@ pub enum SPCOpcode {
     /// BBC (Branch if Memory Bit is Cleared)
     BBC { direct_page: u8, oprand: SPCOprand },
     /// DECW
-    DECW { direct_page: u8 },
+    DECW { oprand: SPCOprand },
     /// DEC (Decrement Memory)
     DEC { oprand: SPCOprand },
     /// CMP (Compare)
@@ -199,45 +202,6 @@ pub enum SPCOpcode {
     STOP,
 }
 
-fn parse_opcode(ram: &[u8]) -> (SPCOpcode, u8) {
-    match ram[0] {
-        0x00 => (SPCOpcode::NOP, 1),
-        0x01 | 0x11 | 0x21 | 0x31 | 0x41 | 0x51 | 0x61 | 0x71 | 0x81 | 0x91 | 0xA1 | 0xB1
-        | 0xC1 | 0xD1 | 0xE1 | 0xF1 => (
-            SPCOpcode::TCALL {
-                table_index: (ram[0] >> 4),
-            },
-            1,
-        ),
-        0x02 | 0x22 | 0x42 | 0x62 | 0x82 | 0xA2 | 0xC2 | 0xE2 => {
-            if ram.len() < 2 {
-                panic!("Insufficient instruction length: {}", ram[0]);
-            }
-            (
-                SPCOpcode::SET1 {
-                    direct_page: (ram[0] >> 5),
-                    oprand: SPCOprand::DirectPageBit { bit: ram[1] },
-                },
-                2,
-            )
-        }
-        0x03 | 0x23 | 0x43 | 0x63 | 0x83 | 0xA3 | 0xC3 | 0xE3 => {
-            if ram.len() < 3 {
-                panic!("Insufficient instruction length: {}", ram[0]);
-            }
-            (
-                SPCOpcode::BBS {
-                    direct_page: (ram[0] >> 5),
-                    oprand: SPCOprand::DirectPageBitPCRelative {
-                        bit: ram[1],
-                        pc_relative: ram[2] as i8,
-                    },
-                },
-                3,
-            )
-        }
-        _ => {
-            panic!("Unsupported opcode: {}", ram[0]);
-        }
-    }
+pub fn make_u16_from_u8(data: &[u8]) -> u16 {
+    ((data[0] as u16) << 8) | data[1] as u16
 }
