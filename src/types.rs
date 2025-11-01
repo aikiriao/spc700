@@ -80,6 +80,9 @@ pub enum SPCOprand {
     IndirectToA,
     DirectPageXToA { direct_page: u8 },
     DirectPageXToY { direct_page: u8 },
+    Indirect,
+    IndirectToIndirect,
+    YPCRelative { pc_relative: i8 },
 }
 
 pub enum SPCOpcode {
@@ -151,6 +154,18 @@ pub enum SPCOpcode {
     CMPW { oprand: SPCOprand },
     /// MOV (Byte Move)
     MOV { oprand: SPCOprand },
+    /// CLRC (Clear Carry Flag)
+    CLRC,
+    /// ROR (Rotate Memory Right)
+    ROR { oprand: SPCOprand },
+    /// DBNZ (Decrement and Branch if not Zero)
+    DBNZ { oprand: SPCOprand },
+    /// BVS (Return from Subroutine)
+    RET,
+    /// BVS (Branch if Overflow Flag is Set)
+    BVS { oprand: SPCOprand },
+    /// BVS (Add 16bit Memory to Accumulator)
+    ADDW { oprand: SPCOprand },
     /// RETI (Recurn from Interrupt)
     RETI,
     /// SETC (Set Carry Flag)
@@ -180,7 +195,7 @@ pub enum SPCOpcode {
     /// BCS (Branch if Carry is Set/ Branch Greater Than or Equal)
     BCS { oprand: SPCOprand },
     /// DAS (Decimal Adjust for Subtruction)
-    DAS,
+    DAS { oprand: SPCOprand },
     /// DI (Disable Interrupt)
     DI,
     /// MUL (Multiple Accumulator and Y Register)
@@ -190,7 +205,7 @@ pub enum SPCOpcode {
     /// MOVW (Word Move)
     MOVW { oprand: SPCOprand },
     /// DAA (Decimal Adjust for Addition)
-    DAA,
+    DAA { oprand: SPCOprand },
     /// CLRV (Clear Overflow Flag)
     CLRV,
     /// NOTC (NOT Carry Flag)
@@ -199,8 +214,6 @@ pub enum SPCOpcode {
     SLEEP,
     /// BEQ (Branch if Equal)
     BEQ { oprand: SPCOprand },
-    /// DBNZ (Decrement and Branch if not Zero)
-    DBNZ { oprand: SPCOprand },
     /// STOP (Stop the Processor)
     STOP,
 }

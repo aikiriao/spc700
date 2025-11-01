@@ -131,7 +131,7 @@ fn parse_opcode(ram: &[u8]) -> (SPCOpcode, usize) {
             SPCOpcode::OR {
                 oprand: SPCOprand::ImmediateToDirectPage {
                     direct_page: ram[1],
-                    immediate: ram[2],
+                    immediate: ram[2]
                 },
             },
             3
@@ -142,6 +142,15 @@ fn parse_opcode(ram: &[u8]) -> (SPCOpcode, usize) {
                 oprand: SPCOprand::IndirectPageToIndirectPage
             },
             1
+        ),
+        0x0A => create_opcode_with_length_check!(
+            ram,
+            SPCOpcode::OR1 {
+                oprand: SPCOprand::AbsoluteMemoryBit {
+                    address_bit: make_u16_from_u8(&ram[1..3]),
+                }
+            },
+            3
         ),
         0x2A => create_opcode_with_length_check!(
             ram,
@@ -523,6 +532,16 @@ fn parse_opcode(ram: &[u8]) -> (SPCOpcode, usize) {
             },
             2
         ),
+        0x29 => create_opcode_with_length_check!(
+            ram,
+            SPCOpcode::AND {
+                oprand: SPCOprand::DirectPageToDirectPage {
+                    direct_page1: ram[1],
+                    direct_page2: ram[2]
+                }
+            },
+            3
+        ),
         0x34 => create_opcode_with_length_check!(
             ram,
             SPCOpcode::AND {
@@ -573,6 +592,135 @@ fn parse_opcode(ram: &[u8]) -> (SPCOpcode, usize) {
             ram,
             SPCOpcode::AND {
                 oprand: SPCOprand::IndirectPageToIndirectPage
+            },
+            1
+        ),
+        0x2B => create_opcode_with_length_check!(
+            ram,
+            SPCOpcode::ROL {
+                oprand: SPCOprand::DirectPage {
+                    direct_page: ram[1]
+                }
+            },
+            2
+        ),
+        0x2C => create_opcode_with_length_check!(
+            ram,
+            SPCOpcode::ROL {
+                oprand: SPCOprand::Absolute {
+                    address: make_u16_from_u8(&ram[1..3])
+                }
+            },
+            3
+        ),
+        0x3B => create_opcode_with_length_check!(
+            ram,
+            SPCOpcode::ROL {
+                oprand: SPCOprand::DirectPageX {
+                    direct_page: ram[1]
+                }
+            },
+            2
+        ),
+        0x3C => create_opcode_with_length_check!(
+            ram,
+            SPCOpcode::ROL {
+                oprand: SPCOprand::Accumulator
+            },
+            1
+        ),
+        0x2E => create_opcode_with_length_check!(
+            ram,
+            SPCOpcode::CBNE {
+                oprand: SPCOprand::DirectPagePCRelative {
+                    direct_page: ram[1],
+                    pc_relative: ram[2] as i8
+                }
+            },
+            3
+        ),
+        0xDE => create_opcode_with_length_check!(
+            ram,
+            SPCOpcode::CBNE {
+                oprand: SPCOprand::DirectPageXPCRelative {
+                    direct_page: ram[1],
+                    pc_relative: ram[2] as i8,
+                }
+            },
+            3
+        ),
+        0x2F => create_opcode_with_length_check!(
+            ram,
+            SPCOpcode::BRA {
+                oprand: SPCOprand::PCRelative {
+                    pc_relative: ram[1] as i8,
+                }
+            },
+            2
+        ),
+        0x30 => create_opcode_with_length_check!(
+            ram,
+            SPCOpcode::BMI {
+                oprand: SPCOprand::PCRelative {
+                    pc_relative: ram[1] as i8,
+                }
+            },
+            2
+        ),
+        0x3A => create_opcode_with_length_check!(
+            ram,
+            SPCOpcode::INCW {
+                oprand: SPCOprand::DirectPage {
+                    direct_page: ram[1],
+                }
+            },
+            2
+        ),
+        0x3D => create_opcode_with_length_check!(
+            ram,
+            SPCOpcode::INC {
+                oprand: SPCOprand::XIndexRegister
+            },
+            1
+        ),
+        0xAB => create_opcode_with_length_check!(
+            ram,
+            SPCOpcode::INC {
+                oprand: SPCOprand::DirectPage {
+                    direct_page: ram[1]
+                }
+            },
+            2
+        ),
+        0xAC => create_opcode_with_length_check!(
+            ram,
+            SPCOpcode::INC {
+                oprand: SPCOprand::Absolute {
+                    address: make_u16_from_u8(&ram[1..3])
+                }
+            },
+            3
+        ),
+        0xBB => create_opcode_with_length_check!(
+            ram,
+            SPCOpcode::INC {
+                oprand: SPCOprand::DirectPageX {
+                    direct_page: ram[1]
+                }
+            },
+            2
+        ),
+        0xBC => create_opcode_with_length_check!(
+            ram,
+            SPCOpcode::INC {
+                oprand: SPCOprand::Accumulator
+            },
+            1
+        ),
+        0xFC => create_opcode_with_length_check!(
+            ram,
+            SPCOpcode::INC {
+                oprand: SPCOprand::YIndexRegister
             },
             1
         ),
@@ -678,7 +826,7 @@ fn parse_opcode(ram: &[u8]) -> (SPCOpcode, usize) {
             SPCOpcode::EOR {
                 oprand: SPCOprand::ImmediateToDirectPage {
                     direct_page: ram[1],
-                    immediate: ram[2],
+                    immediate: ram[2]
                 }
             },
             3
@@ -948,6 +1096,15 @@ fn parse_opcode(ram: &[u8]) -> (SPCOpcode, usize) {
             },
             2
         ),
+        0xD9 => create_opcode_with_length_check!(
+            ram,
+            SPCOpcode::MOV {
+                oprand: SPCOprand::XToDirectPageY {
+                    direct_page: ram[1]
+                }
+            },
+            2
+        ),
         0xDB => create_opcode_with_length_check!(
             ram,
             SPCOpcode::MOV {
@@ -1112,8 +1269,442 @@ fn parse_opcode(ram: &[u8]) -> (SPCOpcode, usize) {
             },
             1
         ),
-        _ => {
-            panic!("Unsupported opcode: {}", ram[0]);
-        }
+        0x60 => create_opcode_with_length_check!(ram, SPCOpcode::CLRC, 1),
+        0x6B => create_opcode_with_length_check!(
+            ram,
+            SPCOpcode::ROR {
+                oprand: SPCOprand::DirectPage {
+                    direct_page: ram[1]
+                }
+            },
+            2
+        ),
+        0x6C => create_opcode_with_length_check!(
+            ram,
+            SPCOpcode::ROR {
+                oprand: SPCOprand::Absolute {
+                    address: make_u16_from_u8(&ram[1..3])
+                }
+            },
+            3
+        ),
+        0x7B => create_opcode_with_length_check!(
+            ram,
+            SPCOpcode::ROR {
+                oprand: SPCOprand::DirectPageX {
+                    direct_page: ram[1]
+                }
+            },
+            2
+        ),
+        0x7C => create_opcode_with_length_check!(
+            ram,
+            SPCOpcode::ROR {
+                oprand: SPCOprand::Accumulator
+            },
+            1
+        ),
+        0x6E => create_opcode_with_length_check!(
+            ram,
+            SPCOpcode::DBNZ {
+                oprand: SPCOprand::DirectPagePCRelative {
+                    direct_page: ram[1],
+                    pc_relative: ram[2] as i8
+                }
+            },
+            3
+        ),
+        0xFE => create_opcode_with_length_check!(
+            ram,
+            SPCOpcode::DBNZ {
+                oprand: SPCOprand::YPCRelative {
+                    pc_relative: ram[1] as i8
+                }
+            },
+            2
+        ),
+        0x6F => create_opcode_with_length_check!(
+            ram,
+            SPCOpcode::RET,
+            1
+        ),
+        0x70 => create_opcode_with_length_check!(
+            ram,
+            SPCOpcode::BVS {
+                oprand: SPCOprand::PCRelative {
+                    pc_relative: ram[1] as i8
+                }
+            },
+            2
+        ),
+        0x7A => create_opcode_with_length_check!(
+            ram,
+            SPCOpcode::ADDW {
+                oprand: SPCOprand::DirectPage {
+                    direct_page: ram[1]
+                }
+            },
+            2
+        ),
+        0x7F => create_opcode_with_length_check!(ram, SPCOpcode::RETI, 1),
+        0x80 => create_opcode_with_length_check!(ram, SPCOpcode::SETC, 1),
+        0x84 => create_opcode_with_length_check!(
+            ram,
+            SPCOpcode::ADC {
+                oprand: SPCOprand::DirectPage {
+                    direct_page: ram[1]
+                }
+            },
+            2
+        ),
+        0x85 => create_opcode_with_length_check!(
+            ram,
+            SPCOpcode::ADC {
+                oprand: SPCOprand::Absolute {
+                    address: make_u16_from_u8(&ram[1..3])
+                }
+            },
+            3
+        ),
+        0x86 => create_opcode_with_length_check!(
+            ram,
+            SPCOpcode::ADC {
+                oprand: SPCOprand::Indirect,
+            },
+            1
+        ),
+        0x87 => create_opcode_with_length_check!(
+            ram,
+            SPCOpcode::ADC {
+                oprand: SPCOprand::DirectPageXIndirect {
+                    direct_page: ram[1]
+                },
+            },
+            2
+        ),
+        0x88 => create_opcode_with_length_check!(
+            ram,
+            SPCOpcode::ADC {
+                oprand: SPCOprand::Immediate { immediate: ram[1] },
+            },
+            2
+        ),
+        0x89 => create_opcode_with_length_check!(
+            ram,
+            SPCOpcode::ADC {
+                oprand: SPCOprand::DirectPageToDirectPage {
+                    direct_page1: ram[1],
+                    direct_page2: ram[2]
+                },
+            },
+            3
+        ),
+        0x94 => create_opcode_with_length_check!(
+            ram,
+            SPCOpcode::ADC {
+                oprand: SPCOprand::DirectPageX {
+                    direct_page: ram[1],
+                },
+            },
+            2
+        ),
+        0x95 => create_opcode_with_length_check!(
+            ram,
+            SPCOpcode::ADC {
+                oprand: SPCOprand::AbsoluteX {
+                    address: make_u16_from_u8(&ram[1..3])
+                },
+            },
+            3
+        ),
+        0x96 => create_opcode_with_length_check!(
+            ram,
+            SPCOpcode::ADC {
+                oprand: SPCOprand::AbsoluteY {
+                    address: make_u16_from_u8(&ram[1..3])
+                },
+            },
+            3
+        ),
+        0x97 => create_opcode_with_length_check!(
+            ram,
+            SPCOpcode::ADC {
+                oprand: SPCOprand::DirectPageIndirectY {
+                    direct_page: ram[1]
+                },
+            },
+            2
+        ),
+        0x98 => create_opcode_with_length_check!(
+            ram,
+            SPCOpcode::ADC {
+                oprand: SPCOprand::ImmediateToDirectPage {
+                    direct_page: ram[1],
+                    immediate: ram[2]
+                }
+            },
+            3
+        ),
+        0x99 => create_opcode_with_length_check!(
+            ram,
+            SPCOpcode::ADC {
+                oprand: SPCOprand::IndirectToIndirect
+            },
+            1
+        ),
+        0x8A => create_opcode_with_length_check!(
+            ram,
+            SPCOpcode::EOR1 {
+                oprand: SPCOprand::AbsoluteMemoryBit {
+                    address_bit: make_u16_from_u8(&ram[1..3])
+                }
+            },
+            3
+        ),
+        0x8E => create_opcode_with_length_check!(
+            ram,
+            SPCOpcode::POP {
+                oprand: SPCOprand::Accumulator
+            },
+            1
+        ),
+        0xAE => create_opcode_with_length_check!(
+            ram,
+            SPCOpcode::POP {
+                oprand: SPCOprand::XIndexRegister
+            },
+            1
+        ),
+        0xCE => create_opcode_with_length_check!(
+            ram,
+            SPCOpcode::POP {
+                oprand: SPCOprand::YIndexRegister
+            },
+            1
+        ),
+        0xEE => create_opcode_with_length_check!(
+            ram,
+            SPCOpcode::POP {
+                oprand: SPCOprand::ProgramStatusWord
+            },
+            1
+        ),
+        0x90 => create_opcode_with_length_check!(
+            ram,
+            SPCOpcode::BCC {
+                oprand: SPCOprand::PCRelative {
+                    pc_relative: ram[1] as i8
+                }
+            },
+            2
+        ),
+        0x9A => create_opcode_with_length_check!(
+            ram,
+            SPCOpcode::SUBW {
+                oprand: SPCOprand::DirectPage {
+                    direct_page: ram[1]
+                }
+            },
+            2
+        ),
+        0x9E => create_opcode_with_length_check!(ram, SPCOpcode::DIV, 1),
+        0x9F => create_opcode_with_length_check!(ram, SPCOpcode::XCN, 1),
+        0xA0 => create_opcode_with_length_check!(ram, SPCOpcode::EI, 1),
+        0xA4 => create_opcode_with_length_check!(
+            ram,
+            SPCOpcode::SBC {
+                oprand: SPCOprand::DirectPage {
+                    direct_page: ram[1]
+                }
+            },
+            1
+        ),
+        0xA5 => create_opcode_with_length_check!(
+            ram,
+            SPCOpcode::SBC {
+                oprand: SPCOprand::Absolute {
+                    address: make_u16_from_u8(&ram[1..3])
+                }
+            },
+            3
+        ),
+        0xA6 => create_opcode_with_length_check!(
+            ram,
+            SPCOpcode::SBC {
+                oprand: SPCOprand::IndirectToA
+            },
+            1
+        ),
+        0xA7 => create_opcode_with_length_check!(
+            ram,
+            SPCOpcode::SBC {
+                oprand: SPCOprand::DirectPageXIndirect {
+                    direct_page: ram[1]
+                }
+            },
+            2
+        ),
+        0xA8 => create_opcode_with_length_check!(
+            ram,
+            SPCOpcode::SBC {
+                oprand: SPCOprand::Immediate { immediate: ram[1] }
+            },
+            2
+        ),
+        0xA9 => create_opcode_with_length_check!(
+            ram,
+            SPCOpcode::SBC {
+                oprand: SPCOprand::DirectPageToDirectPage {
+                    direct_page1: ram[1],
+                    direct_page2: ram[2]
+                }
+            },
+            3
+        ),
+        0xB4 => create_opcode_with_length_check!(
+            ram,
+            SPCOpcode::SBC {
+                oprand: SPCOprand::DirectPageX {
+                    direct_page: ram[1]
+                }
+            },
+            2
+        ),
+        0xB5 => create_opcode_with_length_check!(
+            ram,
+            SPCOpcode::SBC {
+                oprand: SPCOprand::AbsoluteX {
+                    address: make_u16_from_u8(&ram[1..3])
+                }
+            },
+            3
+        ),
+        0xB6 => create_opcode_with_length_check!(
+            ram,
+            SPCOpcode::SBC {
+                oprand: SPCOprand::AbsoluteY {
+                    address: make_u16_from_u8(&ram[1..3])
+                }
+            },
+            3
+        ),
+        0xB7 => create_opcode_with_length_check!(
+            ram,
+            SPCOpcode::SBC {
+                oprand: SPCOprand::DirectPageIndirectY {
+                    direct_page: ram[1]
+                }
+            },
+            2
+        ),
+        0xB8 => create_opcode_with_length_check!(
+            ram,
+            SPCOpcode::SBC {
+                oprand: SPCOprand::ImmediateToDirectPage {
+                    direct_page: ram[1],
+                    immediate: ram[2]
+                }
+            },
+            3
+        ),
+        0xB9 => create_opcode_with_length_check!(
+            ram,
+            SPCOpcode::SBC {
+                oprand: SPCOprand::IndirectToIndirect
+            },
+            1
+        ),
+        0xAA => create_opcode_with_length_check!(
+            ram,
+            SPCOpcode::MOV1 {
+                oprand: SPCOprand::AbsoluteMemoryBitToCarrayFlag {
+                    address_bit: make_u16_from_u8(&ram[1..3])
+                }
+            },
+            3
+        ),
+        0xCA => create_opcode_with_length_check!(
+            ram,
+            SPCOpcode::MOV1 {
+                oprand: SPCOprand::CarrayFlagToAbsoluteMemoryBit {
+                    address_bit: make_u16_from_u8(&ram[1..3])
+                }
+            },
+            3
+        ),
+        0xB0 => create_opcode_with_length_check!(
+            ram,
+            SPCOpcode::BCS {
+                oprand: SPCOprand::PCRelative {
+                    pc_relative: ram[1] as i8
+                }
+            },
+            2
+        ),
+        0xBA => create_opcode_with_length_check!(
+            ram,
+            SPCOpcode::MOVW {
+                oprand: SPCOprand::DirectPageToAY {
+                    direct_page: ram[1]
+                }
+            },
+            2
+        ),
+        0xDA => create_opcode_with_length_check!(
+            ram,
+            SPCOpcode::MOVW {
+                oprand: SPCOprand::AYToDirectPage {
+                    direct_page: ram[1]
+                }
+            },
+            2
+        ),
+        0xBE => create_opcode_with_length_check!(
+            ram,
+            SPCOpcode::DAS {
+                oprand: SPCOprand::Accumulator
+            },
+            1
+        ),
+        0xC0 => create_opcode_with_length_check!(ram, SPCOpcode::DI, 1),
+        0xCF => create_opcode_with_length_check!(ram, SPCOpcode::MUL, 1),
+        0xD0 => create_opcode_with_length_check!(
+            ram,
+            SPCOpcode::BNE {
+                oprand: SPCOprand::PCRelative {
+                    pc_relative: ram[1] as i8
+                }
+            },
+            2
+        ),
+        0xDF => create_opcode_with_length_check!(
+            ram,
+            SPCOpcode::DAA {
+                oprand: SPCOprand::Accumulator
+            },
+            1
+        ),
+        0xE0 => create_opcode_with_length_check!(ram, SPCOpcode::CLRV, 1),
+        0xEA => create_opcode_with_length_check!(
+            ram,
+            SPCOpcode::BNE {
+                oprand: SPCOprand::AbsoluteMemoryBit {
+                    address_bit: make_u16_from_u8(&ram[1..3])
+                }
+            },
+            3
+        ),
+        0xED => create_opcode_with_length_check!(ram, SPCOpcode::NOTC, 1),
+        0xEF => create_opcode_with_length_check!(ram, SPCOpcode::SLEEP, 1),
+        0xF0 => create_opcode_with_length_check!(
+            ram,
+            SPCOpcode::BEQ {
+                oprand: SPCOprand::PCRelative {
+                    pc_relative: ram[1] as i8
+                }
+            },
+            2
+        ),
+        0xFF => create_opcode_with_length_check!(ram, SPCOpcode::STOP, 1),
     }
 }
