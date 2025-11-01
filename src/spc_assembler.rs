@@ -981,7 +981,7 @@ pub fn parse_opcode(ram: &[u8]) -> (SPCOpcode, usize) {
         0xBF => create_opcode_with_length_check!(
             ram,
             SPCOpcode::MOV {
-                oprand: SPCOprand::IndirectAutoIncremenToA
+                oprand: SPCOprand::IndirectAutoIncrementToA
             },
             1
         ),
@@ -1160,7 +1160,7 @@ pub fn parse_opcode(ram: &[u8]) -> (SPCOpcode, usize) {
         0xE8 => create_opcode_with_length_check!(
             ram,
             SPCOpcode::MOV {
-                oprand: SPCOprand::Immediate { immediate: ram[1] }
+                oprand: SPCOprand::ImmediateToA { immediate: ram[1] }
             },
             2
         ),
@@ -1704,5 +1704,409 @@ pub fn parse_opcode(ram: &[u8]) -> (SPCOpcode, usize) {
             2
         ),
         0xFF => create_opcode_with_length_check!(ram, SPCOpcode::STOP, 1),
+    }
+}
+
+impl SPCRegister {
+    /// ダイレクトページのアドレスを取得
+    fn get_direct_page_address(&self, direct_page: u8) -> usize {
+        if self.psw & PSW_FLAG_H != 0 {
+            0x100usize + direct_page as usize
+        } else {
+            direct_page as usize
+        }
+    }
+
+    /// 条件conditionに依存し、pswのflagのset/resetを実行
+    fn set_psw_flag(&mut self, flag: u8, condition: bool) {
+        self.psw = if condition {
+            self.psw | flag
+        } else {
+            self.psw & !flag
+        };
+    }
+}
+
+/// MOV命令の実行
+fn execute_MOV(register: &mut SPCRegister, ram: &mut [u8], oprand: &SPCOprand) {
+    let val;
+
+    // オペランドに応じて代入値と代入先を切り替え
+    match oprand {
+        SPCOprand::ImmediateToA { immediate } => {
+            val = *immediate;
+            register.a = val;
+        }
+        SPCOprand::IndirectToA => {
+            val = ram[register.x as usize];
+            register.a = val;
+        }
+        SPCOprand::IndirectAutoIncrementToA => {
+            val = ram[register.x as usize];
+            register.a = val;
+            register.x += 1;
+        }
+        SPCOprand::DirectPageToA { direct_page } => {
+            let address = register.get_direct_page_address(*direct_page);
+            val = ram[address];
+            register.a = val;
+        }
+        SPCOprand::DirectPageXToA { direct_page } => {
+            let address = register.get_direct_page_address(*direct_page) + register.x as usize;
+            val = ram[address];
+            register.a = val;
+        }
+        SPCOprand::AbsoluteToA { address } => {
+            val = ram[*address as usize];
+            register.a = val;
+        }
+        SPCOprand::AbsoluteX { address } => {
+            val = ram[(*address + register.x as u16) as usize];
+            register.a = val;
+        }
+        SPCOprand::AbsoluteY { address } => {
+            val = ram[(*address + register.y as u16) as usize];
+            register.a = val;
+        }
+        SPCOprand::DirectPageXIndirect { direct_page } => {
+            let dp_address = register.get_direct_page_address(*direct_page) + register.x as usize;
+            let address = make_u16_from_u8(&ram[dp_address..(dp_address + 2)]);
+            val = ram[address as usize];
+            register.a = val;
+        }
+        SPCOprand::DirectPageIndirectY { direct_page } => {
+            let dp_address = register.get_direct_page_address(*direct_page);
+            let address = make_u16_from_u8(&ram[dp_address..(dp_address + 2)]);
+            val = ram[(address + (register.y as u16)) as usize];
+            register.a = val;
+        }
+        SPCOprand::ImmediateToX { immediate } => {
+            val = *immediate;
+            register.x = val;
+        }
+        SPCOprand::DirectPageToX { direct_page } => {
+            let address = register.get_direct_page_address(*direct_page);
+            val = ram[address];
+            register.x = val;
+        }
+        SPCOprand::DirectPageYToX { direct_page } => {
+            let address = register.get_direct_page_address(*direct_page) + register.y as usize;
+            val = ram[address];
+            register.x = val;
+        }
+        SPCOprand::AbsoluteToX { address } => {
+            val = ram[*address as usize];
+            register.x = val;
+        }
+        SPCOprand::ImmediateToY { immediate } => {
+            val = *immediate;
+            register.y = val;
+        }
+        SPCOprand::DirectPageToY { direct_page } => {
+            let address = register.get_direct_page_address(*direct_page);
+            val = ram[address];
+            register.y = val;
+        }
+        SPCOprand::DirectPageXToY { direct_page } => {
+            let address = register.get_direct_page_address(*direct_page) + register.x as usize;
+            val = ram[address];
+            register.y = val;
+        }
+        SPCOprand::AbsoluteToY { address } => {
+            val = ram[*address as usize];
+            register.y = val;
+        }
+        SPCOprand::AToIndirect => {
+            let address = register.get_direct_page_address(register.x);
+            val = register.a;
+            ram[address] = val;
+        }
+        SPCOprand::AToIndirectAutoIncrement => {
+            let address = register.get_direct_page_address(register.x);
+            val = register.a;
+            ram[address] = val;
+            register.x += 1;
+        }
+        SPCOprand::AToDirectPage { direct_page } => {
+            let address = register.get_direct_page_address(*direct_page);
+            val = register.a;
+            ram[address] = val;
+        }
+        SPCOprand::AToDirectPageX { direct_page } => {
+            let address = register.get_direct_page_address(*direct_page) + register.x as usize;
+            val = register.a;
+            ram[address] = val;
+        }
+        SPCOprand::AToAbsolute { address } => {
+            val = register.a;
+            ram[*address as usize] = val;
+        }
+        SPCOprand::AToAbsoluteX { address } => {
+            val = register.a;
+            ram[(*address + (register.x as u16)) as usize] = val;
+        }
+        SPCOprand::AToAbsoluteY { address } => {
+            val = register.a;
+            ram[(*address + (register.y as u16)) as usize] = val;
+        }
+        SPCOprand::AToDirectPageXIndirect { direct_page } => {
+            let dp_address = register.get_direct_page_address(*direct_page) + register.x as usize;
+            let address = make_u16_from_u8(&ram[dp_address..(dp_address + 2)]);
+            val = register.a;
+            ram[address as usize] = val;
+        }
+        SPCOprand::AToDirectPageIndirectY { direct_page } => {
+            let dp_address = register.get_direct_page_address(*direct_page);
+            let address = make_u16_from_u8(&ram[dp_address..(dp_address + 2)]) + register.y as u16;
+            val = register.a;
+            ram[address as usize] = val;
+        }
+        SPCOprand::XToDirectPage { direct_page } => {
+            let address = register.get_direct_page_address(*direct_page);
+            val = register.x;
+            ram[address] = val;
+        }
+        SPCOprand::XToDirectPageY { direct_page } => {
+            let address = register.get_direct_page_address(*direct_page) + register.y as usize;
+            val = register.x;
+            ram[address] = val;
+        }
+        SPCOprand::XToAbsolute { address } => {
+            val = register.x;
+            ram[*address as usize] = val;
+        }
+        SPCOprand::YToDirectPage { direct_page } => {
+            let address = register.get_direct_page_address(*direct_page);
+            val = register.y;
+            ram[address] = val;
+        }
+        SPCOprand::YToDirectPageX { direct_page } => {
+            let address = register.get_direct_page_address(*direct_page) + register.x as usize;
+            val = register.y;
+            ram[address] = val;
+        }
+        SPCOprand::YToAbsolute { address } => {
+            val = register.y;
+            ram[*address as usize] = val;
+        }
+        SPCOprand::XToA => {
+            val = register.x;
+            register.a = val;
+        }
+        SPCOprand::YToA => {
+            val = register.y;
+            register.a = val;
+        }
+        SPCOprand::AToX => {
+            val = register.a;
+            register.x = val;
+        }
+        SPCOprand::AToY => {
+            val = register.a;
+            register.y = val;
+        }
+        SPCOprand::StackPointerToX => {
+            val = register.sp;
+            register.x = val;
+        }
+        SPCOprand::XToStackPointer => {
+            val = register.x;
+            register.sp = val;
+        }
+        SPCOprand::DirectPageToDirectPage { direct_page1, direct_page2 } => {
+            let dst_address = register.get_direct_page_address(*direct_page1);
+            let src_address = register.get_direct_page_address(*direct_page2);
+            val = ram[src_address];
+            ram[dst_address] = val;
+        }
+        SPCOprand::ImmediateToDirectPage { direct_page, immediate } => {
+            let address = register.get_direct_page_address(*direct_page);
+            val = *immediate;
+            ram[address] = val;
+        }
+        _ => panic!("Invalid oprand!"),
+    }
+
+    // フラグ更新
+    register.set_psw_flag(PSW_FLAG_N, (val & PSW_FLAG_N) != 0);
+    register.set_psw_flag(PSW_FLAG_Z, val != 0);
+}
+
+/// オペコードを実行
+pub fn execute_opcode(register: &mut SPCRegister, ram: &mut [u8], opcode: &SPCOpcode) {
+    match opcode {
+        // データ転送命令
+        SPCOpcode::MOV { oprand } => execute_MOV(register, ram, oprand),
+        SPCOpcode::TCALL { table_index } => {}
+        SPCOpcode::SET1 {
+            direct_page,
+            oprand,
+        } => {}
+        SPCOpcode::BBS {
+            direct_page,
+            oprand,
+        } => {}
+        SPCOpcode::OR { oprand } => match oprand {
+            _ => panic!("Invalid oprand!"),
+        },
+        SPCOpcode::OR1 { oprand } => match oprand {
+            _ => panic!("Invalid oprand!"),
+        },
+        SPCOpcode::ASL { oprand } => match oprand {
+            _ => panic!("Invalid oprand!"),
+        },
+        SPCOpcode::PUSH { oprand } => match oprand {
+            _ => panic!("Invalid oprand!"),
+        },
+        SPCOpcode::TSET1 { oprand } => match oprand {
+            _ => panic!("Invalid oprand!"),
+        },
+        SPCOpcode::BRK => {}
+        SPCOpcode::BPL { oprand } => match oprand {
+            _ => panic!("Invalid oprand!"),
+        },
+        SPCOpcode::CLR1 {
+            direct_page,
+            oprand,
+        } => match oprand {
+            _ => panic!("Invalid oprand!"),
+        },
+        SPCOpcode::BBC {
+            direct_page,
+            oprand,
+        } => match oprand {
+            _ => panic!("Invalid oprand!"),
+        },
+        SPCOpcode::DECW { oprand } => match oprand {
+            _ => panic!("Invalid oprand!"),
+        },
+        SPCOpcode::DEC { oprand } => match oprand {
+            _ => panic!("Invalid oprand!"),
+        },
+        SPCOpcode::CMP { oprand } => match oprand {
+            _ => panic!("Invalid oprand!"),
+        },
+        SPCOpcode::JMP { oprand } => match oprand {
+            _ => panic!("Invalid oprand!"),
+        },
+        SPCOpcode::CLRP => {}
+        SPCOpcode::AND { oprand } => match oprand {
+            _ => panic!("Invalid oprand!"),
+        },
+        SPCOpcode::ROL { oprand } => match oprand {
+            _ => panic!("Invalid oprand!"),
+        },
+        SPCOpcode::CBNE { oprand } => match oprand {
+            _ => panic!("Invalid oprand!"),
+        },
+        SPCOpcode::BRA { oprand } => match oprand {
+            _ => panic!("Invalid oprand!"),
+        },
+        SPCOpcode::BMI { oprand } => match oprand {
+            _ => panic!("Invalid oprand!"),
+        },
+        SPCOpcode::INCW { oprand } => match oprand {
+            _ => panic!("Invalid oprand!"),
+        },
+        SPCOpcode::CALL { oprand } => match oprand {
+            _ => panic!("Invalid oprand!"),
+        },
+        SPCOpcode::SETP => {}
+        SPCOpcode::EOR { oprand } => match oprand {
+            _ => panic!("Invalid oprand!"),
+        },
+        SPCOpcode::AND1 { oprand } => match oprand {
+            _ => panic!("Invalid oprand!"),
+        },
+        SPCOpcode::LSR { oprand } => match oprand {
+            _ => panic!("Invalid oprand!"),
+        },
+        SPCOpcode::TCLR1 { oprand } => match oprand {
+            _ => panic!("Invalid oprand!"),
+        },
+        SPCOpcode::PCALL { oprand } => match oprand {
+            _ => panic!("Invalid oprand!"),
+        },
+        SPCOpcode::BVC { oprand } => match oprand {
+            _ => panic!("Invalid oprand!"),
+        },
+        SPCOpcode::CMPW { oprand } => match oprand {
+            _ => panic!("Invalid oprand!"),
+        },
+        SPCOpcode::CLRC => {}
+        SPCOpcode::ROR { oprand } => match oprand {
+            _ => panic!("Invalid oprand!"),
+        },
+        SPCOpcode::DBNZ { oprand } => match oprand {
+            _ => panic!("Invalid oprand!"),
+        },
+        SPCOpcode::RET => {}
+        SPCOpcode::BVS { oprand } => match oprand {
+            _ => panic!("Invalid oprand!"),
+        },
+        SPCOpcode::ADDW { oprand } => match oprand {
+            _ => panic!("Invalid oprand!"),
+        },
+        SPCOpcode::RETI => {}
+        SPCOpcode::SETC => {}
+        SPCOpcode::ADC { oprand } => match oprand {
+            _ => panic!("Invalid oprand!"),
+        },
+        SPCOpcode::EOR1 { oprand } => match oprand {
+            _ => panic!("Invalid oprand!"),
+        },
+        SPCOpcode::POP { oprand } => match oprand {
+            _ => panic!("Invalid oprand!"),
+        },
+        SPCOpcode::BCC { oprand } => match oprand {
+            _ => panic!("Invalid oprand!"),
+        },
+        SPCOpcode::SUBW { oprand } => match oprand {
+            _ => panic!("Invalid oprand!"),
+        },
+        SPCOpcode::DIV => {}
+        SPCOpcode::XCN => {}
+        SPCOpcode::EI => {}
+        SPCOpcode::SBC { oprand } => match oprand {
+            _ => panic!("Invalid oprand!"),
+        },
+        SPCOpcode::MOV1 { oprand } => match oprand {
+            _ => panic!("Invalid oprand!"),
+        },
+        SPCOpcode::INC { oprand } => match oprand {
+            _ => panic!("Invalid oprand!"),
+        },
+        SPCOpcode::BCS { oprand } => match oprand {
+            _ => panic!("Invalid oprand!"),
+        },
+        SPCOpcode::DAS { oprand } => match oprand {
+            _ => panic!("Invalid oprand!"),
+        },
+        SPCOpcode::DI => {}
+        SPCOpcode::MUL => {}
+        SPCOpcode::BNE { oprand } => match oprand {
+            _ => panic!("Invalid oprand!"),
+        },
+        SPCOpcode::MOVW { oprand } => match oprand {
+            _ => panic!("Invalid oprand!"),
+        },
+        SPCOpcode::DAA { oprand } => match oprand {
+            _ => panic!("Invalid oprand!"),
+        },
+        SPCOpcode::CLRV => {}
+        SPCOpcode::NOTC => {}
+        SPCOpcode::BEQ { oprand } => match oprand {
+            _ => panic!("Invalid oprand!"),
+        },
+        // その他の命令
+        SPCOpcode::NOP => {
+            // 何もしない
+        }
+        SPCOpcode::SLEEP => {
+            panic!("This emulator does not support SLEEP instruction!");
+        }
+        SPCOpcode::STOP => {
+            panic!("This emulator does not support STOP instruction!");
+        }
     }
 }

@@ -1,16 +1,26 @@
 /// SPCレジスタ
 pub struct SPCRegister {
-    /// PC（プログラムカウンタ）
-    pub pc: u16,
     /// A（アキュムレータ）
     pub a: u8,
     /// X（インデックスレジスタ）
     pub x: u8,
     /// Y（インデックスレジスタ）
     pub y: u8,
+    /// SP（スタックポインタ）
+    pub sp: u8,
+    /// PC（プログラムカウンタ）
+    pub pc: u16,
     /// PSW（プログラムステータスワード）
     pub psw: u8,
 }
+
+/// PSWのアクセス用フラグ
+pub const PSW_FLAG_N: u8 = 1 << 7; /// ネガティブフラグ
+pub const PSW_FLAG_V: u8 = 1 << 6; /// オーバーフローフラグ
+pub const PSW_FLAG_P: u8 = 1 << 5; /// ダイレクトページフラグ
+pub const PSW_FLAG_H: u8 = 1 << 3; /// ハーフキャリーフラグ
+pub const PSW_FLAG_Z: u8 = 1 << 1; /// ゼロフラグ
+pub const PSW_FLAG_C: u8 = 1 << 0; /// キャリーフラグ
 
 /// SPCオペランド
 #[derive(Debug)]
@@ -76,7 +86,7 @@ pub enum SPCOprand {
     AbsoluteXIndirect { address: u16 },
     AbsoluteX { address: u16 },
     AbsoluteY { address: u16 },
-    IndirectAutoIncremenToA,
+    IndirectAutoIncrementToA,
     DirectPageToA { direct_page: u8 },
     AbsoluteToA { address: u16 },
     IndirectToA,
@@ -85,6 +95,7 @@ pub enum SPCOprand {
     Indirect,
     IndirectToIndirect,
     YPCRelative { pc_relative: i8 },
+    ImmediateToA { immediate: u8 },
 }
 
 /// SPCオペコード
