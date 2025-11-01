@@ -64,8 +64,8 @@ pub enum SPCOprand {
     XToStackPointer,
     AbsoluteMemoryBitToCarrayFlag { address_bit: u16 },
     CarrayFlagToAbsoluteMemoryBit { address_bit: u16 },
-    DirectPageToAccumlatorY { direct_page: u8 },
-    AccumlatorYToDirectPage { direct_page: u8 },
+    DirectPageToAY { direct_page: u8 },
+    AYToDirectPage { direct_page: u8 },
     DirectPageYPCRelative { direct_page: u8 },
     DirectPageBit { bit: u8 },
     DirectPageBitPCRelative { bit: u8, pc_relative: i8 },
@@ -74,6 +74,12 @@ pub enum SPCOprand {
     AbsoluteXIndirect { address: u16 },
     AbsoluteX { address: u16 },
     AbsoluteY { address: u16 },
+    IndirectAutoIncremenToA,
+    DirectPageToA { direct_page: u8 },
+    AbsoluteToA { address: u16 },
+    IndirectToA,
+    DirectPageXToA { direct_page: u8 },
+    DirectPageXToY { direct_page: u8 },
 }
 
 pub enum SPCOpcode {
@@ -136,7 +142,7 @@ pub enum SPCOpcode {
     /// LSR (Logical Right Shift Memory)
     LSR { oprand: SPCOprand },
     /// TCLR1 (Tests and Clears Memory Bits using Accumulator)
-    TCLR { oprand: SPCOprand },
+    TCLR1 { oprand: SPCOprand },
     /// PCALL (Page Call)
     PCALL { oprand: SPCOprand },
     /// BVC (Branch if Overflow Flag is Cleared)
