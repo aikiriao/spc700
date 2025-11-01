@@ -14,14 +14,6 @@ pub struct SPCRegister {
     pub psw: u8,
 }
 
-/// PSWのアクセス用フラグ
-pub const PSW_FLAG_N: u8 = 1 << 7; /// ネガティブフラグ
-pub const PSW_FLAG_V: u8 = 1 << 6; /// オーバーフローフラグ
-pub const PSW_FLAG_P: u8 = 1 << 5; /// ダイレクトページフラグ
-pub const PSW_FLAG_H: u8 = 1 << 3; /// ハーフキャリーフラグ
-pub const PSW_FLAG_Z: u8 = 1 << 1; /// ゼロフラグ
-pub const PSW_FLAG_C: u8 = 1 << 0; /// キャリーフラグ
-
 /// SPCオペランド
 #[derive(Debug)]
 pub enum SPCOprand {
@@ -79,8 +71,8 @@ pub enum SPCOprand {
     DirectPageToAY { direct_page: u8 },
     AYToDirectPage { direct_page: u8 },
     DirectPageYPCRelative { direct_page: u8 },
-    DirectPageBit { bit: u8 },
-    DirectPageBitPCRelative { bit: u8, pc_relative: i8 },
+    DirectPageBit { direct_page: u8 },
+    DirectPageBitPCRelative { direct_page: u8, pc_relative: i8 },
     IndirectPage,
     Immediate { immediate: u8 },
     AbsoluteXIndirect { address: u16 },
@@ -106,9 +98,9 @@ pub enum SPCOpcode {
     /// TCALL (Table Call)
     TCALL { table_index: u8 },
     /// SET1
-    SET1 { direct_page: u8, oprand: SPCOprand },
+    SET1 { bit: u8, oprand: SPCOprand },
     /// BBS (Branch on Bit Set)
-    BBS { direct_page: u8, oprand: SPCOprand },
+    BBS { bit: u8, oprand: SPCOprand },
     /// OR (Logical OR with Memory)
     OR { oprand: SPCOprand },
     /// OR1 (Logical OR Carry Flag and Memory Bit)
@@ -124,7 +116,7 @@ pub enum SPCOpcode {
     /// BPL (Branch if Plus)
     BPL { oprand: SPCOprand },
     /// CLR1
-    CLR1 { direct_page: u8, oprand: SPCOprand },
+    CLR1 { bit: u8, oprand: SPCOprand },
     /// BBC (Branch if Memory Bit is Cleared)
     BBC { direct_page: u8, oprand: SPCOprand },
     /// DECW

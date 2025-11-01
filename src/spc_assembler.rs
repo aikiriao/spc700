@@ -25,17 +25,19 @@ pub fn parse_opcode(ram: &[u8]) -> (SPCOpcode, usize) {
         0x02 | 0x22 | 0x42 | 0x62 | 0x82 | 0xA2 | 0xC2 | 0xE2 => create_opcode_with_length_check!(
             ram,
             SPCOpcode::SET1 {
-                direct_page: (ram[0] >> 5),
-                oprand: SPCOprand::DirectPageBit { bit: ram[1] },
+                bit: (ram[0] >> 5),
+                oprand: SPCOprand::DirectPageBit {
+                    direct_page: ram[1]
+                },
             },
             2
         ),
         0x03 | 0x23 | 0x43 | 0x63 | 0x83 | 0xA3 | 0xC3 | 0xE3 => create_opcode_with_length_check!(
             ram,
             SPCOpcode::BBS {
-                direct_page: (ram[0] >> 5),
+                bit: (ram[0] >> 5),
                 oprand: SPCOprand::DirectPageBitPCRelative {
-                    bit: ram[1],
+                    direct_page: ram[1],
                     pc_relative: ram[2] as i8,
                 },
             },
@@ -247,8 +249,10 @@ pub fn parse_opcode(ram: &[u8]) -> (SPCOpcode, usize) {
         0x12 | 0x32 | 0x52 | 0x72 | 0x92 | 0xB2 | 0xD2 | 0xF2 => create_opcode_with_length_check!(
             ram,
             SPCOpcode::CLR1 {
-                direct_page: (ram[0] >> 5),
-                oprand: SPCOprand::DirectPageBit { bit: ram[1] },
+                bit: (ram[0] >> 5),
+                oprand: SPCOprand::DirectPageBit {
+                    direct_page: ram[1]
+                },
             },
             2
         ),
@@ -257,7 +261,7 @@ pub fn parse_opcode(ram: &[u8]) -> (SPCOpcode, usize) {
             SPCOpcode::BBC {
                 direct_page: (ram[0] >> 5),
                 oprand: SPCOprand::DirectPageBitPCRelative {
-                    bit: ram[1],
+                    direct_page: ram[1],
                     pc_relative: ram[2] as i8,
                 },
             },
@@ -1707,7 +1711,23 @@ pub fn parse_opcode(ram: &[u8]) -> (SPCOpcode, usize) {
     }
 }
 
+/// ネガティブフラグ
+const PSW_FLAG_N: u8 = 1 << 7;
+/// オーバーフローフラグ
+const PSW_FLAG_V: u8 = 1 << 6;
+/// ダイレクトページフラグ
+const PSW_FLAG_P: u8 = 1 << 5;
+/// ハーフキャリーフラグ
+const PSW_FLAG_H: u8 = 1 << 3;
+/// ゼロフラグ
+const PSW_FLAG_Z: u8 = 1 << 1;
+/// キャリーフラグ
+const PSW_FLAG_C: u8 = 1 << 0;
+
 impl SPCRegister {
+    /// スタックのベースアドレス
+    const STACK_BASE_ADDRESS: usize = 0x100usize;
+
     /// ダイレクトページのアドレスを取得
     fn get_direct_page_address(&self, direct_page: u8) -> usize {
         if self.psw & PSW_FLAG_H != 0 {
@@ -1724,6 +1744,19 @@ impl SPCRegister {
         } else {
             self.psw & !flag
         };
+    }
+
+    /// スタックにデータをPUSH
+    fn push_stack(&mut self, ram: &mut [u8], value: u8) {
+        ram[Self::STACK_BASE_ADDRESS + self.sp as usize] = value;
+        self.sp += 1;
+    }
+
+    /// スタックからデータをPOP
+    fn pop_stack(&mut self, ram: &mut [u8]) -> u8 {
+        self.sp -= 1;
+        let value = ram[Self::STACK_BASE_ADDRESS + self.sp as usize];
+        value
     }
 }
 
@@ -1913,13 +1946,19 @@ fn execute_MOV(register: &mut SPCRegister, ram: &mut [u8], oprand: &SPCOprand) {
             val = register.x;
             register.sp = val;
         }
-        SPCOprand::DirectPageToDirectPage { direct_page1, direct_page2 } => {
+        SPCOprand::DirectPageToDirectPage {
+            direct_page1,
+            direct_page2,
+        } => {
             let dst_address = register.get_direct_page_address(*direct_page1);
             let src_address = register.get_direct_page_address(*direct_page2);
             val = ram[src_address];
             ram[dst_address] = val;
         }
-        SPCOprand::ImmediateToDirectPage { direct_page, immediate } => {
+        SPCOprand::ImmediateToDirectPage {
+            direct_page,
+            immediate,
+        } => {
             let address = register.get_direct_page_address(*direct_page);
             val = *immediate;
             ram[address] = val;
@@ -1937,15 +1976,43 @@ pub fn execute_opcode(register: &mut SPCRegister, ram: &mut [u8], opcode: &SPCOp
     match opcode {
         // データ転送命令
         SPCOpcode::MOV { oprand } => execute_MOV(register, ram, oprand),
-        SPCOpcode::TCALL { table_index } => {}
-        SPCOpcode::SET1 {
-            direct_page,
-            oprand,
-        } => {}
-        SPCOpcode::BBS {
-            direct_page,
-            oprand,
-        } => {}
+        // ジャンプ命令
+        SPCOpcode::TCALL { table_index } => {
+            let address = 0xFFC0usize + (*table_index * 2) as usize;
+            let jmp_pc = make_u16_from_u8(&ram[address..(address + 2)]);
+            register.push_stack(ram, ((register.pc >> 8) & 0xF) as u8);
+            register.push_stack(ram, ((register.pc >> 0) & 0xF) as u8);
+            register.pc = jmp_pc;
+        }
+        // ビット操作命令
+        SPCOpcode::SET1 { bit, oprand } => match oprand {
+            SPCOprand::DirectPageBit { direct_page } => {
+                let address = register.get_direct_page_address(*direct_page);
+                ram[address] |= 1 << (*bit);
+            }
+            _ => panic!("Invalid oprand!"),
+        },
+        // 分岐命令
+        SPCOpcode::BBS { bit, oprand } => match oprand {
+            SPCOprand::DirectPageBitPCRelative {
+                direct_page,
+                pc_relative,
+            } => {
+                let address = register.get_direct_page_address(*direct_page);
+                if ram[address] & (1 << (*bit)) != 0 {
+                    register.pc = (register.pc as i16 + *pc_relative as i16) as u16;
+                }
+            }
+            _ => panic!("Invalid oprand!"),
+        },
+        SPCOpcode::BCC { oprand } => match oprand {
+            SPCOprand::PCRelative { pc_relative } => {
+                if register.psw & PSW_FLAG_C != 0 {
+                    register.pc = (register.pc as i16 + *pc_relative as i16) as u16;
+                }
+            }
+            _ => panic!("Invalid oprand!"),
+        },
         SPCOpcode::OR { oprand } => match oprand {
             _ => panic!("Invalid oprand!"),
         },
@@ -1965,10 +2032,11 @@ pub fn execute_opcode(register: &mut SPCRegister, ram: &mut [u8], opcode: &SPCOp
         SPCOpcode::BPL { oprand } => match oprand {
             _ => panic!("Invalid oprand!"),
         },
-        SPCOpcode::CLR1 {
-            direct_page,
-            oprand,
-        } => match oprand {
+        SPCOpcode::CLR1 { bit, oprand } => match oprand {
+            SPCOprand::DirectPageBit { direct_page } => {
+                let address = register.get_direct_page_address(*direct_page);
+                ram[address] &= !(1 << (*bit));
+            }
             _ => panic!("Invalid oprand!"),
         },
         SPCOpcode::BBC {
@@ -2056,9 +2124,6 @@ pub fn execute_opcode(register: &mut SPCRegister, ram: &mut [u8], opcode: &SPCOp
             _ => panic!("Invalid oprand!"),
         },
         SPCOpcode::POP { oprand } => match oprand {
-            _ => panic!("Invalid oprand!"),
-        },
-        SPCOpcode::BCC { oprand } => match oprand {
             _ => panic!("Invalid oprand!"),
         },
         SPCOpcode::SUBW { oprand } => match oprand {
