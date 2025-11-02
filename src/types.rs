@@ -118,7 +118,7 @@ pub enum SPCOpcode {
     /// CLR1
     CLR1 { bit: u8, oprand: SPCOprand },
     /// BBC (Branch if Memory Bit is Cleared)
-    BBC { direct_page: u8, oprand: SPCOprand },
+    BBC { bit: u8, oprand: SPCOprand },
     /// DECW
     DECW { oprand: SPCOprand },
     /// DEC (Decrement Memory)
