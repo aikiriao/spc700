@@ -2219,41 +2219,51 @@ fn execute_bit_operation_with_carry(
     register.set_psw_flag(PSW_FLAG_C, ret);
 }
 
+/// INC命令の実行
+fn execute_inc(register: &mut SPCRegister, ram: &mut [u8], oprand: &SPCOprand) {
+    fn inc(a: u8) -> u8 {
+        a + 1
+    }
+    execute_inc_dec(register, ram, oprand, inc);
+}
+
 /// DEC命令の実行
 fn execute_dec(register: &mut SPCRegister, ram: &mut [u8], oprand: &SPCOprand) {
-    let mut ret;
+    fn dec(a: u8) -> u8 {
+        a - 1
+    }
+    execute_inc_dec(register, ram, oprand, dec);
+}
+
+/// INC/DEC命令の実行
+fn execute_inc_dec(register: &mut SPCRegister, ram: &mut [u8], oprand: &SPCOprand, op: fn(u8) -> u8) {
+    let ret;
 
     match oprand {
         SPCOprand::Accumulator => {
-            ret = register.a;
-            ret -= 1;
+            ret = op(register.a);
             register.a = ret;
         }
         SPCOprand::DirectPage { direct_page } => {
             let address = register.get_direct_page_address(*direct_page);
-            ret = ram[address];
-            ret -= 1;
+            ret = op(ram[address]);
             ram[address] = ret;
         }
         SPCOprand::DirectPageX { direct_page } => {
             let address = register.get_direct_page_address(*direct_page) + register.x as usize;
-            ret = ram[address];
-            ret -= 1;
+            ret = op(ram[address]);
             ram[address] = ret;
         }
         SPCOprand::Absolute { address } => {
-            ret = ram[*address as usize];
-            ret -= 1;
+            ret = op(ram[*address as usize]);
             ram[*address as usize] = ret;
         }
         SPCOprand::XIndexRegister => {
-            ret = register.x;
-            ret -= 1;
+            ret = op(register.x);
             register.x = ret;
         }
         SPCOprand::YIndexRegister => {
-            ret = register.y;
-            ret -= 1;
+            ret = op(register.y);
             register.y = ret;
         }
         _ => panic!("Invalid oprand!"),
@@ -2898,6 +2908,7 @@ pub fn execute_opcode(register: &mut SPCRegister, ram: &mut [u8], opcode: &SPCOp
             _ => panic!("Invalid oprand!"),
         },
         SPCOpcode::DEC { oprand } => execute_dec(register, ram, oprand),
+        SPCOpcode::INC { oprand } => execute_inc(register, ram, oprand),
         // 比較命令
         SPCOpcode::CMP { oprand } => execute_cmp(register, ram, oprand),
         SPCOpcode::CMPW { oprand } => match oprand {
@@ -2926,9 +2937,6 @@ pub fn execute_opcode(register: &mut SPCRegister, ram: &mut [u8], opcode: &SPCOp
         SPCOpcode::SETC => {
             register.set_psw_flag(PSW_FLAG_C, true);
         }
-        SPCOpcode::INC { oprand } => match oprand {
-            _ => panic!("Invalid oprand!"),
-        },
         SPCOpcode::BCS { oprand } => match oprand {
             _ => panic!("Invalid oprand!"),
         },
