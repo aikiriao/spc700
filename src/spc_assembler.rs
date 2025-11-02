@@ -11,7 +11,7 @@ macro_rules! create_opcode_with_length_check {
 }
 
 /// RAMからオペコードを解釈
-pub fn parse_opcode(ram: &[u8]) -> (SPCOpcode, usize) {
+pub fn parse_opcode(ram: &[u8]) -> (SPCOpcode, u16) {
     match ram[0] {
         0x00 => create_opcode_with_length_check!(ram, SPCOpcode::NOP, 1),
         0x01 | 0x11 | 0x21 | 0x31 | 0x41 | 0x51 | 0x61 | 0x71 | 0x81 | 0x91 | 0xA1 | 0xB1

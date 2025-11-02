@@ -5,12 +5,12 @@ use std::fmt::Error;
 
 /// バイナリをディスアセンブル
 fn naive_disassemble(ram: &[u8]) {
-    let mut pc = 0;
+    let mut pc = 0x100;
 
     while pc < ram.len() {
         let (opcode, len) = parse_opcode(&ram[pc..]);
         println!("{:#06X}: {:?}", pc, opcode);
-        pc += len;
+        pc += len as usize;
     }
 }
 
