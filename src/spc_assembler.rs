@@ -2514,6 +2514,12 @@ pub fn execute_opcode(register: &mut SPCRegister, ram: &mut [u8], opcode: &SPCOp
         }
         // データ転送命令
         SPCOpcode::MOV { oprand } => execute_mov(register, ram, oprand),
+        SPCOpcode::XCN => {
+            let ret = (register.x >> 4) | (register.x << 4);
+            register.x = ret;
+            register.set_psw_flag(PSW_FLAG_N, (ret >> 7) != 0);
+            register.set_psw_flag(PSW_FLAG_Z, ret == 0);
+        }
         // ジャンプ命令
         SPCOpcode::TCALL { table_index } => {
             let address = 0xFFC0usize + (*table_index * 2) as usize;
@@ -2755,11 +2761,11 @@ pub fn execute_opcode(register: &mut SPCRegister, ram: &mut [u8], opcode: &SPCOp
             SPCOprand::DirectPage { direct_page } => {
                 let address = register.get_direct_page_address(*direct_page);
                 let wval = make_u16_from_u8(&ram[address..(address + 2)]);
-                let yaval = ((register.y as u16) << 8) | register.a as u16;
-                let (ret, arith_overflow) = yaval.overflowing_add(wval);
+                let ya = ((register.y as u16) << 8) | register.a as u16;
+                let (ret, arith_overflow) = ya.overflowing_add(wval);
                 let sign_overflow =
-                    ((yaval & 0x8000) == (wval & 0x8000)) && ((yaval & 0x8000) != (ret & 0x8000));
-                let half_carry = check_half_carry_add_u16(yaval, wval);
+                    ((ya & 0x8000) == (wval & 0x8000)) && ((ya & 0x8000) != (ret & 0x8000));
+                let half_carry = check_half_carry_add_u16(ya, wval);
                 register.y = (ret >> 8) as u8 & 0xFF;
                 register.a = (ret >> 0) as u8 & 0xFF;
                 // フラグ更新
@@ -2783,11 +2789,11 @@ pub fn execute_opcode(register: &mut SPCRegister, ram: &mut [u8], opcode: &SPCOp
             SPCOprand::DirectPage { direct_page } => {
                 let address = register.get_direct_page_address(*direct_page);
                 let wval = make_u16_from_u8(&ram[address..(address + 2)]);
-                let yaval = ((register.y as u16) << 8) | register.a as u16;
-                let (ret, arith_overflow) = yaval.overflowing_sub(wval);
+                let ya = ((register.y as u16) << 8) | register.a as u16;
+                let (ret, arith_overflow) = ya.overflowing_sub(wval);
                 let sign_overflow =
-                    ((yaval & 0x8000) != (wval & 0x8000)) && ((yaval & 0x8000) != (ret & 0x8000));
-                let half_carry = check_half_carry_sub_u16(yaval, wval);
+                    ((ya & 0x8000) != (wval & 0x8000)) && ((ya & 0x8000) != (ret & 0x8000));
+                let half_carry = check_half_carry_sub_u16(ya, wval);
                 register.y = (ret >> 8) as u8 & 0xFF;
                 register.a = (ret >> 0) as u8 & 0xFF;
                 // フラグ更新
@@ -2807,6 +2813,24 @@ pub fn execute_opcode(register: &mut SPCRegister, ram: &mut [u8], opcode: &SPCOp
             }
             _ => panic!("Invalid oprand!"),
         },
+        SPCOpcode::DIV => {
+            let ya = ((register.y as u16) << 8) | register.a as u16;
+            let quot = ya / (register.x as u16);
+            let rem = ya % (register.x as u16);
+
+            if quot <= 0xFF {
+                register.a = quot as u8;
+            } else {
+                register.a = (quot & 0xFF) as u8;
+            }
+            register.y = rem as u8;
+
+            register.set_psw_flag(PSW_FLAG_N, (quot >> 8) != 0);
+            register.set_psw_flag(PSW_FLAG_V, quot > 0xFF);
+            register.set_psw_flag(PSW_FLAG_H, (register.y & 0xF) >= (register.x & 0xF));
+            register.set_psw_flag(PSW_FLAG_Z, quot == 0);
+
+        }
         SPCOpcode::DECW { oprand } => match oprand {
             SPCOprand::DirectPage { direct_page } => {
                 let address = register.get_direct_page_address(*direct_page);
@@ -2838,8 +2862,8 @@ pub fn execute_opcode(register: &mut SPCRegister, ram: &mut [u8], opcode: &SPCOp
             SPCOprand::DirectPage { direct_page } => {
                 let address = register.get_direct_page_address(*direct_page);
                 let wval = make_u16_from_u8(&ram[address..(address + 2)]) as i32;
-                let yaval = ((register.y as i32) << 8) | register.a as i32;
-                let ret = yaval - wval;
+                let ya = ((register.y as i32) << 8) | register.a as i32;
+                let ret = ya- wval;
                 // フラグ更新
                 register.set_psw_flag(PSW_FLAG_N, (ret & PSW_FLAG_N as i32) != 0);
                 register.set_psw_flag(PSW_FLAG_Z, ret == 0);
@@ -2860,8 +2884,6 @@ pub fn execute_opcode(register: &mut SPCRegister, ram: &mut [u8], opcode: &SPCOp
         SPCOpcode::SETC => {
             register.set_psw_flag(PSW_FLAG_C, true);
         }
-        SPCOpcode::DIV => {}
-        SPCOpcode::XCN => {}
         SPCOpcode::SBC { oprand } => match oprand {
             _ => panic!("Invalid oprand!"),
         },
