@@ -1648,7 +1648,7 @@ pub fn parse_opcode(ram: &[u8]) -> (SPCOpcode, u16) {
         0xBA => create_opcode_with_length_check!(
             ram,
             SPCOpcode::MOVW {
-                oprand: SPCOprand::DirectPageToAY {
+                oprand: SPCOprand::DirectPageToYA {
                     direct_page: ram[1]
                 }
             },
@@ -1657,7 +1657,7 @@ pub fn parse_opcode(ram: &[u8]) -> (SPCOpcode, u16) {
         0xDA => create_opcode_with_length_check!(
             ram,
             SPCOpcode::MOVW {
-                oprand: SPCOprand::AYToDirectPage {
+                oprand: SPCOprand::YAToDirectPage {
                     direct_page: ram[1]
                 }
             },
@@ -2555,6 +2555,21 @@ pub fn execute_opcode(register: &mut SPCRegister, ram: &mut [u8], opcode: &SPCOp
         }
         // データ転送命令
         SPCOpcode::MOV { oprand } => execute_mov(register, ram, oprand),
+        SPCOpcode::MOVW { oprand } => match oprand {
+            SPCOprand::DirectPageToYA { direct_page } => {
+                let address = register.get_direct_page_address(*direct_page);
+                register.y = ram[address + 0];
+                register.a = ram[address + 1];
+                register.set_psw_flag(PSW_FLAG_N, (register.y >> 7) != 0);
+                register.set_psw_flag(PSW_FLAG_N, (register.y == 0) && (register.a == 0));
+            }
+            SPCOprand::YAToDirectPage { direct_page } => {
+                let address = register.get_direct_page_address(*direct_page);
+                ram[address + 0] = register.y;
+                ram[address + 1] = register.a;
+            }
+            _ => panic!("Invalid oprand!"),
+        },
         SPCOpcode::XCN => {
             let ret = (register.x >> 4) | (register.x << 4);
             register.x = ret;
@@ -3014,9 +3029,6 @@ pub fn execute_opcode(register: &mut SPCRegister, ram: &mut [u8], opcode: &SPCOp
                 register.set_psw_flag(PSW_FLAG_Z, ret == 0);
                 register.set_psw_flag(PSW_FLAG_C, carry);
             }
-            _ => panic!("Invalid oprand!"),
-        },
-        SPCOpcode::MOVW { oprand } => match oprand {
             _ => panic!("Invalid oprand!"),
         },
         SPCOpcode::CLRV => {}
