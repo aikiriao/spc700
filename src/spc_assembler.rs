@@ -2980,6 +2980,13 @@ pub fn execute_opcode(register: &mut SPCRegister, ram: &mut [u8], opcode: &SPCOp
         SPCOpcode::SETC => {
             register.set_psw_flag(PSW_FLAG_C, true);
         }
+        SPCOpcode::CLRV => {
+            register.set_psw_flag(PSW_FLAG_V, false);
+            register.set_psw_flag(PSW_FLAG_H, false);
+        }
+        SPCOpcode::NOTC => {
+            register.set_psw_flag(PSW_FLAG_C, !register.test_psw_flag(PSW_FLAG_C));
+        }
         // 十進補正命令
         SPCOpcode::DAS { oprand } => match oprand {
             SPCOprand::Accumulator => {
@@ -3031,8 +3038,6 @@ pub fn execute_opcode(register: &mut SPCRegister, ram: &mut [u8], opcode: &SPCOp
             }
             _ => panic!("Invalid oprand!"),
         },
-        SPCOpcode::CLRV => {}
-        SPCOpcode::NOTC => {}
         SPCOpcode::BEQ { oprand } => match oprand {
             _ => panic!("Invalid oprand!"),
         },
