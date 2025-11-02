@@ -2031,13 +2031,19 @@ fn execute_or(register: &mut SPCRegister, ram: &mut [u8], oprand: &SPCOprand) {
             ret = ram[dst_address] | ram[src_address];
             ram[dst_address] = ret;
         }
-        SPCOprand::DirectPageToDirectPage { direct_page1, direct_page2 } => {
+        SPCOprand::DirectPageToDirectPage {
+            direct_page1,
+            direct_page2,
+        } => {
             let dst_address = register.get_direct_page_address(*direct_page1);
             let src_address = register.get_direct_page_address(*direct_page2);
             ret = ram[dst_address] | ram[src_address];
             ram[dst_address] = ret;
         }
-        SPCOprand::ImmediateToDirectPage { direct_page, immediate } => {
+        SPCOprand::ImmediateToDirectPage {
+            direct_page,
+            immediate,
+        } => {
             let address = register.get_direct_page_address(*direct_page);
             ret = ram[address] | *immediate;
             ram[address] = ret;
@@ -2092,7 +2098,7 @@ fn execute_asl(register: &mut SPCRegister, ram: &mut [u8], oprand: &SPCOprand) {
 /// メモリビットのアドレスとビット位置を取得
 fn get_address_bit(address_bit: u16) -> (u8, usize) {
     let bit_pos = ((address_bit >> 13) & 0x07) as u8;
-    let address = ((address_bit >>  0) & 0x1F) as usize;
+    let address = ((address_bit >> 0) & 0x1F) as usize;
     (bit_pos, address)
 }
 
@@ -2161,13 +2167,25 @@ pub fn execute_opcode(register: &mut SPCRegister, ram: &mut [u8], opcode: &SPCOp
         // 論理演算命令
         SPCOpcode::OR { oprand } => execute_or(register, ram, oprand),
         SPCOpcode::ASL { oprand } => execute_asl(register, ram, oprand),
+        // スタック操作命令
         SPCOpcode::PUSH { oprand } => match oprand {
+            SPCOprand::Accumulator => {
+                register.push_stack(ram, register.a);
+            }
+            SPCOprand::XIndexRegister => {
+                register.push_stack(ram, register.x);
+            }
+            SPCOprand::YIndexRegister => {
+                register.push_stack(ram, register.y);
+            }
+            SPCOprand::ProgramStatusWord => {
+                register.push_stack(ram, register.psw);
+            }
             _ => panic!("Invalid oprand!"),
         },
         SPCOpcode::TSET1 { oprand } => match oprand {
             _ => panic!("Invalid oprand!"),
         },
-        SPCOpcode::BRK => {}
         SPCOpcode::BPL { oprand } => match oprand {
             _ => panic!("Invalid oprand!"),
         },
@@ -2254,7 +2272,6 @@ pub fn execute_opcode(register: &mut SPCRegister, ram: &mut [u8], opcode: &SPCOp
         SPCOpcode::ADDW { oprand } => match oprand {
             _ => panic!("Invalid oprand!"),
         },
-        SPCOpcode::RETI => {}
         SPCOpcode::SETC => {}
         SPCOpcode::ADC { oprand } => match oprand {
             _ => panic!("Invalid oprand!"),
@@ -2302,6 +2319,13 @@ pub fn execute_opcode(register: &mut SPCRegister, ram: &mut [u8], opcode: &SPCOp
         SPCOpcode::BEQ { oprand } => match oprand {
             _ => panic!("Invalid oprand!"),
         },
+        // 割り込み命令
+        SPCOpcode::BRK => {
+            panic!("This emulator does not support BRK instruction!");
+        }
+        SPCOpcode::RETI => {
+            panic!("This emulator does not support RETI instruction!");
+        }
         // その他の命令
         SPCOpcode::NOP => {
             // 何もしない
