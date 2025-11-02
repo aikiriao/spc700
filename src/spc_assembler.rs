@@ -2554,6 +2554,14 @@ pub fn execute_opcode(register: &mut SPCRegister, ram: &mut [u8], opcode: &SPCOp
         },
         SPCOpcode::OR1 { oprand } => execute_or1(register, ram, oprand),
         SPCOpcode::AND1 { oprand } => execute_and1(register, ram, oprand),
+        SPCOpcode::EOR1 { oprand } => match oprand {
+            SPCOprand::AbsoluteBit { address_bit } => {
+                let (bit_pos, address) = get_address_bit(*address_bit);
+                let ret = (register.psw & PSW_FLAG_C) ^ ((ram[address] >> bit_pos) & 0x1);
+                register.set_psw_flag(PSW_FLAG_C, ret != 0);
+            }
+            _ => panic!("Invalid oprand!"),
+        },
         SPCOpcode::TCLR1 { oprand } => match oprand {
             SPCOprand::Absolute { address } => {
                 let ret = ram[*address as usize] & !register.a;
@@ -2698,6 +2706,21 @@ pub fn execute_opcode(register: &mut SPCRegister, ram: &mut [u8], opcode: &SPCOp
             }
             _ => panic!("Invalid oprand!"),
         },
+        SPCOpcode::POP { oprand } => match oprand {
+            SPCOprand::Accumulator => {
+                register.a = register.pop_stack(ram);
+            }
+            SPCOprand::XIndexRegister => {
+                register.x = register.pop_stack(ram);
+            }
+            SPCOprand::YIndexRegister => {
+                register.y = register.pop_stack(ram);
+            }
+            SPCOprand::ProgramStatusWord => {
+                register.psw = register.pop_stack(ram);
+            }
+            _ => panic!("Invalid oprand!"),
+        },
         SPCOpcode::TSET1 { oprand } => match oprand {
             SPCOprand::Absolute { address } => {
                 let addr = *address as usize;
@@ -2789,12 +2812,6 @@ pub fn execute_opcode(register: &mut SPCRegister, ram: &mut [u8], opcode: &SPCOp
         SPCOpcode::SETC => {
             register.set_psw_flag(PSW_FLAG_C, true);
         }
-        SPCOpcode::EOR1 { oprand } => match oprand {
-            _ => panic!("Invalid oprand!"),
-        },
-        SPCOpcode::POP { oprand } => match oprand {
-            _ => panic!("Invalid oprand!"),
-        },
         SPCOpcode::SUBW { oprand } => match oprand {
             _ => panic!("Invalid oprand!"),
         },
