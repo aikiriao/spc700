@@ -2387,6 +2387,11 @@ pub fn execute_opcode(register: &mut SPCRegister, ram: &mut [u8], opcode: &SPCOp
             }
             _ => panic!("Invalid oprand!"),
         },
+        SPCOpcode::RET => {
+            let low = register.pop_stack(ram) as u16;
+            let high = register.pop_stack(ram) as u16;
+            register.pc = (high << 8) | low;
+        }
         // ビット操作命令
         SPCOpcode::SET1 { bit, oprand } => match oprand {
             SPCOprand::DirectPageBit { direct_page } => {
@@ -2610,7 +2615,6 @@ pub fn execute_opcode(register: &mut SPCRegister, ram: &mut [u8], opcode: &SPCOp
         SPCOpcode::CLRC => {
             register.set_psw_flag(PSW_FLAG_C, false);
         }
-        SPCOpcode::RET => {}
         SPCOpcode::BVS { oprand } => match oprand {
             _ => panic!("Invalid oprand!"),
         },
