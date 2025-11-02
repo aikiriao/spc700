@@ -2363,12 +2363,10 @@ fn execute_adc(register: &mut SPCRegister, ram: &mut [u8], oprand: &SPCOprand) {
         if carry {
             ret += 1;
         }
-        let sign_overflow = (((ret & 0x80) != 0) && ((a & 0x80) == 0) && ((b & 0x80) == 0))
-            || (((ret & 0x80) == 0) && ((a & 0x80) != 0) && ((b & 0x80) != 0));
         (
             (ret & 0xFF) as u8,
             (ret & 0x100) != 0,
-            sign_overflow,
+            ((a & 0x80) == (b & 0x80)) && (((a & 0x80) as u16) != (ret & 0x80)),
             check_half_carry_add(a, b),
         )
     }
@@ -2377,6 +2375,7 @@ fn execute_adc(register: &mut SPCRegister, ram: &mut [u8], oprand: &SPCOprand) {
         SPCOprand::Immediate { immediate } => {
             (ret, arith_overflow, sign_overflow, half_carry) =
                 add_core(register.a, *immediate, register.test_psw_flag(PSW_FLAG_C));
+            register.a = ret;
         }
         SPCOprand::IndirectPage => {
             (ret, arith_overflow, sign_overflow, half_carry) = add_core(
@@ -2384,16 +2383,19 @@ fn execute_adc(register: &mut SPCRegister, ram: &mut [u8], oprand: &SPCOprand) {
                 ram[register.x as usize],
                 register.test_psw_flag(PSW_FLAG_C),
             );
+            register.a = ret;
         }
         SPCOprand::DirectPage { direct_page } => {
             let address = register.get_direct_page_address(*direct_page);
             (ret, arith_overflow, sign_overflow, half_carry) =
                 add_core(register.a, ram[address], register.test_psw_flag(PSW_FLAG_C));
+            register.a = ret;
         }
         SPCOprand::DirectPageX { direct_page } => {
             let address = register.get_direct_page_address(*direct_page) + register.x as usize;
             (ret, arith_overflow, sign_overflow, half_carry) =
                 add_core(register.a, ram[address], register.test_psw_flag(PSW_FLAG_C));
+            register.a = ret;
         }
         SPCOprand::Absolute { address } => {
             (ret, arith_overflow, sign_overflow, half_carry) = add_core(
@@ -2401,6 +2403,7 @@ fn execute_adc(register: &mut SPCRegister, ram: &mut [u8], oprand: &SPCOprand) {
                 ram[*address as usize],
                 register.test_psw_flag(PSW_FLAG_C),
             );
+            register.a = ret;
         }
         SPCOprand::AbsoluteX { address } => {
             let addr = *address + register.x as u16;
@@ -2409,6 +2412,7 @@ fn execute_adc(register: &mut SPCRegister, ram: &mut [u8], oprand: &SPCOprand) {
                 ram[addr as usize],
                 register.test_psw_flag(PSW_FLAG_C),
             );
+            register.a = ret;
         }
         SPCOprand::AbsoluteY { address } => {
             let addr = *address + register.y as u16;
@@ -2417,16 +2421,19 @@ fn execute_adc(register: &mut SPCRegister, ram: &mut [u8], oprand: &SPCOprand) {
                 ram[addr as usize],
                 register.test_psw_flag(PSW_FLAG_C),
             );
+            register.a = ret;
         }
         SPCOprand::DirectPageXIndirect { direct_page } => {
             let address = register.get_direct_page_x_indexed_indirect_address(ram, *direct_page);
             (ret, arith_overflow, sign_overflow, half_carry) =
                 add_core(register.a, ram[address], register.test_psw_flag(PSW_FLAG_C));
+            register.a = ret;
         }
         SPCOprand::DirectPageIndirectY { direct_page } => {
             let address = register.get_direct_page_indirect_y_indexed_address(ram, *direct_page);
             (ret, arith_overflow, sign_overflow, half_carry) =
                 add_core(register.a, ram[address], register.test_psw_flag(PSW_FLAG_C));
+            register.a = ret;
         }
         SPCOprand::IndirectPageToIndirectPage => {
             let address1 = register.get_direct_page_address(register.x);
@@ -2436,6 +2443,7 @@ fn execute_adc(register: &mut SPCRegister, ram: &mut [u8], oprand: &SPCOprand) {
                 ram[address2],
                 register.test_psw_flag(PSW_FLAG_C),
             );
+            ram[address1] = ret;
         }
         SPCOprand::DirectPageToDirectPage {
             direct_page1,
@@ -2448,6 +2456,7 @@ fn execute_adc(register: &mut SPCRegister, ram: &mut [u8], oprand: &SPCOprand) {
                 ram[address2],
                 register.test_psw_flag(PSW_FLAG_C),
             );
+            ram[address1] = ret;
         }
         SPCOprand::ImmediateToDirectPage {
             direct_page,
@@ -2456,6 +2465,7 @@ fn execute_adc(register: &mut SPCRegister, ram: &mut [u8], oprand: &SPCOprand) {
             let address = register.get_direct_page_address(*direct_page);
             (ret, arith_overflow, sign_overflow, half_carry) =
                 add_core(ram[address], *immediate, register.test_psw_flag(PSW_FLAG_C));
+            ram[address] = ret;
         }
         _ => panic!("Invalid oprand!"),
     }
