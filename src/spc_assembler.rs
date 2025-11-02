@@ -1775,8 +1775,7 @@ impl SPCRegister {
     /// スタックからデータをPOP
     fn pop_stack(&mut self, ram: &mut [u8]) -> u8 {
         self.sp -= 1;
-        let value = ram[Self::STACK_BASE_ADDRESS + self.sp as usize];
-        value
+        ram[Self::STACK_BASE_ADDRESS + self.sp as usize]
     }
 }
 
