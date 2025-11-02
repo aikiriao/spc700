@@ -2595,6 +2595,22 @@ pub fn execute_opcode(register: &mut SPCRegister, ram: &mut [u8], opcode: &SPCOp
             _ => panic!("Invalid oprand!"),
         },
         SPCOpcode::OR1 { oprand } => execute_or1(register, ram, oprand),
+        SPCOpcode::MOV1 { oprand } => match oprand {
+            SPCOprand::AbsoluteMemoryBitToCarrayFlag { address_bit } => {
+                let (bit_pos, address) = get_address_bit(*address_bit);
+                register.set_psw_flag(PSW_FLAG_C, ((ram[address] >> bit_pos) & 0x1) != 0);
+            }
+            SPCOprand::CarrayFlagToAbsoluteMemoryBit { address_bit } => {
+                let (bit_pos, address) = get_address_bit(*address_bit);
+                let mask = (register.psw & PSW_FLAG_C) << bit_pos;
+                ram[address] = if mask != 0 {
+                    ram[address] | mask
+                } else {
+                    ram[address] & !mask
+                };
+            }
+            _ => panic!("Invalid oprand!"),
+        },
         SPCOpcode::AND1 { oprand } => execute_and1(register, ram, oprand),
         SPCOpcode::EOR1 { oprand } => match oprand {
             SPCOprand::AbsoluteBit { address_bit } => {
@@ -2910,9 +2926,6 @@ pub fn execute_opcode(register: &mut SPCRegister, ram: &mut [u8], opcode: &SPCOp
         SPCOpcode::SETC => {
             register.set_psw_flag(PSW_FLAG_C, true);
         }
-        SPCOpcode::MOV1 { oprand } => match oprand {
-            _ => panic!("Invalid oprand!"),
-        },
         SPCOpcode::INC { oprand } => match oprand {
             _ => panic!("Invalid oprand!"),
         },
