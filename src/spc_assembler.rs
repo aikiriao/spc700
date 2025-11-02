@@ -329,14 +329,16 @@ pub fn parse_opcode(ram: &[u8]) -> (SPCOpcode, usize) {
         0x1E => create_opcode_with_length_check!(
             ram,
             SPCOpcode::CMP {
-                oprand: SPCOprand::Immediate { immediate: ram[1] },
+                oprand: SPCOprand::AbsoluteToX {
+                    address: make_u16_from_u8(&ram[1..3]),
+                },
             },
-            2
+            3
         ),
         0x3E => create_opcode_with_length_check!(
             ram,
             SPCOpcode::CMP {
-                oprand: SPCOprand::DirectPage {
+                oprand: SPCOprand::DirectPageToX {
                     direct_page: ram[1]
                 },
             },
@@ -345,7 +347,7 @@ pub fn parse_opcode(ram: &[u8]) -> (SPCOpcode, usize) {
         0x5E => create_opcode_with_length_check!(
             ram,
             SPCOpcode::CMP {
-                oprand: SPCOprand::Absolute {
+                oprand: SPCOprand::AbsoluteToY {
                     address: make_u16_from_u8(&ram[1..3])
                 },
             },
@@ -1833,7 +1835,7 @@ fn execute_mov(register: &mut SPCRegister, ram: &mut [u8], oprand: &SPCOprand) {
             val = *immediate;
             register.x = val;
         }
-        SPCOprand::DirectPageToX { direct_page } => {
+        SPCOprand::DirectPage { direct_page } => {
             let address = register.get_direct_page_address(*direct_page);
             val = ram[address];
             register.x = val;
@@ -1987,53 +1989,82 @@ fn execute_mov(register: &mut SPCRegister, ram: &mut [u8], oprand: &SPCOprand) {
 
 /// OR命令の実行
 fn execute_or(register: &mut SPCRegister, ram: &mut [u8], oprand: &SPCOprand) {
+    fn or(a: u8, b: u8) -> u8 {
+        a | b
+    }
+    execute_binary_logical_operation(register, ram, oprand, or);
+}
+
+/// AND命令の実行
+fn execute_and(register: &mut SPCRegister, ram: &mut [u8], oprand: &SPCOprand) {
+    fn and(a: u8, b: u8) -> u8 {
+        a & b
+    }
+    execute_binary_logical_operation(register, ram, oprand, and);
+}
+
+/// AND命令の実行
+fn execute_eor(register: &mut SPCRegister, ram: &mut [u8], oprand: &SPCOprand) {
+    fn eor(a: u8, b: u8) -> u8 {
+        a ^ b
+    }
+    execute_binary_logical_operation(register, ram, oprand, eor);
+}
+
+/// 2項論理演算の実行
+fn execute_binary_logical_operation(
+    register: &mut SPCRegister,
+    ram: &mut [u8],
+    oprand: &SPCOprand,
+    op: fn(u8, u8) -> u8,
+) {
     let ret;
 
     match oprand {
         SPCOprand::Immediate { immediate } => {
-            ret = register.a | *immediate;
+            ret = op(register.a, *immediate);
             register.a = ret;
         }
         SPCOprand::IndirectPage => {
-            ret = register.a | ram[register.x as usize];
+            ret = op(register.a, ram[register.x as usize]);
             register.a = ret;
         }
         SPCOprand::DirectPage { direct_page } => {
             let address = register.get_direct_page_address(*direct_page);
-            ret = register.a | ram[address];
+            ret = op(register.a, ram[address]);
             register.a = ret;
         }
         SPCOprand::DirectPageX { direct_page } => {
             let address = register.get_direct_page_address(*direct_page) + register.x as usize;
-            ret = register.a | ram[address];
+            ret = op(register.a, ram[address]);
             register.a = ret;
         }
         SPCOprand::Absolute { address } => {
-            ret = register.a | ram[*address as usize];
+            ret = op(register.a, ram[*address as usize]);
             register.a = ret;
         }
         SPCOprand::AbsoluteX { address } => {
-            ret = register.a | ram[(*address + register.x as u16) as usize];
+            ret = op(register.a, ram[(*address + register.x as u16) as usize]);
             register.a = ret;
         }
         SPCOprand::AbsoluteY { address } => {
-            ret = register.a | ram[(*address + register.y as u16) as usize];
+            ret = op(register.a, ram[(*address + register.y as u16) as usize]);
             register.a = ret;
         }
         SPCOprand::DirectPageXIndirect { direct_page } => {
             let address = register.get_direct_page_x_indexed_indirect_address(ram, *direct_page);
-            ret = register.a | ram[address];
+            ret = op(register.a, ram[address]);
             register.a = ret;
         }
         SPCOprand::DirectPageIndirectY { direct_page } => {
             let address = register.get_direct_page_indirect_y_indexed_address(ram, *direct_page);
-            ret = register.a | ram[address];
+            ret = op(register.a, ram[address]);
             register.a = ret;
         }
         SPCOprand::IndirectPageToIndirectPage => {
             let dst_address = register.get_direct_page_address(register.x);
             let src_address = register.get_direct_page_address(register.y);
-            ret = ram[dst_address] | ram[src_address];
+            ret = op(ram[dst_address], ram[src_address]);
             ram[dst_address] = ret;
         }
         SPCOprand::DirectPageToDirectPage {
@@ -2042,7 +2073,7 @@ fn execute_or(register: &mut SPCRegister, ram: &mut [u8], oprand: &SPCOprand) {
         } => {
             let dst_address = register.get_direct_page_address(*direct_page1);
             let src_address = register.get_direct_page_address(*direct_page2);
-            ret = ram[dst_address] | ram[src_address];
+            ret = op(ram[dst_address], ram[src_address]);
             ram[dst_address] = ret;
         }
         SPCOprand::ImmediateToDirectPage {
@@ -2050,7 +2081,7 @@ fn execute_or(register: &mut SPCRegister, ram: &mut [u8], oprand: &SPCOprand) {
             immediate,
         } => {
             let address = register.get_direct_page_address(*direct_page);
-            ret = ram[address] | *immediate;
+            ret = op(ram[address], *immediate);
             ram[address] = ret;
         }
         _ => panic!("Invalid oprand!"),
@@ -2063,32 +2094,70 @@ fn execute_or(register: &mut SPCRegister, ram: &mut [u8], oprand: &SPCOprand) {
 
 /// ASL命令の実行
 fn execute_asl(register: &mut SPCRegister, ram: &mut [u8], oprand: &SPCOprand) {
+    fn asl(a: u8) -> u8 {
+        a << 1
+    }
+    execute_unary_bit_opration(register, ram, oprand, asl);
+}
+
+/// ROL命令の実行
+fn execute_rol(register: &mut SPCRegister, ram: &mut [u8], oprand: &SPCOprand) {
+    fn rol(a: u8) -> u8 {
+        let msb = a >> 7;
+        a << 1 | msb
+    }
+    execute_unary_bit_opration(register, ram, oprand, rol);
+}
+
+/// ROR命令の実行
+fn execute_ror(register: &mut SPCRegister, ram: &mut [u8], oprand: &SPCOprand) {
+    fn ror(a: u8) -> u8 {
+        let lsb = a & 1;
+        a >> 1 | lsb << 7
+    }
+    execute_unary_bit_opration(register, ram, oprand, ror);
+}
+
+/// LSR命令の実行
+fn execute_lsr(register: &mut SPCRegister, ram: &mut [u8], oprand: &SPCOprand) {
+    fn lsr(a: u8) -> u8 {
+        a >> 1
+    }
+    execute_unary_bit_opration(register, ram, oprand, lsr);
+}
+
+/// 単項ビット演算命令の実行
+fn execute_unary_bit_opration(
+    register: &mut SPCRegister,
+    ram: &mut [u8],
+    oprand: &SPCOprand,
+    op: fn(u8) -> u8,
+) {
     let ret;
     let prev_msb;
 
     match oprand {
         SPCOprand::Accumulator => {
-            let val = register.a;
             prev_msb = (register.a >> 7) & 0x1;
-            register.a <<= 1;
+            register.a = op(register.a);
             ret = register.a;
         }
         SPCOprand::DirectPage { direct_page } => {
             let address = register.get_direct_page_address(*direct_page);
             prev_msb = (ram[address] >> 7) & 0x1;
-            ram[address] <<= 1;
+            ram[address] = op(ram[address]);
             ret = ram[address];
         }
         SPCOprand::DirectPageX { direct_page } => {
             let address = register.get_direct_page_address(*direct_page) + register.x as usize;
             prev_msb = (ram[address] >> 7) & 0x1;
-            ram[address] <<= 1;
+            ram[address] = op(ram[address]);
             ret = ram[address];
         }
         SPCOprand::Absolute { address } => {
             let addr = *address as usize;
             prev_msb = (ram[addr] >> 7) & 0x1;
-            ram[addr] <<= 1;
+            ram[addr] = op(ram[addr]);
             ret = ram[addr];
         }
         _ => panic!("Invalid oprand!"),
@@ -2215,33 +2284,39 @@ fn execute_cmp(register: &mut SPCRegister, ram: &mut [u8], oprand: &SPCOprand) {
             let address2 = register.get_direct_page_address(register.y);
             ret = ram[address1] as i16 - ram[address2] as i16;
         }
-        SPCOprand::DirectPageToDirectPage { direct_page1, direct_page2 } => {
+        SPCOprand::DirectPageToDirectPage {
+            direct_page1,
+            direct_page2,
+        } => {
             let address1 = register.get_direct_page_address(*direct_page1);
             let address2 = register.get_direct_page_address(*direct_page2);
             ret = ram[address1] as i16 - ram[address2] as i16;
         }
-        SPCOprand::ImmediateToDirectPage { direct_page, immediate } => {
+        SPCOprand::ImmediateToDirectPage {
+            direct_page,
+            immediate,
+        } => {
             let address = register.get_direct_page_address(*direct_page);
             ret = ram[address] as i16 - *immediate as i16;
         }
         SPCOprand::ImmediateToX { immediate } => {
             ret = register.x as i16 - *immediate as i16;
         }
-        SPCOprand::DirectPage { direct_page } => {
+        SPCOprand::DirectPageToX { direct_page } => {
             let address = register.get_direct_page_address(*direct_page);
             ret = register.x as i16 - ram[address] as i16;
         }
-        SPCOprand::AbsoluteX { address } => {
+        SPCOprand::AbsoluteToX { address } => {
             ret = register.x as i16 - ram[*address as usize] as i16;
         }
         SPCOprand::ImmediateToY { immediate } => {
             ret = register.y as i16 - *immediate as i16;
         }
-        SPCOprand::DirectPage { direct_page } => {
+        SPCOprand::DirectPageToY { direct_page } => {
             let address = register.get_direct_page_address(*direct_page);
             ret = register.y as i16 - ram[address] as i16;
         }
-        SPCOprand::AbsoluteY { address } => {
+        SPCOprand::AbsoluteToY { address } => {
             ret = register.y as i16 - ram[*address as usize] as i16;
         }
         _ => panic!("Invalid oprand!"),
@@ -2256,6 +2331,9 @@ fn execute_cmp(register: &mut SPCRegister, ram: &mut [u8], oprand: &SPCOprand) {
 /// オペコードを実行
 pub fn execute_opcode(register: &mut SPCRegister, ram: &mut [u8], opcode: &SPCOpcode) {
     match opcode {
+        SPCOpcode::NOP => {
+            // 何もしない
+        }
         // データ転送命令
         SPCOpcode::MOV { oprand } => execute_mov(register, ram, oprand),
         // ジャンプ命令
@@ -2266,6 +2344,17 @@ pub fn execute_opcode(register: &mut SPCRegister, ram: &mut [u8], opcode: &SPCOp
             register.push_stack(ram, ((register.pc >> 0) & 0xFF) as u8);
             register.pc = jmp_pc;
         }
+        SPCOpcode::JMP { oprand } => match oprand {
+            SPCOprand::Absolute { address } => {
+                register.pc = *address;
+            }
+            SPCOprand::AbsoluteXIndirect { address } => {
+                let addr = (*address + register.x as u16) as usize;
+                let jmp_pc = make_u16_from_u8(&ram[addr..(addr + 2)]);
+                register.pc = jmp_pc;
+            }
+            _ => panic!("Invalid oprand!"),
+        },
         // ビット操作命令
         SPCOpcode::SET1 { bit, oprand } => match oprand {
             SPCOprand::DirectPageBit { direct_page } => {
@@ -2317,8 +2406,13 @@ pub fn execute_opcode(register: &mut SPCRegister, ram: &mut [u8], opcode: &SPCOp
             _ => panic!("Invalid oprand!"),
         },
         // 論理演算命令
-        SPCOpcode::OR { oprand } => execute_or(register, ram, oprand),
+        SPCOpcode::AND { oprand } => execute_and(register, ram, oprand),
         SPCOpcode::ASL { oprand } => execute_asl(register, ram, oprand),
+        SPCOpcode::EOR { oprand } => execute_eor(register, ram, oprand),
+        SPCOpcode::LSR { oprand } => execute_lsr(register, ram, oprand),
+        SPCOpcode::OR { oprand } => execute_or(register, ram, oprand),
+        SPCOpcode::ROL { oprand } => execute_rol(register, ram, oprand),
+        SPCOpcode::ROR { oprand } => execute_ror(register, ram, oprand),
         // スタック操作命令
         SPCOpcode::PUSH { oprand } => match oprand {
             SPCOprand::Accumulator => {
@@ -2369,16 +2463,10 @@ pub fn execute_opcode(register: &mut SPCRegister, ram: &mut [u8], opcode: &SPCOp
         SPCOpcode::DEC { oprand } => execute_dec(register, ram, oprand),
         // 比較命令
         SPCOpcode::CMP { oprand } => execute_cmp(register, ram, oprand),
-        SPCOpcode::JMP { oprand } => match oprand {
-            _ => panic!("Invalid oprand!"),
-        },
-        SPCOpcode::CLRP => {}
-        SPCOpcode::AND { oprand } => match oprand {
-            _ => panic!("Invalid oprand!"),
-        },
-        SPCOpcode::ROL { oprand } => match oprand {
-            _ => panic!("Invalid oprand!"),
-        },
+        // フラグ操作命令
+        SPCOpcode::CLRP => {
+            register.set_psw_flag(PSW_FLAG_P, false);
+        }
         SPCOpcode::CBNE { oprand } => match oprand {
             _ => panic!("Invalid oprand!"),
         },
@@ -2395,13 +2483,7 @@ pub fn execute_opcode(register: &mut SPCRegister, ram: &mut [u8], opcode: &SPCOp
             _ => panic!("Invalid oprand!"),
         },
         SPCOpcode::SETP => {}
-        SPCOpcode::EOR { oprand } => match oprand {
-            _ => panic!("Invalid oprand!"),
-        },
         SPCOpcode::AND1 { oprand } => match oprand {
-            _ => panic!("Invalid oprand!"),
-        },
-        SPCOpcode::LSR { oprand } => match oprand {
             _ => panic!("Invalid oprand!"),
         },
         SPCOpcode::TCLR1 { oprand } => match oprand {
@@ -2417,9 +2499,6 @@ pub fn execute_opcode(register: &mut SPCRegister, ram: &mut [u8], opcode: &SPCOp
             _ => panic!("Invalid oprand!"),
         },
         SPCOpcode::CLRC => {}
-        SPCOpcode::ROR { oprand } => match oprand {
-            _ => panic!("Invalid oprand!"),
-        },
         SPCOpcode::DBNZ { oprand } => match oprand {
             _ => panic!("Invalid oprand!"),
         },
@@ -2445,7 +2524,6 @@ pub fn execute_opcode(register: &mut SPCRegister, ram: &mut [u8], opcode: &SPCOp
         },
         SPCOpcode::DIV => {}
         SPCOpcode::XCN => {}
-        SPCOpcode::EI => {}
         SPCOpcode::SBC { oprand } => match oprand {
             _ => panic!("Invalid oprand!"),
         },
@@ -2461,7 +2539,6 @@ pub fn execute_opcode(register: &mut SPCRegister, ram: &mut [u8], opcode: &SPCOp
         SPCOpcode::DAS { oprand } => match oprand {
             _ => panic!("Invalid oprand!"),
         },
-        SPCOpcode::DI => {}
         SPCOpcode::MUL => {}
         SPCOpcode::BNE { oprand } => match oprand {
             _ => panic!("Invalid oprand!"),
@@ -2478,6 +2555,12 @@ pub fn execute_opcode(register: &mut SPCRegister, ram: &mut [u8], opcode: &SPCOp
             _ => panic!("Invalid oprand!"),
         },
         // 割り込み命令
+        SPCOpcode::EI => {
+            panic!("This emulator does not support EI instruction!");
+        }
+        SPCOpcode::DI => {
+            panic!("This emulator does not support DI instruction!");
+        }
         SPCOpcode::BRK => {
             panic!("This emulator does not support BRK instruction!");
         }
@@ -2485,9 +2568,6 @@ pub fn execute_opcode(register: &mut SPCRegister, ram: &mut [u8], opcode: &SPCOp
             panic!("This emulator does not support RETI instruction!");
         }
         // その他の命令
-        SPCOpcode::NOP => {
-            // 何もしない
-        }
         SPCOpcode::SLEEP => {
             panic!("This emulator does not support SLEEP instruction!");
         }
