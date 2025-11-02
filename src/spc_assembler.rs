@@ -2367,7 +2367,7 @@ fn execute_adc(register: &mut SPCRegister, ram: &mut [u8], oprand: &SPCOprand) {
             (ret & 0xFF) as u8,
             (ret & 0x100) != 0,
             ((a & 0x80) == (b & 0x80)) && (((a & 0x80) as u16) != (ret & 0x80)),
-            check_half_carry_add(a, b),
+            check_half_carry_add_u8(a, b),
         )
     }
 
@@ -2487,13 +2487,23 @@ fn execute_adc(register: &mut SPCRegister, ram: &mut [u8], oprand: &SPCOprand) {
 }
 
 /// 加算時のハーフキャリーを判定
-fn check_half_carry_add(a: u8, b: u8) -> bool {
+fn check_half_carry_add_u8(a: u8, b: u8) -> bool {
     (((a & 0xF) + (b & 0xF)) & 0x10) == 0x10
 }
 
 /// 減算時のハーフキャリーを判定
-fn check_half_carry_sub(a: u8, b: u8) -> bool {
+fn check_half_carry_sub_u8(a: u8, b: u8) -> bool {
     ((a & 0xF) as i16 - (b & 0xF) as i16) < 0
+}
+
+/// 加算時のハーフキャリーを判定
+fn check_half_carry_add_u16(a: u16, b: u16) -> bool {
+    (((a & 0xF) + (b & 0xF)) & 0x10) == 0x10
+}
+
+/// 減算時のハーフキャリーを判定
+fn check_half_carry_sub_u16(a: u16, b: u16) -> bool {
+    ((a & 0xF) as i32 - (b & 0xF) as i32) < 0
 }
 
 /// オペコードを実行
@@ -2744,18 +2754,56 @@ pub fn execute_opcode(register: &mut SPCRegister, ram: &mut [u8], opcode: &SPCOp
         SPCOpcode::ADDW { oprand } => match oprand {
             SPCOprand::DirectPage { direct_page } => {
                 let address = register.get_direct_page_address(*direct_page);
-                let wval = make_u16_from_u8(&ram[address..(address + 2)]) as i16;
-                let yaval = ((register.y as i16) << 8) | register.a as i16;
-                let (ret, overflow) = yaval.overflowing_add(wval);
-                let halfcarry = check_half_carry_add(register.a, (wval & 0xFF) as u8);
+                let wval = make_u16_from_u8(&ram[address..(address + 2)]);
+                let yaval = ((register.y as u16) << 8) | register.a as u16;
+                let (ret, arith_overflow) = yaval.overflowing_add(wval);
+                let sign_overflow =
+                    ((yaval & 0x8000) == (wval & 0x8000)) && ((yaval & 0x8000) != (ret & 0x8000));
+                let half_carry = check_half_carry_add_u16(yaval, wval);
                 register.y = (ret >> 8) as u8 & 0xFF;
                 register.a = (ret >> 0) as u8 & 0xFF;
                 // フラグ更新
                 register.set_psw_flag(PSW_FLAG_N, (ret >> 15) != 0);
-                register.set_psw_flag(PSW_FLAG_V, overflow);
-                register.set_psw_flag(PSW_FLAG_H, halfcarry);
+                register.set_psw_flag(PSW_FLAG_H, half_carry);
                 register.set_psw_flag(PSW_FLAG_Z, ret == 0);
-                register.set_psw_flag(PSW_FLAG_C, !overflow);
+                if arith_overflow {
+                    register.set_psw_flag(PSW_FLAG_V, false);
+                    register.set_psw_flag(PSW_FLAG_C, true);
+                } else if sign_overflow {
+                    register.set_psw_flag(PSW_FLAG_V, true);
+                    register.set_psw_flag(PSW_FLAG_C, false);
+                } else {
+                    register.set_psw_flag(PSW_FLAG_V, false);
+                    register.set_psw_flag(PSW_FLAG_C, false);
+                }
+            }
+            _ => panic!("Invalid oprand!"),
+        },
+        SPCOpcode::SUBW { oprand } => match oprand {
+            SPCOprand::DirectPage { direct_page } => {
+                let address = register.get_direct_page_address(*direct_page);
+                let wval = make_u16_from_u8(&ram[address..(address + 2)]);
+                let yaval = ((register.y as u16) << 8) | register.a as u16;
+                let (ret, arith_overflow) = yaval.overflowing_sub(wval);
+                let sign_overflow =
+                    ((yaval & 0x8000) != (wval & 0x8000)) && ((yaval & 0x8000) != (ret & 0x8000));
+                let half_carry = check_half_carry_sub_u16(yaval, wval);
+                register.y = (ret >> 8) as u8 & 0xFF;
+                register.a = (ret >> 0) as u8 & 0xFF;
+                // フラグ更新
+                register.set_psw_flag(PSW_FLAG_N, (ret >> 15) != 0);
+                register.set_psw_flag(PSW_FLAG_H, half_carry);
+                register.set_psw_flag(PSW_FLAG_Z, ret == 0);
+                if !arith_overflow {
+                    register.set_psw_flag(PSW_FLAG_V, false);
+                    register.set_psw_flag(PSW_FLAG_C, true);
+                } else if sign_overflow {
+                    register.set_psw_flag(PSW_FLAG_V, true);
+                    register.set_psw_flag(PSW_FLAG_C, false);
+                } else {
+                    register.set_psw_flag(PSW_FLAG_V, false);
+                    register.set_psw_flag(PSW_FLAG_C, false);
+                }
             }
             _ => panic!("Invalid oprand!"),
         },
@@ -2812,9 +2860,6 @@ pub fn execute_opcode(register: &mut SPCRegister, ram: &mut [u8], opcode: &SPCOp
         SPCOpcode::SETC => {
             register.set_psw_flag(PSW_FLAG_C, true);
         }
-        SPCOpcode::SUBW { oprand } => match oprand {
-            _ => panic!("Invalid oprand!"),
-        },
         SPCOpcode::DIV => {}
         SPCOpcode::XCN => {}
         SPCOpcode::SBC { oprand } => match oprand {
