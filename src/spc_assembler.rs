@@ -2904,6 +2904,13 @@ pub fn execute_opcode(register: &mut SPCRegister, ram: &mut [u8], opcode: &SPCOp
             register.set_psw_flag(PSW_FLAG_H, (register.y & 0xF) >= (register.x & 0xF));
             register.set_psw_flag(PSW_FLAG_Z, quot == 0);
         }
+        SPCOpcode::MUL => {
+            let mul = (register.y as i16) * (register.a as i16);
+            register.y = ((mul << 8) & 0xFF) as u8;
+            register.a = ((mul << 0) & 0xFF) as u8;
+            register.set_psw_flag(PSW_FLAG_N, (mul >> 15) != 0);
+            register.set_psw_flag(PSW_FLAG_Z, register.y == 0);
+        }
         SPCOpcode::DECW { oprand } => match oprand {
             SPCOprand::DirectPage { direct_page } => {
                 let address = register.get_direct_page_address(*direct_page);
@@ -3009,7 +3016,6 @@ pub fn execute_opcode(register: &mut SPCRegister, ram: &mut [u8], opcode: &SPCOp
             }
             _ => panic!("Invalid oprand!"),
         },
-        SPCOpcode::MUL => {}
         SPCOpcode::MOVW { oprand } => match oprand {
             _ => panic!("Invalid oprand!"),
         },
