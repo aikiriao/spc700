@@ -2667,7 +2667,7 @@ pub fn execute_opcode(register: &mut SPCRegister, ram: &mut [u8], opcode: &SPCOp
             } => {
                 let address = register.get_direct_page_address(*direct_page);
                 if ram[address] & (1 << (*bit)) == 0 {
-                    register.pc = (register.pc as i16 + *pc_relative as i16) as u16;
+                    register.pc = (register.pc as i32 + *pc_relative as i32) as u16;
                 }
             }
             _ => panic!("Invalid oprand!"),
@@ -2679,7 +2679,7 @@ pub fn execute_opcode(register: &mut SPCRegister, ram: &mut [u8], opcode: &SPCOp
             } => {
                 let address = register.get_direct_page_address(*direct_page);
                 if ram[address] & (1 << (*bit)) != 0 {
-                    register.pc = (register.pc as i16 + *pc_relative as i16) as u16;
+                    register.pc = (register.pc as i32 + *pc_relative as i32) as u16;
                 }
             }
             _ => panic!("Invalid oprand!"),
@@ -2687,7 +2687,7 @@ pub fn execute_opcode(register: &mut SPCRegister, ram: &mut [u8], opcode: &SPCOp
         SPCOpcode::BCC { oprand } => match oprand {
             SPCOprand::PCRelative { pc_relative } => {
                 if register.test_psw_flag(PSW_FLAG_C) {
-                    register.pc = (register.pc as i16 + *pc_relative as i16) as u16;
+                    register.pc = (register.pc as i32 + *pc_relative as i32) as u16;
                 }
             }
             _ => panic!("Invalid oprand!"),
@@ -2695,7 +2695,7 @@ pub fn execute_opcode(register: &mut SPCRegister, ram: &mut [u8], opcode: &SPCOp
         SPCOpcode::BPL { oprand } => match oprand {
             SPCOprand::PCRelative { pc_relative } => {
                 if !register.test_psw_flag(PSW_FLAG_Z) {
-                    register.pc = (register.pc as i16 + *pc_relative as i16) as u16;
+                    register.pc = (register.pc as i32 + *pc_relative as i32) as u16;
                 }
             }
             _ => panic!("Invalid oprand!"),
@@ -2707,7 +2707,7 @@ pub fn execute_opcode(register: &mut SPCRegister, ram: &mut [u8], opcode: &SPCOp
             } => {
                 let address = register.get_direct_page_address(*direct_page);
                 if register.a != ram[address] {
-                    register.pc = (register.pc as i16 + *pc_relative as i16) as u16;
+                    register.pc = (register.pc as i32 + *pc_relative as i32) as u16;
                 }
             }
             SPCOprand::DirectPageXPCRelative {
@@ -2716,21 +2716,21 @@ pub fn execute_opcode(register: &mut SPCRegister, ram: &mut [u8], opcode: &SPCOp
             } => {
                 let address = register.get_direct_page_address(*direct_page) + register.x as usize;
                 if register.a != ram[address] {
-                    register.pc = (register.pc as i16 + *pc_relative as i16) as u16;
+                    register.pc = (register.pc as i32 + *pc_relative as i32) as u16;
                 }
             }
             _ => panic!("Invalid oprand!"),
         },
         SPCOpcode::BRA { oprand } => match oprand {
             SPCOprand::PCRelative { pc_relative } => {
-                register.pc = (register.pc as i16 + *pc_relative as i16) as u16;
+                register.pc = (register.pc as i32 + *pc_relative as i32) as u16;
             }
             _ => panic!("Invalid oprand!"),
         },
         SPCOpcode::BMI { oprand } => match oprand {
             SPCOprand::PCRelative { pc_relative } => {
                 if register.test_psw_flag(PSW_FLAG_N) {
-                    register.pc = (register.pc as i16 + *pc_relative as i16) as u16;
+                    register.pc = (register.pc as i32 + *pc_relative as i32) as u16;
                 }
             }
             _ => panic!("Invalid oprand!"),
@@ -2738,7 +2738,7 @@ pub fn execute_opcode(register: &mut SPCRegister, ram: &mut [u8], opcode: &SPCOp
         SPCOpcode::BVC { oprand } => match oprand {
             SPCOprand::PCRelative { pc_relative } => {
                 if !register.test_psw_flag(PSW_FLAG_V) {
-                    register.pc = (register.pc as i16 + *pc_relative as i16) as u16;
+                    register.pc = (register.pc as i32 + *pc_relative as i32) as u16;
                 }
             }
             _ => panic!("Invalid oprand!"),
@@ -2746,7 +2746,7 @@ pub fn execute_opcode(register: &mut SPCRegister, ram: &mut [u8], opcode: &SPCOp
         SPCOpcode::BVS { oprand } => match oprand {
             SPCOprand::PCRelative { pc_relative } => {
                 if register.test_psw_flag(PSW_FLAG_V) {
-                    register.pc = (register.pc as i16 + *pc_relative as i16) as u16;
+                    register.pc = (register.pc as i32 + *pc_relative as i32) as u16;
                 }
             }
             _ => panic!("Invalid oprand!"),
@@ -2759,13 +2759,13 @@ pub fn execute_opcode(register: &mut SPCRegister, ram: &mut [u8], opcode: &SPCOp
                 let address = register.get_direct_page_address(*direct_page);
                 ram[address] -= 1;
                 if ram[address] != 0 {
-                    register.pc = (register.pc as i16 + *pc_relative as i16) as u16;
+                    register.pc = (register.pc as i32 + *pc_relative as i32) as u16;
                 }
             }
             SPCOprand::YPCRelative { pc_relative } => {
                 register.y -= 1;
                 if register.y != 0 {
-                    register.pc = (register.pc as i16 + *pc_relative as i16) as u16;
+                    register.pc = (register.pc as i32 + *pc_relative as i32) as u16;
                 }
             }
             _ => panic!("Invalid oprand!"),
@@ -2773,7 +2773,7 @@ pub fn execute_opcode(register: &mut SPCRegister, ram: &mut [u8], opcode: &SPCOp
         SPCOpcode::BCS { oprand } => match oprand {
             SPCOprand::PCRelative { pc_relative } => {
                 if register.test_psw_flag(PSW_FLAG_C) {
-                    register.pc = (register.pc as i16 + *pc_relative as i16) as u16;
+                    register.pc = (register.pc as i32 + *pc_relative as i32) as u16;
                 }
             }
             _ => panic!("Invalid oprand!"),
@@ -2781,7 +2781,15 @@ pub fn execute_opcode(register: &mut SPCRegister, ram: &mut [u8], opcode: &SPCOp
         SPCOpcode::BNE { oprand } => match oprand {
             SPCOprand::PCRelative { pc_relative } => {
                 if !register.test_psw_flag(PSW_FLAG_Z) {
-                    register.pc = (register.pc as i16 + *pc_relative as i16) as u16;
+                    register.pc = (register.pc as i32 + *pc_relative as i32) as u16;
+                }
+            }
+            _ => panic!("Invalid oprand!"),
+        },
+        SPCOpcode::BEQ { oprand } => match oprand {
+            SPCOprand::PCRelative { pc_relative } => {
+                if register.test_psw_flag(PSW_FLAG_Z) {
+                    register.pc = (register.pc as i32 + *pc_relative as i32) as u16;
                 }
             }
             _ => panic!("Invalid oprand!"),
@@ -3036,9 +3044,6 @@ pub fn execute_opcode(register: &mut SPCRegister, ram: &mut [u8], opcode: &SPCOp
                 register.set_psw_flag(PSW_FLAG_Z, ret == 0);
                 register.set_psw_flag(PSW_FLAG_C, carry);
             }
-            _ => panic!("Invalid oprand!"),
-        },
-        SPCOpcode::BEQ { oprand } => match oprand {
             _ => panic!("Invalid oprand!"),
         },
         // 割り込み命令
