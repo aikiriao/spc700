@@ -2236,7 +2236,12 @@ fn execute_dec(register: &mut SPCRegister, ram: &mut [u8], oprand: &SPCOprand) {
 }
 
 /// INC/DEC命令の実行
-fn execute_inc_dec(register: &mut SPCRegister, ram: &mut [u8], oprand: &SPCOprand, op: fn(u8) -> u8) {
+fn execute_inc_dec(
+    register: &mut SPCRegister,
+    ram: &mut [u8],
+    oprand: &SPCOprand,
+    op: fn(u8) -> u8,
+) {
     let ret;
 
     match oprand {
@@ -2750,6 +2755,22 @@ pub fn execute_opcode(register: &mut SPCRegister, ram: &mut [u8], opcode: &SPCOp
             }
             _ => panic!("Invalid oprand!"),
         },
+        SPCOpcode::BCS { oprand } => match oprand {
+            SPCOprand::PCRelative { pc_relative } => {
+                if register.test_psw_flag(PSW_FLAG_C) {
+                    register.pc = (register.pc as i16 + *pc_relative as i16) as u16;
+                }
+            }
+            _ => panic!("Invalid oprand!"),
+        },
+        SPCOpcode::BNE { oprand } => match oprand {
+            SPCOprand::PCRelative { pc_relative } => {
+                if !register.test_psw_flag(PSW_FLAG_Z) {
+                    register.pc = (register.pc as i16 + *pc_relative as i16) as u16;
+                }
+            }
+            _ => panic!("Invalid oprand!"),
+        },
         // 論理演算命令
         SPCOpcode::AND { oprand } => execute_and(register, ram, oprand),
         SPCOpcode::ASL { oprand } => execute_asl(register, ram, oprand),
@@ -2937,16 +2958,10 @@ pub fn execute_opcode(register: &mut SPCRegister, ram: &mut [u8], opcode: &SPCOp
         SPCOpcode::SETC => {
             register.set_psw_flag(PSW_FLAG_C, true);
         }
-        SPCOpcode::BCS { oprand } => match oprand {
-            _ => panic!("Invalid oprand!"),
-        },
         SPCOpcode::DAS { oprand } => match oprand {
             _ => panic!("Invalid oprand!"),
         },
         SPCOpcode::MUL => {}
-        SPCOpcode::BNE { oprand } => match oprand {
-            _ => panic!("Invalid oprand!"),
-        },
         SPCOpcode::MOVW { oprand } => match oprand {
             _ => panic!("Invalid oprand!"),
         },
