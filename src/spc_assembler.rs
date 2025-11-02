@@ -2958,14 +2958,59 @@ pub fn execute_opcode(register: &mut SPCRegister, ram: &mut [u8], opcode: &SPCOp
         SPCOpcode::SETC => {
             register.set_psw_flag(PSW_FLAG_C, true);
         }
+        // 十進補正命令
         SPCOpcode::DAS { oprand } => match oprand {
+            SPCOprand::Accumulator => {
+                let mut ret = register.a;
+                let mut carry = register.test_psw_flag(PSW_FLAG_C);
+                // ハーフキャリーフラグが設定されている or 下位ニブルが0xA以上ならば0x6を引く
+                if register.test_psw_flag(PSW_FLAG_H) || (ret & 0x0F) >= 0xA {
+                    (ret, carry) = ret.overflowing_sub(0x06);
+                }
+                // キャリーフラグがクリアされている or 上位ニブルが0xA以上ならば0x60を引く
+                if !register.test_psw_flag(PSW_FLAG_C) || ((ret & 0xF0) >> 4) >= 0xA {
+                    (ret, carry) = ret.overflowing_sub(0x60);
+                }
+                // 最上位ビットにキャリーフラグをセットする
+                ret = if register.test_psw_flag(PSW_FLAG_C) {
+                    ret | 0x80
+                } else {
+                    ret & 0x7F
+                };
+                register.a = ret;
+                register.set_psw_flag(PSW_FLAG_N, (ret >> 7) != 0);
+                register.set_psw_flag(PSW_FLAG_Z, ret == 0);
+                register.set_psw_flag(PSW_FLAG_C, carry);
+            }
+            _ => panic!("Invalid oprand!"),
+        },
+        SPCOpcode::DAA { oprand } => match oprand {
+            SPCOprand::Accumulator => {
+                let mut ret = register.a;
+                let mut carry = register.test_psw_flag(PSW_FLAG_C);
+                // ハーフキャリーフラグが設定されている or 下位ニブルが0xA以上ならば0x6を足す
+                if register.test_psw_flag(PSW_FLAG_H) || (ret & 0x0F) >= 0xA {
+                    (ret, carry) = ret.overflowing_add(0x06);
+                }
+                // キャリーフラグがクリアされている or 上位ニブルが0xA以上ならば0x60を足す
+                if !register.test_psw_flag(PSW_FLAG_C) || ((ret & 0xF0) >> 4) >= 0xA {
+                    (ret, carry) = ret.overflowing_add(0x60);
+                }
+                // 最上位ビットにキャリーフラグをセットする
+                ret = if register.test_psw_flag(PSW_FLAG_C) {
+                    ret | 0x80
+                } else {
+                    ret & 0x7F
+                };
+                register.a = ret;
+                register.set_psw_flag(PSW_FLAG_N, (ret >> 7) != 0);
+                register.set_psw_flag(PSW_FLAG_Z, ret == 0);
+                register.set_psw_flag(PSW_FLAG_C, carry);
+            }
             _ => panic!("Invalid oprand!"),
         },
         SPCOpcode::MUL => {}
         SPCOpcode::MOVW { oprand } => match oprand {
-            _ => panic!("Invalid oprand!"),
-        },
-        SPCOpcode::DAA { oprand } => match oprand {
             _ => panic!("Invalid oprand!"),
         },
         SPCOpcode::CLRV => {}
