@@ -2351,6 +2351,141 @@ fn execute_cmp(register: &mut SPCRegister, ram: &mut [u8], oprand: &SPCOprand) {
     register.set_psw_flag(PSW_FLAG_C, ret >= 0);
 }
 
+/// ADC命令の実行
+fn execute_adc(register: &mut SPCRegister, ram: &mut [u8], oprand: &SPCOprand) {
+    let ret;
+    let arith_overflow;
+    let sign_overflow;
+    let half_carry;
+
+    fn add_core(a: u8, b: u8, carry: bool) -> (u8, bool, bool, bool) {
+        let mut ret = (a as u16) + (b as u16);
+        if carry {
+            ret += 1;
+        }
+        let sign_overflow = (((ret & 0x80) != 0) && ((a & 0x80) == 0) && ((b & 0x80) == 0))
+            || (((ret & 0x80) == 0) && ((a & 0x80) != 0) && ((b & 0x80) != 0));
+        (
+            (ret & 0xFF) as u8,
+            (ret & 0x100) != 0,
+            sign_overflow,
+            check_half_carry_add(a, b),
+        )
+    }
+
+    match oprand {
+        SPCOprand::Immediate { immediate } => {
+            (ret, arith_overflow, sign_overflow, half_carry) =
+                add_core(register.a, *immediate, register.test_psw_flag(PSW_FLAG_C));
+        }
+        SPCOprand::IndirectPage => {
+            (ret, arith_overflow, sign_overflow, half_carry) = add_core(
+                register.a,
+                ram[register.x as usize],
+                register.test_psw_flag(PSW_FLAG_C),
+            );
+        }
+        SPCOprand::DirectPage { direct_page } => {
+            let address = register.get_direct_page_address(*direct_page);
+            (ret, arith_overflow, sign_overflow, half_carry) =
+                add_core(register.a, ram[address], register.test_psw_flag(PSW_FLAG_C));
+        }
+        SPCOprand::DirectPageX { direct_page } => {
+            let address = register.get_direct_page_address(*direct_page) + register.x as usize;
+            (ret, arith_overflow, sign_overflow, half_carry) =
+                add_core(register.a, ram[address], register.test_psw_flag(PSW_FLAG_C));
+        }
+        SPCOprand::Absolute { address } => {
+            (ret, arith_overflow, sign_overflow, half_carry) = add_core(
+                register.a,
+                ram[*address as usize],
+                register.test_psw_flag(PSW_FLAG_C),
+            );
+        }
+        SPCOprand::AbsoluteX { address } => {
+            let addr = *address + register.x as u16;
+            (ret, arith_overflow, sign_overflow, half_carry) = add_core(
+                register.a,
+                ram[addr as usize],
+                register.test_psw_flag(PSW_FLAG_C),
+            );
+        }
+        SPCOprand::AbsoluteY { address } => {
+            let addr = *address + register.y as u16;
+            (ret, arith_overflow, sign_overflow, half_carry) = add_core(
+                register.a,
+                ram[addr as usize],
+                register.test_psw_flag(PSW_FLAG_C),
+            );
+        }
+        SPCOprand::DirectPageXIndirect { direct_page } => {
+            let address = register.get_direct_page_x_indexed_indirect_address(ram, *direct_page);
+            (ret, arith_overflow, sign_overflow, half_carry) =
+                add_core(register.a, ram[address], register.test_psw_flag(PSW_FLAG_C));
+        }
+        SPCOprand::DirectPageIndirectY { direct_page } => {
+            let address = register.get_direct_page_indirect_y_indexed_address(ram, *direct_page);
+            (ret, arith_overflow, sign_overflow, half_carry) =
+                add_core(register.a, ram[address], register.test_psw_flag(PSW_FLAG_C));
+        }
+        SPCOprand::IndirectPageToIndirectPage => {
+            let address1 = register.get_direct_page_address(register.x);
+            let address2 = register.get_direct_page_address(register.y);
+            (ret, arith_overflow, sign_overflow, half_carry) = add_core(
+                ram[address1],
+                ram[address2],
+                register.test_psw_flag(PSW_FLAG_C),
+            );
+        }
+        SPCOprand::DirectPageToDirectPage {
+            direct_page1,
+            direct_page2,
+        } => {
+            let address1 = register.get_direct_page_address(*direct_page1);
+            let address2 = register.get_direct_page_address(*direct_page2);
+            (ret, arith_overflow, sign_overflow, half_carry) = add_core(
+                ram[address1],
+                ram[address2],
+                register.test_psw_flag(PSW_FLAG_C),
+            );
+        }
+        SPCOprand::ImmediateToDirectPage {
+            direct_page,
+            immediate,
+        } => {
+            let address = register.get_direct_page_address(*direct_page);
+            (ret, arith_overflow, sign_overflow, half_carry) =
+                add_core(ram[address], *immediate, register.test_psw_flag(PSW_FLAG_C));
+        }
+        _ => panic!("Invalid oprand!"),
+    }
+
+    // フラグ更新
+    register.set_psw_flag(PSW_FLAG_N, (register.a & PSW_FLAG_N) != 0);
+    register.set_psw_flag(PSW_FLAG_H, half_carry);
+    register.set_psw_flag(PSW_FLAG_Z, ret == 0);
+    if arith_overflow {
+        register.set_psw_flag(PSW_FLAG_V, false);
+        register.set_psw_flag(PSW_FLAG_C, true);
+    } else if sign_overflow {
+        register.set_psw_flag(PSW_FLAG_V, true);
+        register.set_psw_flag(PSW_FLAG_C, false);
+    } else {
+        register.set_psw_flag(PSW_FLAG_V, false);
+        register.set_psw_flag(PSW_FLAG_C, false);
+    }
+}
+
+/// 加算時のハーフキャリーを判定
+fn check_half_carry_add(a: u8, b: u8) -> bool {
+    (((a & 0xF) + (b & 0xF)) & 0x10) == 0x10
+}
+
+/// 減算時のハーフキャリーを判定
+fn check_half_carry_sub(a: u8, b: u8) -> bool {
+    ((a & 0xF) as i16 - (b & 0xF) as i16) < 0
+}
+
 /// オペコードを実行
 pub fn execute_opcode(register: &mut SPCRegister, ram: &mut [u8], opcode: &SPCOpcode) {
     match opcode {
@@ -2502,6 +2637,14 @@ pub fn execute_opcode(register: &mut SPCRegister, ram: &mut [u8], opcode: &SPCOp
             }
             _ => panic!("Invalid oprand!"),
         },
+        SPCOpcode::BVS { oprand } => match oprand {
+            SPCOprand::PCRelative { pc_relative } => {
+                if register.test_psw_flag(PSW_FLAG_V) {
+                    register.pc = (register.pc as i16 + *pc_relative as i16) as u16;
+                }
+            }
+            _ => panic!("Invalid oprand!"),
+        },
         SPCOpcode::DBNZ { oprand } => match oprand {
             SPCOprand::DirectPagePCRelative {
                 direct_page,
@@ -2564,6 +2707,25 @@ pub fn execute_opcode(register: &mut SPCRegister, ram: &mut [u8], opcode: &SPCOp
             _ => panic!("Invalid oprand!"),
         },
         // 算術演算命令
+        SPCOpcode::ADC { oprand } => execute_adc(register, ram, oprand),
+        SPCOpcode::ADDW { oprand } => match oprand {
+            SPCOprand::DirectPage { direct_page } => {
+                let address = register.get_direct_page_address(*direct_page);
+                let wval = make_u16_from_u8(&ram[address..(address + 2)]) as i16;
+                let yaval = ((register.y as i16) << 8) | register.a as i16;
+                let (ret, overflow) = yaval.overflowing_add(wval);
+                let halfcarry = check_half_carry_add(register.a, (wval & 0xFF) as u8);
+                register.y = (ret >> 8) as u8 & 0xFF;
+                register.a = (ret >> 0) as u8 & 0xFF;
+                // フラグ更新
+                register.set_psw_flag(PSW_FLAG_N, (ret >> 15) != 0);
+                register.set_psw_flag(PSW_FLAG_V, overflow);
+                register.set_psw_flag(PSW_FLAG_H, halfcarry);
+                register.set_psw_flag(PSW_FLAG_Z, ret == 0);
+                register.set_psw_flag(PSW_FLAG_C, !overflow);
+            }
+            _ => panic!("Invalid oprand!"),
+        },
         SPCOpcode::DECW { oprand } => match oprand {
             SPCOprand::DirectPage { direct_page } => {
                 let address = register.get_direct_page_address(*direct_page);
@@ -2614,16 +2776,9 @@ pub fn execute_opcode(register: &mut SPCRegister, ram: &mut [u8], opcode: &SPCOp
         SPCOpcode::CLRC => {
             register.set_psw_flag(PSW_FLAG_C, false);
         }
-        SPCOpcode::BVS { oprand } => match oprand {
-            _ => panic!("Invalid oprand!"),
-        },
-        SPCOpcode::ADDW { oprand } => match oprand {
-            _ => panic!("Invalid oprand!"),
-        },
-        SPCOpcode::SETC => {}
-        SPCOpcode::ADC { oprand } => match oprand {
-            _ => panic!("Invalid oprand!"),
-        },
+        SPCOpcode::SETC => {
+            register.set_psw_flag(PSW_FLAG_C, true);
+        }
         SPCOpcode::EOR1 { oprand } => match oprand {
             _ => panic!("Invalid oprand!"),
         },
