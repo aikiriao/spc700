@@ -2172,6 +2172,87 @@ fn execute_dec(register: &mut SPCRegister, ram: &mut [u8], oprand: &SPCOprand) {
     register.set_psw_flag(PSW_FLAG_Z, ret == 0);
 }
 
+/// CMP命令の実行
+fn execute_cmp(register: &mut SPCRegister, ram: &mut [u8], oprand: &SPCOprand) {
+    let ret;
+
+    match oprand {
+        SPCOprand::Immediate { immediate } => {
+            ret = register.a as i16 - *immediate as i16;
+        }
+        SPCOprand::IndirectPage => {
+            ret = register.a as i16 - ram[register.x as usize] as i16;
+        }
+        SPCOprand::DirectPage { direct_page } => {
+            let address = register.get_direct_page_address(*direct_page);
+            ret = register.a as i16 - ram[address] as i16;
+        }
+        SPCOprand::DirectPageX { direct_page } => {
+            let address = register.get_direct_page_address(*direct_page) + register.x as usize;
+            ret = register.a as i16 - ram[address] as i16;
+        }
+        SPCOprand::Absolute { address } => {
+            ret = register.a as i16 - ram[*address as usize] as i16;
+        }
+        SPCOprand::AbsoluteX { address } => {
+            let addr = *address + register.x as u16;
+            ret = register.a as i16 - ram[addr as usize] as i16;
+        }
+        SPCOprand::AbsoluteY { address } => {
+            let addr = *address + register.y as u16;
+            ret = register.a as i16 - ram[addr as usize] as i16;
+        }
+        SPCOprand::DirectPageXIndirect { direct_page } => {
+            let address = register.get_direct_page_x_indexed_indirect_address(ram, *direct_page);
+            ret = register.a as i16 - ram[address] as i16;
+        }
+        SPCOprand::DirectPageIndirectY { direct_page } => {
+            let address = register.get_direct_page_indirect_y_indexed_address(ram, *direct_page);
+            ret = register.a as i16 - ram[address] as i16;
+        }
+        SPCOprand::IndirectPageToIndirectPage => {
+            let address1 = register.get_direct_page_address(register.x);
+            let address2 = register.get_direct_page_address(register.y);
+            ret = ram[address1] as i16 - ram[address2] as i16;
+        }
+        SPCOprand::DirectPageToDirectPage { direct_page1, direct_page2 } => {
+            let address1 = register.get_direct_page_address(*direct_page1);
+            let address2 = register.get_direct_page_address(*direct_page2);
+            ret = ram[address1] as i16 - ram[address2] as i16;
+        }
+        SPCOprand::ImmediateToDirectPage { direct_page, immediate } => {
+            let address = register.get_direct_page_address(*direct_page);
+            ret = ram[address] as i16 - *immediate as i16;
+        }
+        SPCOprand::ImmediateToX { immediate } => {
+            ret = register.x as i16 - *immediate as i16;
+        }
+        SPCOprand::DirectPage { direct_page } => {
+            let address = register.get_direct_page_address(*direct_page);
+            ret = register.x as i16 - ram[address] as i16;
+        }
+        SPCOprand::AbsoluteX { address } => {
+            ret = register.x as i16 - ram[*address as usize] as i16;
+        }
+        SPCOprand::ImmediateToY { immediate } => {
+            ret = register.y as i16 - *immediate as i16;
+        }
+        SPCOprand::DirectPage { direct_page } => {
+            let address = register.get_direct_page_address(*direct_page);
+            ret = register.y as i16 - ram[address] as i16;
+        }
+        SPCOprand::AbsoluteY { address } => {
+            ret = register.y as i16 - ram[*address as usize] as i16;
+        }
+        _ => panic!("Invalid oprand!"),
+    }
+
+    // フラグ更新
+    register.set_psw_flag(PSW_FLAG_N, (ret & PSW_FLAG_N as i16) != 0);
+    register.set_psw_flag(PSW_FLAG_Z, ret == 0);
+    register.set_psw_flag(PSW_FLAG_C, ret >= 0);
+}
+
 /// オペコードを実行
 pub fn execute_opcode(register: &mut SPCRegister, ram: &mut [u8], opcode: &SPCOpcode) {
     match opcode {
@@ -2272,6 +2353,7 @@ pub fn execute_opcode(register: &mut SPCRegister, ram: &mut [u8], opcode: &SPCOp
             }
             _ => panic!("Invalid oprand!"),
         },
+        // 算術演算命令
         SPCOpcode::DECW { oprand } => match oprand {
             SPCOprand::DirectPage { direct_page } => {
                 let address = register.get_direct_page_address(*direct_page);
@@ -2285,9 +2367,8 @@ pub fn execute_opcode(register: &mut SPCRegister, ram: &mut [u8], opcode: &SPCOp
             _ => panic!("Invalid oprand!"),
         },
         SPCOpcode::DEC { oprand } => execute_dec(register, ram, oprand),
-        SPCOpcode::CMP { oprand } => match oprand {
-            _ => panic!("Invalid oprand!"),
-        },
+        // 比較命令
+        SPCOpcode::CMP { oprand } => execute_cmp(register, ram, oprand),
         SPCOpcode::JMP { oprand } => match oprand {
             _ => panic!("Invalid oprand!"),
         },
