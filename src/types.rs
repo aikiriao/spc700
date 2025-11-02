@@ -215,6 +215,8 @@ pub enum SPCOpcode {
     DAA { oprand: SPCOprand },
     /// CLRV (Clear Overflow Flag)
     CLRV,
+    /// NOT1 (Inverse Memory Bit)
+    NOT1 { oprand: SPCOprand },
     /// NOTC (NOT Carry Flag)
     NOTC,
     /// SLEEP (Sleep the Processor)
