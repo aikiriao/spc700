@@ -2949,13 +2949,13 @@ pub fn execute_opcode(register: &mut SPCRegister, ram: &mut [u8], opcode: &SPCOp
                 pc_relative,
             } => {
                 let address = register.get_direct_page_address(*direct_page);
-                let _ = ram[address].overflowing_sub(1);
+                ram[address] = ram[address].overflowing_sub(1).0;
                 if ram[address] != 0 {
                     register.pc = (register.pc as i32 + *pc_relative as i32) as u16;
                 }
             }
             SPCOprand::YPCRelative { pc_relative } => {
-                let _ = register.y.overflowing_sub(1);
+                register.y = register.y.overflowing_sub(1).0;
                 if register.y != 0 {
                     register.pc = (register.pc as i32 + *pc_relative as i32) as u16;
                 }
