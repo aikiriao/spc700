@@ -20,12 +20,10 @@ fn naive_execution(register: &SPCRegister, ram: &[u8]) {
     let mut reg = register.clone();
     let mut mem = ram.to_vec();
 
-    reg.pc = reg.pc << 8 | reg.pc >> 8;
-
     loop {
         let (opcode, len) = parse_opcode(&mem[(reg.pc as usize)..]);
         reg.pc += len;
-        println!("{:#06X}: {:?} {:?}", reg.pc, opcode, reg);
+        println!("{:#06X}: {:?} {:?}", reg.pc - len, opcode, reg);
         execute_opcode(&mut reg, &mut mem, &opcode);
     }
 }
