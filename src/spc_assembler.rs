@@ -2222,7 +2222,7 @@ fn execute_bit_operation_with_carry(
 /// INC命令の実行
 fn execute_inc(register: &mut SPCRegister, ram: &mut [u8], oprand: &SPCOprand) {
     fn inc(a: u8) -> u8 {
-        a + 1
+        a.overflowing_add(1).0
     }
     execute_inc_dec(register, ram, oprand, inc);
 }
@@ -2230,7 +2230,7 @@ fn execute_inc(register: &mut SPCRegister, ram: &mut [u8], oprand: &SPCOprand) {
 /// DEC命令の実行
 fn execute_dec(register: &mut SPCRegister, ram: &mut [u8], oprand: &SPCOprand) {
     fn dec(a: u8) -> u8 {
-        a - 1
+        a.overflowing_sub(1).0
     }
     execute_inc_dec(register, ram, oprand, dec);
 }
@@ -2727,7 +2727,7 @@ pub fn execute_opcode(register: &mut SPCRegister, ram: &mut [u8], opcode: &SPCOp
         // ビット操作命令
         SPCOpcode::AND1 { oprand } => execute_and1(register, ram, oprand),
         SPCOpcode::CLR1 { bit, oprand } => match oprand {
-            SPCOprand::DirectPage { direct_page } => {
+            SPCOprand::DirectPageBit { direct_page } => {
                 let address = register.get_direct_page_address(*direct_page);
                 ram[address] &= !(1 << (*bit));
             }
@@ -2949,7 +2949,7 @@ pub fn execute_opcode(register: &mut SPCRegister, ram: &mut [u8], opcode: &SPCOp
                 pc_relative,
             } => {
                 let address = register.get_direct_page_address(*direct_page);
-                ram[address] -= 1;
+                let _ = ram[address].overflowing_sub(1);
                 if ram[address] != 0 {
                     register.pc = (register.pc as i32 + *pc_relative as i32) as u16;
                 }
