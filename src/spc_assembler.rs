@@ -2228,10 +2228,7 @@ fn execute_bit_operation_with_carry(
         SPCOprand::AbsoluteInverseBit { address_bit } => {
             let (bit_pos, address) = get_address_bit(*address_bit);
             let memval = read_ram_u8(ram, address);
-            ret = op(
-                register.psw & PSW_FLAG_C,
-                !((memval >> bit_pos) & 0x1),
-            );
+            ret = op(register.psw & PSW_FLAG_C, !((memval >> bit_pos) & 0x1));
         }
         _ => panic!("Invalid oprand!"),
     }
@@ -2519,10 +2516,8 @@ fn execute_adc_sbc(
             let address2 = register.get_direct_page_address(register.y);
             let memval1 = read_ram_u8(ram, address1);
             let memval2 = read_ram_u8(ram, address2);
-            (ret, arith_overflow, sign_overflow, half_carry) = op(
-                memval1, memval2,
-                register.test_psw_flag(PSW_FLAG_C),
-            );
+            (ret, arith_overflow, sign_overflow, half_carry) =
+                op(memval1, memval2, register.test_psw_flag(PSW_FLAG_C));
             write_ram_u8(ram, address1, ret);
         }
         SPCOprand::DirectPageToDirectPage {
@@ -2533,10 +2528,8 @@ fn execute_adc_sbc(
             let address_src = register.get_direct_page_address(*direct_page_src);
             let memval_dst = read_ram_u8(ram, address_dst);
             let memval_src = read_ram_u8(ram, address_src);
-            (ret, arith_overflow, sign_overflow, half_carry) = op(
-                memval_dst, memval_src,
-                register.test_psw_flag(PSW_FLAG_C),
-            );
+            (ret, arith_overflow, sign_overflow, half_carry) =
+                op(memval_dst, memval_src, register.test_psw_flag(PSW_FLAG_C));
             write_ram_u8(ram, address_dst, ret);
         }
         SPCOprand::ImmediateToDirectPage {
