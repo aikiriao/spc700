@@ -85,7 +85,6 @@ pub enum SPCOprand {
     IndirectToA,
     DirectPageXToA { direct_page: u8 },
     DirectPageXToY { direct_page: u8 },
-    Indirect,
     IndirectToIndirect,
     YPCRelative { pc_relative: i8 },
     ImmediateToA { immediate: u8 },

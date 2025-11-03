@@ -1373,7 +1373,7 @@ pub fn parse_opcode(ram: &[u8]) -> (SPCOpcode, u16) {
         0x86 => create_opcode_with_length_check!(
             ram,
             SPCOpcode::ADC {
-                oprand: SPCOprand::Indirect,
+                oprand: SPCOprand::IndirectPage,
             },
             1
         ),
