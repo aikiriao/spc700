@@ -1839,7 +1839,7 @@ fn execute_mov(register: &mut SPCRegister, ram: &mut [u8], oprand: &SPCOprand) {
             val = *immediate;
             register.x = val;
         }
-        SPCOprand::DirectPage { direct_page } => {
+        SPCOprand::DirectPageToX { direct_page } => {
             let address = register.get_direct_page_address(*direct_page);
             val = ram[address];
             register.x = val;
