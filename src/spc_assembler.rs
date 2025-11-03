@@ -1732,7 +1732,7 @@ impl SPCRegister {
 
     /// ダイレクトページのアドレスを取得
     fn get_direct_page_address(&self, direct_page: u8) -> usize {
-        if self.test_psw_flag(PSW_FLAG_H) {
+        if self.test_psw_flag(PSW_FLAG_P) {
             0x100usize + direct_page as usize
         } else {
             direct_page as usize
