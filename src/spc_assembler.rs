@@ -1769,12 +1769,12 @@ impl SPCRegister {
     /// スタックにデータをPUSH
     fn push_stack(&mut self, ram: &mut [u8], value: u8) {
         ram[Self::STACK_BASE_ADDRESS + self.sp as usize] = value;
-        self.sp += 1;
+        self.sp -= 1;
     }
 
     /// スタックからデータをPOP
     fn pop_stack(&mut self, ram: &mut [u8]) -> u8 {
-        self.sp -= 1;
+        self.sp += 1;
         ram[Self::STACK_BASE_ADDRESS + self.sp as usize]
     }
 }
@@ -2386,14 +2386,14 @@ fn execute_adc(register: &mut SPCRegister, ram: &mut [u8], oprand: &SPCOprand) {
 /// SBC命令の実行
 fn execute_sbc(register: &mut SPCRegister, ram: &mut [u8], oprand: &SPCOprand) {
     fn sub(a: u8, b: u8, carry: bool) -> (u8, bool, bool, bool) {
-        let mut ret = (a as u16) - (b as u16);
+        let mut ret = (a as i16) - (b as i16);
         if !carry {
             ret += 1;
         }
         (
             (ret & 0xFF) as u8,
             (ret & 0x100) != 0,
-            ((a & 0x80) != (b & 0x80)) && (((a & 0x80) as u16) != (ret & 0x80)),
+            ((a & 0x80) != (b & 0x80)) && (((a & 0x80) as i16) != (ret & 0x80)),
             check_half_carry_sub_u8(a, b),
         )
     }
@@ -2955,7 +2955,7 @@ pub fn execute_opcode(register: &mut SPCRegister, ram: &mut [u8], opcode: &SPCOp
                 }
             }
             SPCOprand::YPCRelative { pc_relative } => {
-                register.y -= 1;
+                let _ = register.y.overflowing_sub(1);
                 if register.y != 0 {
                     register.pc = (register.pc as i32 + *pc_relative as i32) as u16;
                 }

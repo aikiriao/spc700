@@ -1,5 +1,6 @@
-use spc::spc_file_parser::*;
 use spc::spc_assembler::*;
+use spc::spc_file_parser::*;
+use spc::types::*;
 use std::env;
 use std::fmt::Error;
 
@@ -11,6 +12,21 @@ fn naive_disassemble(ram: &[u8]) {
         let (opcode, len) = parse_opcode(&ram[pc..]);
         println!("{:#06X}: {:?}", pc, opcode);
         pc += len as usize;
+    }
+}
+
+/// 実行してみる（仮）
+fn naive_execution(register: &SPCRegister, ram: &[u8]) {
+    let mut reg = register.clone();
+    let mut mem = ram.to_vec();
+
+    reg.pc = reg.pc << 8 | reg.pc >> 8;
+
+    loop {
+        let (opcode, len) = parse_opcode(&mem[(reg.pc as usize)..]);
+        reg.pc += len;
+        println!("{:#06X}: {:?} {:?}", reg.pc, opcode, reg);
+        execute_opcode(&mut reg, &mut mem, &opcode);
     }
 }
 

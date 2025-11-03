@@ -1,4 +1,5 @@
 /// SPCレジスタ
+#[derive(Debug, Clone)]
 pub struct SPCRegister {
     /// A（アキュムレータ）
     pub a: u8,
