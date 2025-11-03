@@ -227,6 +227,8 @@ pub enum SPCOpcode {
     STOP,
 }
 
+/// メモリ上にあるデータから16bitデータを読みだす
 pub fn make_u16_from_u8(data: &[u8]) -> u16 {
-    ((data[0] as u16) << 8) | data[1] as u16
+    assert_eq!(data.len(), 2);
+    ((data[1] as u16) << 8) | data[0] as u16
 }

@@ -94,7 +94,7 @@ fn parse_spc_header(data: &[u8]) -> Option<SPCFileHeader> {
         },
         tag_version: data[0x24],
         spc_register: SPCRegister {
-            pc: ((data[0x26] as u16) << 8) | (data[0x25] as u16), // LEらしい
+            pc: make_u16_from_u8(&data[0x25..0x27]),
             a: data[0x27],
             x: data[0x28],
             y: data[0x29],
@@ -107,8 +107,8 @@ fn parse_spc_header(data: &[u8]) -> Option<SPCFileHeader> {
         comment: data[0x7E..0x7E + 32].try_into().unwrap(),
         generate_date: data[0x9E],
         generate_month: data[0x9F],
-        generate_year: make_u16_from_u8(&data[0xA0..0xA3]), // TODO: エンディアンは？
-        duration: make_u16_from_u8(&data[0xA9..0xAB]), // TODO: エンディアンは？
+        generate_year: make_u16_from_u8(&data[0xA0..0xA2]),
+        duration: make_u16_from_u8(&data[0xA9..0xAB]),
         fadeout_time: ((data[0xAC] as u32) << 16)
             | ((data[0xAD] as u32) << 8)
             | (data[0xAE] as u32), // TODO: エンディアンは？
