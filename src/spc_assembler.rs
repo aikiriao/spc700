@@ -93,8 +93,8 @@ pub fn parse_opcode(ram: &[u8]) -> (SPCOpcode, u16) {
             ram,
             SPCOpcode::OR {
                 oprand: SPCOprand::DirectPageToDirectPage {
-                    direct_page1: ram[1],
-                    direct_page2: ram[2]
+                    direct_page_src: ram[1], // !NOTICE!
+                    direct_page_dst: ram[2], // !NOTICE!
                 },
             },
             3
@@ -139,8 +139,8 @@ pub fn parse_opcode(ram: &[u8]) -> (SPCOpcode, u16) {
             ram,
             SPCOpcode::OR {
                 oprand: SPCOprand::ImmediateToDirectPage {
-                    direct_page: ram[1],
-                    immediate: ram[2]
+                    immediate: ram[1],
+                    direct_page: ram[2],
                 },
             },
             3
@@ -403,8 +403,8 @@ pub fn parse_opcode(ram: &[u8]) -> (SPCOpcode, u16) {
             ram,
             SPCOpcode::CMP {
                 oprand: SPCOprand::DirectPageToDirectPage {
-                    direct_page1: ram[1],
-                    direct_page2: ram[2],
+                    direct_page_src: ram[1], // !NOTICE!
+                    direct_page_dst: ram[2], // !NOTICE!
                 }
             },
             3
@@ -449,8 +449,8 @@ pub fn parse_opcode(ram: &[u8]) -> (SPCOpcode, u16) {
             ram,
             SPCOpcode::CMP {
                 oprand: SPCOprand::ImmediateToDirectPage {
-                    direct_page: ram[1],
-                    immediate: ram[2]
+                    immediate: ram[1],
+                    direct_page: ram[2],
                 },
             },
             3
@@ -549,8 +549,8 @@ pub fn parse_opcode(ram: &[u8]) -> (SPCOpcode, u16) {
             ram,
             SPCOpcode::AND {
                 oprand: SPCOprand::DirectPageToDirectPage {
-                    direct_page1: ram[1],
-                    direct_page2: ram[2]
+                    direct_page_src: ram[1], // !NOTICE!
+                    direct_page_dst: ram[2], // !NOTICE!
                 }
             },
             3
@@ -595,8 +595,8 @@ pub fn parse_opcode(ram: &[u8]) -> (SPCOpcode, u16) {
             ram,
             SPCOpcode::AND {
                 oprand: SPCOprand::ImmediateToDirectPage {
-                    direct_page: ram[1],
-                    immediate: ram[2]
+                    immediate: ram[1],
+                    direct_page: ram[2],
                 }
             },
             3
@@ -792,8 +792,8 @@ pub fn parse_opcode(ram: &[u8]) -> (SPCOpcode, u16) {
             ram,
             SPCOpcode::EOR {
                 oprand: SPCOprand::DirectPageToDirectPage {
-                    direct_page1: ram[1],
-                    direct_page2: ram[2]
+                    direct_page_src: ram[1], // !NOTICE!
+                    direct_page_dst: ram[2], // !NOTICE!
                 }
             },
             3
@@ -838,8 +838,8 @@ pub fn parse_opcode(ram: &[u8]) -> (SPCOpcode, u16) {
             ram,
             SPCOpcode::EOR {
                 oprand: SPCOprand::ImmediateToDirectPage {
-                    direct_page: ram[1],
-                    immediate: ram[2]
+                    immediate: ram[1],
+                    direct_page: ram[2],
                 }
             },
             3
@@ -962,8 +962,8 @@ pub fn parse_opcode(ram: &[u8]) -> (SPCOpcode, u16) {
             ram,
             SPCOpcode::MOV {
                 oprand: SPCOprand::ImmediateToDirectPage {
-                    direct_page: ram[1],
-                    immediate: ram[2]
+                    immediate: ram[1],
+                    direct_page: ram[2],
                 }
             },
             3
@@ -1260,8 +1260,8 @@ pub fn parse_opcode(ram: &[u8]) -> (SPCOpcode, u16) {
             ram,
             SPCOpcode::MOV {
                 oprand: SPCOprand::DirectPageToDirectPage {
-                    direct_page1: ram[1],
-                    direct_page2: ram[2]
+                    direct_page_src: ram[1], // !NOTICE!
+                    direct_page_dst: ram[2], // !NOTICE!
                 }
             },
             3
@@ -1402,8 +1402,8 @@ pub fn parse_opcode(ram: &[u8]) -> (SPCOpcode, u16) {
             ram,
             SPCOpcode::ADC {
                 oprand: SPCOprand::DirectPageToDirectPage {
-                    direct_page1: ram[1],
-                    direct_page2: ram[2]
+                    direct_page_src: ram[1], // !NOTICE!
+                    direct_page_dst: ram[2], // !NOTICE!
                 },
             },
             3
@@ -1448,8 +1448,8 @@ pub fn parse_opcode(ram: &[u8]) -> (SPCOpcode, u16) {
             ram,
             SPCOpcode::ADC {
                 oprand: SPCOprand::ImmediateToDirectPage {
-                    direct_page: ram[1],
-                    immediate: ram[2]
+                    immediate: ram[1],
+                    direct_page: ram[2],
                 }
             },
             3
@@ -1564,8 +1564,8 @@ pub fn parse_opcode(ram: &[u8]) -> (SPCOpcode, u16) {
             ram,
             SPCOpcode::SBC {
                 oprand: SPCOprand::DirectPageToDirectPage {
-                    direct_page1: ram[1],
-                    direct_page2: ram[2]
+                    direct_page_dst: ram[1], // !NOTICE! Oprand maybe LE.
+                    direct_page_src: ram[2]  // !NOTICE! Oprand maybe LE.
                 }
             },
             3
@@ -1610,8 +1610,8 @@ pub fn parse_opcode(ram: &[u8]) -> (SPCOpcode, u16) {
             ram,
             SPCOpcode::SBC {
                 oprand: SPCOprand::ImmediateToDirectPage {
-                    direct_page: ram[1],
-                    immediate: ram[2]
+                    immediate: ram[1],
+                    direct_page: ram[2],
                 }
             },
             3
@@ -1967,11 +1967,11 @@ fn execute_mov(register: &mut SPCRegister, ram: &mut [u8], oprand: &SPCOprand) {
             register.sp = val;
         }
         SPCOprand::DirectPageToDirectPage {
-            direct_page1,
-            direct_page2,
+            direct_page_dst,
+            direct_page_src,
         } => {
-            let dst_address = register.get_direct_page_address(*direct_page1);
-            let src_address = register.get_direct_page_address(*direct_page2);
+            let dst_address = register.get_direct_page_address(*direct_page_dst);
+            let src_address = register.get_direct_page_address(*direct_page_src);
             val = ram[src_address];
             write_ram_u8(ram, dst_address, val);
         }
@@ -2072,11 +2072,11 @@ fn execute_binary_logical_operation(
             write_ram_u8(ram, dst_address, ret);
         }
         SPCOprand::DirectPageToDirectPage {
-            direct_page1,
-            direct_page2,
+            direct_page_dst,
+            direct_page_src,
         } => {
-            let dst_address = register.get_direct_page_address(*direct_page1);
-            let src_address = register.get_direct_page_address(*direct_page2);
+            let dst_address = register.get_direct_page_address(*direct_page_dst);
+            let src_address = register.get_direct_page_address(*direct_page_src);
             ret = op(ram[dst_address], ram[src_address]);
             write_ram_u8(ram, dst_address, ret);
         }
@@ -2328,11 +2328,11 @@ fn execute_cmp(register: &mut SPCRegister, ram: &mut [u8], oprand: &SPCOprand) {
             ret = ram[address1] as i16 - ram[address2] as i16;
         }
         SPCOprand::DirectPageToDirectPage {
-            direct_page1,
-            direct_page2,
+            direct_page_dst,
+            direct_page_src,
         } => {
-            let address1 = register.get_direct_page_address(*direct_page1);
-            let address2 = register.get_direct_page_address(*direct_page2);
+            let address1 = register.get_direct_page_address(*direct_page_dst);
+            let address2 = register.get_direct_page_address(*direct_page_src);
             ret = ram[address1] as i16 - ram[address2] as i16;
         }
         SPCOprand::ImmediateToDirectPage {
@@ -2492,17 +2492,17 @@ fn execute_adc_sbc(
             write_ram_u8(ram, address1, ret);
         }
         SPCOprand::DirectPageToDirectPage {
-            direct_page1,
-            direct_page2,
+            direct_page_dst,
+            direct_page_src,
         } => {
-            let address1 = register.get_direct_page_address(*direct_page1);
-            let address2 = register.get_direct_page_address(*direct_page2);
+            let address_dst = register.get_direct_page_address(*direct_page_dst);
+            let address_src = register.get_direct_page_address(*direct_page_src);
             (ret, arith_overflow, sign_overflow, half_carry) = op(
-                ram[address1],
-                ram[address2],
+                ram[address_dst],
+                ram[address_src],
                 register.test_psw_flag(PSW_FLAG_C),
             );
-            write_ram_u8(ram, address1, ret);
+            write_ram_u8(ram, address_dst, ret);
         }
         SPCOprand::ImmediateToDirectPage {
             direct_page,

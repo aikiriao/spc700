@@ -29,7 +29,7 @@ pub enum SPCOprand {
     DirectPageXIndirect { direct_page: u8 },
     DirectPageIndirectY { direct_page: u8 },
     IndirectPageToIndirectPage,
-    DirectPageToDirectPage { direct_page1: u8, direct_page2: u8 },
+    DirectPageToDirectPage { direct_page_src: u8, direct_page_dst: u8 },
     ImmediateToDirectPage { direct_page: u8, immediate: u8 },
     ImmediateToX { immediate: u8 },
     AbsoluteBit { address_bit: u16 },
