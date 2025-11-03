@@ -2111,6 +2111,7 @@ fn execute_binary_logical_operation(
 /// ASL命令の実行
 fn execute_asl(register: &mut SPCRegister, ram: &mut [u8], oprand: &SPCOprand) {
     fn asl(a: u8) -> u8 {
+        // NOTE: 最上位ビットはキャリーフラグに入る
         a << 1
     }
     execute_unary_bit_opration(register, ram, oprand, asl);
@@ -2120,7 +2121,7 @@ fn execute_asl(register: &mut SPCRegister, ram: &mut [u8], oprand: &SPCOprand) {
 fn execute_rol(register: &mut SPCRegister, ram: &mut [u8], oprand: &SPCOprand) {
     fn rol(a: u8) -> u8 {
         let msb = a >> 7;
-        a << 1 | msb
+        (a << 1) | msb
     }
     execute_unary_bit_opration(register, ram, oprand, rol);
 }
@@ -2129,7 +2130,7 @@ fn execute_rol(register: &mut SPCRegister, ram: &mut [u8], oprand: &SPCOprand) {
 fn execute_ror(register: &mut SPCRegister, ram: &mut [u8], oprand: &SPCOprand) {
     fn ror(a: u8) -> u8 {
         let lsb = a & 1;
-        a >> 1 | lsb << 7
+        (a >> 1) | (lsb << 7)
     }
     execute_unary_bit_opration(register, ram, oprand, ror);
 }
@@ -2154,28 +2155,29 @@ fn execute_unary_bit_opration(
 
     match oprand {
         SPCOprand::Accumulator => {
-            prev_msb = (register.a >> 7) & 0x1;
+            prev_msb = register.a & 0x80;
             ret = op(register.a);
             register.a = ret;
         }
         SPCOprand::DirectPage { direct_page } => {
             let address = register.get_direct_page_address(*direct_page);
             let memval = read_ram_u8(ram, address);
-            prev_msb = (memval >> 7) & 0x1;
+            prev_msb = memval & 0x80;
             ret = op(memval);
             write_ram_u8(ram, address, ret);
         }
         SPCOprand::DirectPageX { direct_page } => {
             let address = register.get_direct_page_address(*direct_page) + register.x as usize;
             let memval = read_ram_u8(ram, address);
-            prev_msb = (memval >> 7) & 0x1;
+            prev_msb = memval & 0x80;
             ret = op(memval);
             write_ram_u8(ram, address, ret);
         }
         SPCOprand::Absolute { address } => {
             let addr = *address as usize;
-            prev_msb = (ram[addr] >> 7) & 0x1;
-            ret = op(ram[addr]);
+            let memval = read_ram_u8(ram, addr);
+            prev_msb = memval & 0x80;
+            ret = op(memval);
             write_ram_u8(ram, addr, ret);
         }
         _ => panic!("Invalid oprand!"),
@@ -2325,11 +2327,13 @@ fn execute_cmp(register: &mut SPCRegister, ram: &mut [u8], oprand: &SPCOprand) {
         }
         SPCOprand::AbsoluteX { address } => {
             let addr = *address + register.x as u16;
-            ret = register.a as i16 - ram[addr as usize] as i16;
+            let memval = read_ram_u8(ram, addr as usize);
+            ret = register.a as i16 - memval as i16;
         }
         SPCOprand::AbsoluteY { address } => {
             let addr = *address + register.y as u16;
-            ret = register.a as i16 - ram[addr as usize] as i16;
+            let memval = read_ram_u8(ram, addr as usize);
+            ret = register.a as i16 - memval as i16;
         }
         SPCOprand::DirectPageXIndirect { direct_page } => {
             let address = register.get_direct_page_x_indexed_indirect_address(ram, *direct_page);
@@ -2481,20 +2485,16 @@ fn execute_adc_sbc(
         }
         SPCOprand::AbsoluteX { address } => {
             let addr = *address + register.x as u16;
-            (ret, arith_overflow, sign_overflow, half_carry) = op(
-                register.a,
-                ram[addr as usize],
-                register.test_psw_flag(PSW_FLAG_C),
-            );
+            let memval = read_ram_u8(ram, addr as usize);
+            (ret, arith_overflow, sign_overflow, half_carry) =
+                op(register.a, memval, register.test_psw_flag(PSW_FLAG_C));
             register.a = ret;
         }
         SPCOprand::AbsoluteY { address } => {
             let addr = *address + register.y as u16;
-            (ret, arith_overflow, sign_overflow, half_carry) = op(
-                register.a,
-                ram[addr as usize],
-                register.test_psw_flag(PSW_FLAG_C),
-            );
+            let memval = read_ram_u8(ram, addr as usize);
+            (ret, arith_overflow, sign_overflow, half_carry) =
+                op(register.a, memval, register.test_psw_flag(PSW_FLAG_C));
             register.a = ret;
         }
         SPCOprand::DirectPageXIndirect { direct_page } => {
@@ -2819,8 +2819,9 @@ pub fn execute_opcode(register: &mut SPCRegister, ram: &mut [u8], opcode: &SPCOp
         SPCOpcode::TSET1 { oprand } => match oprand {
             SPCOprand::Absolute { address } => {
                 let addr = *address as usize;
-                let or = register.a | ram[addr];
-                let and = register.a & ram[addr];
+                let memval = read_ram_u8(ram, addr);
+                let or = register.a | memval;
+                let and = register.a & memval;
                 write_ram_u8(ram, addr, or);
                 register.set_psw_flag(PSW_FLAG_N, (or & PSW_FLAG_N) != 0);
                 register.set_psw_flag(PSW_FLAG_Z, and == 0);
