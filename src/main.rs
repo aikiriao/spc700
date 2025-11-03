@@ -15,7 +15,7 @@ fn naive_disassemble(ram: &[u8]) {
     }
 }
 
-/// 実行してみる（仮）
+/// 実行してみる
 fn naive_execution(register: &SPCRegister, ram: &[u8]) {
     let mut reg = register.clone();
     let mut mem = ram.to_vec();
@@ -23,7 +23,13 @@ fn naive_execution(register: &SPCRegister, ram: &[u8]) {
     loop {
         let (opcode, len) = parse_opcode(&mem[(reg.pc as usize)..]);
         reg.pc += len;
-        println!("{:#06X}: {:?} {:?}", reg.pc - len, opcode, reg);
+        println!(
+            "{:#06X}: {:X?} {:X?} {:X?}",
+            reg.pc - len,
+            mem[(reg.pc - len) as usize..(reg.pc as usize)].to_vec(),
+            opcode,
+            reg
+        );
         execute_opcode(&mut reg, &mut mem, &opcode);
     }
 }
