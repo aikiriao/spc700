@@ -10,6 +10,11 @@ macro_rules! create_opcode_with_length_check {
     }};
 }
 
+/// RAMへの書き込み（デバッグするために関数化）
+fn write_ram_u8(ram: &mut [u8], address: usize, value: u8) {
+    ram[address] = value;
+}
+
 /// RAMからオペコードを解釈
 pub fn parse_opcode(ram: &[u8]) -> (SPCOpcode, u16) {
     match ram[0] {
@@ -1768,7 +1773,7 @@ impl SPCRegister {
 
     /// スタックにデータをPUSH
     fn push_stack(&mut self, ram: &mut [u8], value: u8) {
-        ram[Self::STACK_BASE_ADDRESS + self.sp as usize] = value;
+        write_ram_u8(ram, Self::STACK_BASE_ADDRESS + self.sp as usize, value);
         self.sp -= 1;
     }
 
@@ -1869,73 +1874,73 @@ fn execute_mov(register: &mut SPCRegister, ram: &mut [u8], oprand: &SPCOprand) {
         SPCOprand::AToIndirect => {
             let address = register.get_direct_page_address(register.x);
             val = register.a;
-            ram[address] = val;
+            write_ram_u8(ram, address, val);
         }
         SPCOprand::AToIndirectAutoIncrement => {
             let address = register.get_direct_page_address(register.x);
             val = register.a;
-            ram[address] = val;
+            write_ram_u8(ram, address, val);
             register.x += 1;
         }
         SPCOprand::AToDirectPage { direct_page } => {
             let address = register.get_direct_page_address(*direct_page);
             val = register.a;
-            ram[address] = val;
+            write_ram_u8(ram, address, val);
         }
         SPCOprand::AToDirectPageX { direct_page } => {
             let address = register.get_direct_page_address(*direct_page) + register.x as usize;
             val = register.a;
-            ram[address] = val;
+            write_ram_u8(ram, address, val);
         }
         SPCOprand::AToAbsolute { address } => {
             val = register.a;
-            ram[*address as usize] = val;
+            write_ram_u8(ram, *address as usize, val);
         }
         SPCOprand::AToAbsoluteX { address } => {
             val = register.a;
-            ram[(*address + (register.x as u16)) as usize] = val;
+            write_ram_u8(ram, (*address + (register.x as u16)) as usize, val);
         }
         SPCOprand::AToAbsoluteY { address } => {
             val = register.a;
-            ram[(*address + (register.y as u16)) as usize] = val;
+            write_ram_u8(ram, (*address + (register.y as u16)) as usize, val);
         }
         SPCOprand::AToDirectPageXIndirect { direct_page } => {
             let address = register.get_direct_page_x_indexed_indirect_address(ram, *direct_page);
             val = register.a;
-            ram[address] = val;
+            write_ram_u8(ram, address, val);
         }
         SPCOprand::AToDirectPageIndirectY { direct_page } => {
             let address = register.get_direct_page_indirect_y_indexed_address(ram, *direct_page);
             val = register.a;
-            ram[address] = val;
+            write_ram_u8(ram, address, val);
         }
         SPCOprand::XToDirectPage { direct_page } => {
             let address = register.get_direct_page_address(*direct_page);
             val = register.x;
-            ram[address] = val;
+            write_ram_u8(ram, address, val);
         }
         SPCOprand::XToDirectPageY { direct_page } => {
             let address = register.get_direct_page_address(*direct_page) + register.y as usize;
             val = register.x;
-            ram[address] = val;
+            write_ram_u8(ram, address, val);
         }
         SPCOprand::XToAbsolute { address } => {
             val = register.x;
-            ram[*address as usize] = val;
+            write_ram_u8(ram, *address as usize, val);
         }
         SPCOprand::YToDirectPage { direct_page } => {
             let address = register.get_direct_page_address(*direct_page);
             val = register.y;
-            ram[address] = val;
+            write_ram_u8(ram, address, val);
         }
         SPCOprand::YToDirectPageX { direct_page } => {
             let address = register.get_direct_page_address(*direct_page) + register.x as usize;
             val = register.y;
-            ram[address] = val;
+            write_ram_u8(ram, address, val);
         }
         SPCOprand::YToAbsolute { address } => {
             val = register.y;
-            ram[*address as usize] = val;
+            write_ram_u8(ram, *address as usize, val);
         }
         SPCOprand::XToA => {
             val = register.x;
@@ -1968,7 +1973,7 @@ fn execute_mov(register: &mut SPCRegister, ram: &mut [u8], oprand: &SPCOprand) {
             let dst_address = register.get_direct_page_address(*direct_page1);
             let src_address = register.get_direct_page_address(*direct_page2);
             val = ram[src_address];
-            ram[dst_address] = val;
+            write_ram_u8(ram, dst_address, val);
         }
         SPCOprand::ImmediateToDirectPage {
             direct_page,
@@ -1976,7 +1981,7 @@ fn execute_mov(register: &mut SPCRegister, ram: &mut [u8], oprand: &SPCOprand) {
         } => {
             let address = register.get_direct_page_address(*direct_page);
             val = *immediate;
-            ram[address] = val;
+            write_ram_u8(ram, address, val);
         }
         _ => panic!("Invalid oprand!"),
     }
@@ -2064,7 +2069,7 @@ fn execute_binary_logical_operation(
             let dst_address = register.get_direct_page_address(register.x);
             let src_address = register.get_direct_page_address(register.y);
             ret = op(ram[dst_address], ram[src_address]);
-            ram[dst_address] = ret;
+            write_ram_u8(ram, dst_address, ret);
         }
         SPCOprand::DirectPageToDirectPage {
             direct_page1,
@@ -2073,7 +2078,7 @@ fn execute_binary_logical_operation(
             let dst_address = register.get_direct_page_address(*direct_page1);
             let src_address = register.get_direct_page_address(*direct_page2);
             ret = op(ram[dst_address], ram[src_address]);
-            ram[dst_address] = ret;
+            write_ram_u8(ram, dst_address, ret);
         }
         SPCOprand::ImmediateToDirectPage {
             direct_page,
@@ -2081,7 +2086,7 @@ fn execute_binary_logical_operation(
         } => {
             let address = register.get_direct_page_address(*direct_page);
             ret = op(ram[address], *immediate);
-            ram[address] = ret;
+            write_ram_u8(ram, address, ret);
         }
         _ => panic!("Invalid oprand!"),
     }
@@ -2144,19 +2149,19 @@ fn execute_unary_bit_opration(
         SPCOprand::DirectPage { direct_page } => {
             let address = register.get_direct_page_address(*direct_page);
             prev_msb = (ram[address] >> 7) & 0x1;
-            ram[address] = op(ram[address]);
+            write_ram_u8(ram, address, op(ram[address]));
             ret = ram[address];
         }
         SPCOprand::DirectPageX { direct_page } => {
             let address = register.get_direct_page_address(*direct_page) + register.x as usize;
             prev_msb = (ram[address] >> 7) & 0x1;
-            ram[address] = op(ram[address]);
+            write_ram_u8(ram, address, op(ram[address]));
             ret = ram[address];
         }
         SPCOprand::Absolute { address } => {
             let addr = *address as usize;
             prev_msb = (ram[addr] >> 7) & 0x1;
-            ram[addr] = op(ram[addr]);
+            write_ram_u8(ram, addr, op(ram[addr]));
             ret = ram[addr];
         }
         _ => panic!("Invalid oprand!"),
@@ -2252,16 +2257,16 @@ fn execute_inc_dec(
         SPCOprand::DirectPage { direct_page } => {
             let address = register.get_direct_page_address(*direct_page);
             ret = op(ram[address]);
-            ram[address] = ret;
+            write_ram_u8(ram, address, ret);
         }
         SPCOprand::DirectPageX { direct_page } => {
             let address = register.get_direct_page_address(*direct_page) + register.x as usize;
             ret = op(ram[address]);
-            ram[address] = ret;
+            write_ram_u8(ram, address, ret);
         }
         SPCOprand::Absolute { address } => {
             ret = op(ram[*address as usize]);
-            ram[*address as usize] = ret;
+            write_ram_u8(ram, *address as usize, ret);
         }
         SPCOprand::XIndexRegister => {
             ret = op(register.x);
@@ -2484,7 +2489,7 @@ fn execute_adc_sbc(
                 ram[address2],
                 register.test_psw_flag(PSW_FLAG_C),
             );
-            ram[address1] = ret;
+            write_ram_u8(ram, address1, ret);
         }
         SPCOprand::DirectPageToDirectPage {
             direct_page1,
@@ -2497,7 +2502,7 @@ fn execute_adc_sbc(
                 ram[address2],
                 register.test_psw_flag(PSW_FLAG_C),
             );
-            ram[address1] = ret;
+            write_ram_u8(ram, address1, ret);
         }
         SPCOprand::ImmediateToDirectPage {
             direct_page,
@@ -2506,7 +2511,7 @@ fn execute_adc_sbc(
             let address = register.get_direct_page_address(*direct_page);
             (ret, arith_overflow, sign_overflow, half_carry) =
                 op(ram[address], *immediate, register.test_psw_flag(PSW_FLAG_C));
-            ram[address] = ret;
+            write_ram_u8(ram, address, ret);
         }
         _ => panic!("Invalid oprand!"),
     }
@@ -2565,8 +2570,8 @@ pub fn execute_opcode(register: &mut SPCRegister, ram: &mut [u8], opcode: &SPCOp
             }
             SPCOprand::YAToDirectPage { direct_page } => {
                 let address = register.get_direct_page_address(*direct_page);
-                ram[address + 0] = register.y;
-                ram[address + 1] = register.a;
+                write_ram_u8(ram, address + 0, register.y);
+                write_ram_u8(ram, address + 1, register.a);
             }
             _ => panic!("Invalid oprand!"),
         },
@@ -2611,9 +2616,9 @@ pub fn execute_opcode(register: &mut SPCRegister, ram: &mut [u8], opcode: &SPCOp
             SPCOprand::DirectPage { direct_page } => {
                 let address = register.get_direct_page_address(*direct_page);
                 let mut wval = make_u16_from_u8(&ram[address..(address + 2)]);
-                wval -= 1;
-                ram[address + 0] = ((wval >> 8) & 0xFF) as u8;
-                ram[address + 1] = ((wval >> 0) & 0xFF) as u8;
+                wval = wval.overflowing_sub(1).0;
+                write_ram_u8(ram, address + 0, ((wval >> 8) & 0xFF) as u8);
+                write_ram_u8(ram, address + 1, ((wval >> 0) & 0xFF) as u8);
                 register.set_psw_flag(PSW_FLAG_N, (wval >> 15) != 0);
                 register.set_psw_flag(PSW_FLAG_Z, wval == 0);
             }
@@ -2641,9 +2646,9 @@ pub fn execute_opcode(register: &mut SPCRegister, ram: &mut [u8], opcode: &SPCOp
             SPCOprand::DirectPage { direct_page } => {
                 let address = register.get_direct_page_address(*direct_page);
                 let mut wval = make_u16_from_u8(&ram[address..(address + 2)]);
-                wval += 1;
-                ram[address + 0] = ((wval >> 8) & 0xFF) as u8;
-                ram[address + 1] = ((wval >> 0) & 0xFF) as u8;
+                wval = wval.overflowing_add(1).0;
+                write_ram_u8(ram, address + 0, ((wval >> 8) & 0xFF) as u8);
+                write_ram_u8(ram, address + 1, ((wval >> 0) & 0xFF) as u8);
                 register.set_psw_flag(PSW_FLAG_N, (wval >> 15) != 0);
                 register.set_psw_flag(PSW_FLAG_Z, wval == 0);
             }
@@ -2729,7 +2734,7 @@ pub fn execute_opcode(register: &mut SPCRegister, ram: &mut [u8], opcode: &SPCOp
         SPCOpcode::CLR1 { bit, oprand } => match oprand {
             SPCOprand::DirectPageBit { direct_page } => {
                 let address = register.get_direct_page_address(*direct_page);
-                ram[address] &= !(1 << (*bit));
+                write_ram_u8(ram, address, ram[address] & !(1 << (*bit)));
             }
             _ => panic!("Invalid oprand!"),
         },
@@ -2750,25 +2755,29 @@ pub fn execute_opcode(register: &mut SPCRegister, ram: &mut [u8], opcode: &SPCOp
             SPCOprand::CarrayFlagToAbsoluteMemoryBit { address_bit } => {
                 let (bit_pos, address) = get_address_bit(*address_bit);
                 let mask = (register.psw & PSW_FLAG_C) << bit_pos;
-                ram[address] = if mask != 0 {
-                    ram[address] | mask
-                } else {
-                    ram[address] & !mask
-                };
+                write_ram_u8(
+                    ram,
+                    address,
+                    if mask != 0 {
+                        ram[address] | mask
+                    } else {
+                        ram[address] & !mask
+                    },
+                );
             }
             _ => panic!("Invalid oprand!"),
         },
         SPCOpcode::NOT1 { oprand } => match oprand {
             SPCOprand::AbsoluteBit { address_bit } => {
                 let (bit_pos, address) = get_address_bit(*address_bit);
-                ram[address] ^= 1 << bit_pos;
+                write_ram_u8(ram, address, ram[address] ^ (1 << bit_pos));
             }
             _ => panic!("Invalid oprand!"),
         },
         SPCOpcode::SET1 { bit, oprand } => match oprand {
             SPCOprand::DirectPageBit { direct_page } => {
                 let address = register.get_direct_page_address(*direct_page);
-                ram[address] |= 1 << (*bit);
+                write_ram_u8(ram, address, ram[address] | (1 << (*bit)));
             }
             _ => panic!("Invalid oprand!"),
         },
@@ -2777,7 +2786,7 @@ pub fn execute_opcode(register: &mut SPCRegister, ram: &mut [u8], opcode: &SPCOp
                 let addr = *address as usize;
                 let or = register.a | ram[addr];
                 let and = register.a & ram[addr];
-                ram[addr] = or;
+                write_ram_u8(ram, addr, or);
                 register.set_psw_flag(PSW_FLAG_N, (or & PSW_FLAG_N) != 0);
                 register.set_psw_flag(PSW_FLAG_Z, and == 0);
             }
@@ -2786,7 +2795,7 @@ pub fn execute_opcode(register: &mut SPCRegister, ram: &mut [u8], opcode: &SPCOp
         SPCOpcode::TCLR1 { oprand } => match oprand {
             SPCOprand::Absolute { address } => {
                 let ret = ram[*address as usize] & !register.a;
-                ram[*address as usize] = ret;
+                write_ram_u8(ram, *address as usize, ret);
                 register.set_psw_flag(PSW_FLAG_N, (ret >> 7) != 0);
                 register.set_psw_flag(PSW_FLAG_Z, ret == 0);
             }
@@ -2949,7 +2958,7 @@ pub fn execute_opcode(register: &mut SPCRegister, ram: &mut [u8], opcode: &SPCOp
                 pc_relative,
             } => {
                 let address = register.get_direct_page_address(*direct_page);
-                ram[address] = ram[address].overflowing_sub(1).0;
+                write_ram_u8(ram, address, ram[address].overflowing_sub(1).0);
                 if ram[address] != 0 {
                     register.pc = (register.pc as i32 + *pc_relative as i32) as u16;
                 }
