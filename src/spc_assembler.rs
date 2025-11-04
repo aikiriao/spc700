@@ -3043,7 +3043,7 @@ pub fn execute_opcode(register: &mut SPCRegister, ram: &mut [u8], opcode: &SPCOp
             _ => panic!("Invalid oprand!"),
         },
         SPCOpcode::TCALL { table_index } => {
-            let address = 0xFFC0usize + (*table_index * 2) as usize;
+            let address = 0xFFDEusize - (*table_index * 2) as usize;
             let jmp_pc = make_u16_from_u8(&ram[address..(address + 2)]);
             register.push_stack(ram, ((register.pc >> 8) & 0xFF) as u8);
             register.push_stack(ram, ((register.pc >> 0) & 0xFF) as u8);
