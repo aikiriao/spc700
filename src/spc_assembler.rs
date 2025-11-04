@@ -1128,7 +1128,7 @@ pub fn parse_opcode(ram: &[u8]) -> (SPCOpcode, u16) {
         0xDB => create_opcode_with_length_check!(
             ram,
             SPCOpcode::MOV {
-                oprand: SPCOprand::DirectPageX {
+                oprand: SPCOprand::YToDirectPageX {
                     direct_page: ram[1]
                 }
             },
