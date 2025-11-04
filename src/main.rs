@@ -1,5 +1,6 @@
-use spc::spc_assembler::*;
 use spc::spc_file_parser::*;
+use spc::spc_assembler::*;
+use spc::spc_emulator::*;
 use spc::types::*;
 use std::env;
 use std::fmt::Error;
