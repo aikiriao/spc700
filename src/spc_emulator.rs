@@ -1,4 +1,5 @@
 use crate::types::*;
+use crate::spc_assembler::*;
 
 /// ネガティブフラグ
 const PSW_FLAG_N: u8 = 1 << 7;
@@ -12,6 +13,77 @@ const PSW_FLAG_H: u8 = 1 << 3;
 const PSW_FLAG_Z: u8 = 1 << 1;
 /// キャリーフラグ
 const PSW_FLAG_C: u8 = 1 << 0;
+
+pub struct SPCEmulator {
+    reg: SPCRegister,
+    ram: [u8; 65536],
+    tick_count: u64,
+    timer_enable: [bool; 3],
+    timer_count: [u8; 3],
+}
+
+impl SPCEmulator {
+    pub fn new(reg: &SPCRegister, ram: &[u8]) -> Self {
+        let mut emu = Self {
+            reg: reg.clone(),
+            ram: [0u8; 65536],
+            tick_count: 0,
+            timer_enable: [false; 3],
+            timer_count: [0; 3],
+        };
+        emu.ram.copy_from_slice(ram);
+
+        // TODO: ramの内容からエミュレータをセットアップ
+
+        emu
+    }
+
+    /// ステップ実行
+    pub fn execute_step(&mut self) {
+        let (opcode, len) = parse_opcode(&self.ram[(self.reg.pc as usize)..]);
+        println!(
+            "{:#06X}: {:02X?} {:X?} {:X?}",
+            self.reg.pc,
+            self.ram[(self.reg.pc as usize)..((self.reg.pc + len) as usize)].to_vec(),
+            opcode,
+            self.reg
+        );
+        self.reg.pc += len;
+        execute_opcode(&mut self.reg, &mut self.ram, &opcode);
+    }
+
+    /// クロックカウンタの更新
+    fn countup_clock(&mut self, id: usize) {
+        const T0TARGET_ADDRESS: usize = 0x00FA;
+        const T0OUT_ADDRESS: usize = 0x00FD;
+        let amount = read_ram_u8(&mut self.ram, T0TARGET_ADDRESS + id);
+        let mut counter = read_ram_u8(&mut self.ram, T0OUT_ADDRESS + id);
+        self.timer_count[id] = self.timer_count[id].overflowing_add(1).0;
+        if self.timer_count[id] >= amount {
+            self.timer_count[id] = 0;
+            counter = counter.overflowing_add(1).0;
+            write_ram_u8(&mut self.ram, T0TARGET_ADDRESS + id, counter & 0x0F);
+        }
+    }
+
+    /// クロックティック
+    pub fn clock_tick_64kHz(&mut self) {
+        self.tick_count += 1;
+        // 8kHzタイマー
+        if self.tick_count % 8 == 0 {
+            if self.timer_enable[0] {
+                self.countup_clock(0);
+            }
+            if self.timer_enable[1] {
+                self.countup_clock(1);
+            }
+        }
+        // 64kHzタイマー
+        if self.timer_enable[2] {
+            self.countup_clock(2);
+        }
+    }
+}
 
 /// RAMへの書き込み（デバッグするため関数化）
 fn write_ram_u8(ram: &mut [u8], address: usize, value: u8) {
