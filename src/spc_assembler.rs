@@ -124,11 +124,11 @@ pub fn parse_opcode(ram: &[u8]) -> (SPCOpcode, u16) {
         0x17 => create_opcode_with_length_check!(
             ram,
             SPCOpcode::OR {
-                oprand: SPCOprand::AbsoluteY {
-                    address: make_u16_from_u8(&ram[1..3]),
+                oprand: SPCOprand::DirectPageIndirectY {
+                    address: ram[1],
                 },
             },
-            3
+            2
         ),
         0x18 => create_opcode_with_length_check!(
             ram,
