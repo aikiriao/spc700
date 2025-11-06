@@ -442,7 +442,7 @@ impl SPCEmulator {
     }
 
     /// クロックティック
-    pub fn clock_tick_64kHz(&mut self) {
+    pub fn clock_tick_64k_hz(&mut self) {
         self.tick_count = self.tick_count.overflowing_add(1).0;
         // 8kHzタイマー
         if self.tick_count % 8 == 0 {
@@ -456,6 +456,10 @@ impl SPCEmulator {
         // 64kHzタイマー
         if self.timer_enable[2] {
             self.countup_clock(2);
+        }
+        // 32kHz周期で出力サンプル計算
+        if self.tick_count % 2 == 0 {
+            // TODO
         }
     }
 

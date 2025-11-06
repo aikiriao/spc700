@@ -18,11 +18,17 @@ fn naive_disassemble(ram: &[u8]) {
 
 /// 実行してみる
 fn naive_execution(register: &SPCRegister, ram: &[u8]) {
+    const CLOCK_TICK_CYCLE_64KHZ: u64 = 384;
     let mut emu = SPCEmulator::new(&register, ram);
-    let mut total_step = 0u64;
+    let mut total_cycle = 0u64;
+    let mut next_tick_cycle = CLOCK_TICK_CYCLE_64KHZ;
     loop {
         let cycle = emu.execute_step();
-        total_step += cycle as u64;
+        total_cycle = total_cycle.overflowing_add(cycle as u64).0;
+        if total_cycle >= next_tick_cycle {
+            emu.clock_tick_64k_hz();
+            next_tick_cycle = next_tick_cycle.overflowing_add(CLOCK_TICK_CYCLE_64KHZ).0;
+        }
     }
 }
 
