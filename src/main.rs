@@ -19,9 +19,10 @@ fn naive_disassemble(ram: &[u8]) {
 /// 実行してみる
 fn naive_execution(register: &SPCRegister, ram: &[u8]) {
     let mut emu = SPCEmulator::new(&register, ram);
-
+    let mut total_step = 0u64;
     loop {
-        emu.execute_step();
+        let cycle = emu.execute_step();
+        total_step += cycle as u64;
     }
 }
 
