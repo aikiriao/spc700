@@ -1,4 +1,5 @@
 use crate::spc_assembler::*;
+use crate::spc_dsp::*;
 use crate::types::*;
 
 /// ネガティブフラグ
@@ -37,331 +38,7 @@ const T0OUT_ADDRESS: usize = 0x00FD;
 const T1OUT_ADDRESS: usize = 0x00FE;
 const T2OUT_ADDRESS: usize = 0x00FF;
 
-/// DSPレジスタアドレス
-const MVOLL_ADDRESS: u8 = 0x0C;
-const MVOLR_ADDRESS: u8 = 0x1C;
-const EVOLL_ADDRESS: u8 = 0x2C;
-const EVOLR_ADDRESS: u8 = 0x3C;
-const KON_ADDRESS: u8 = 0x4C;
-const KOFF_ADDRESS: u8 = 0x5C;
-const FLG_ADDRESS: u8 = 0x6C;
-const ENDX_ADDRESS: u8 = 0x7C;
-const EFB_ADDRESS: u8 = 0x0D;
-const PMON_ADDRESS: u8 = 0x2D;
-const NON_ADDRESS: u8 = 0x3D;
-const EON_ADDRESS: u8 = 0x4D;
-const DIR_ADDRESS: u8 = 0x5D;
-const ESA_ADDRESS: u8 = 0x6D;
-const EDL_ADDRESS: u8 = 0x7D;
-const FIR0_ADDRESS: u8 = 0x0F;
-const FIR1_ADDRESS: u8 = 0x1F;
-const FIR2_ADDRESS: u8 = 0x2F;
-const FIR3_ADDRESS: u8 = 0x3F;
-const FIR4_ADDRESS: u8 = 0x4F;
-const FIR5_ADDRESS: u8 = 0x5F;
-const FIR6_ADDRESS: u8 = 0x6F;
-const FIR7_ADDRESS: u8 = 0x7F;
-const V0VOLL_ADDRESS: u8 = 0x00;
-const V0VOLR_ADDRESS: u8 = 0x01;
-const V0PITCHL_ADDRESS: u8 = 0x02;
-const V0PITCHH_ADDRESS: u8 = 0x03;
-const V0SRCN_ADDRESS: u8 = 0x04;
-const V0ADSR1_ADDRESS: u8 = 0x05;
-const V0ADSR2_ADDRESS: u8 = 0x06;
-const V0GAIN_ADDRESS: u8 = 0x07;
-const V0ENVX_ADDRESS: u8 = 0x08;
-const V0OUTX_ADDRESS: u8 = 0x09;
-
-#[derive(Copy, Clone)]
-enum SPCVoiceGainMode {
-    Fixed { gain: u8 },
-    LinearDecrease { rate: u8 },
-    ExponentialDecrease { rate: u8 },
-    LinearIncrease { rate: u8 },
-    BentIncrease { rate: u8 },
-}
-
-#[derive(Copy, Clone)]
-struct SPCVoiceRegister {
-    volume: [i8; 2],
-    pitch: u16,
-    sample_source: u8, // BRR dir = sample_dir_page * 0x100 + sample_source * 4
-    adsr_enable: bool,
-    attack_rate: u8,
-    decay_rate: u8,
-    sustain_rate: u8,
-    sustain_level: u8,
-    gain_mode: SPCVoiceGainMode,
-    envelope_value: u8,
-    output_sample: i8,
-}
-
-impl SPCVoiceRegister {
-    fn new() -> Self {
-        Self {
-            volume: [0; 2],
-            pitch: 0,
-            sample_source: 0,
-            adsr_enable: false,
-            attack_rate: 0,
-            decay_rate: 0,
-            sustain_rate: 0,
-            sustain_level: 0,
-            gain_mode: SPCVoiceGainMode::Fixed { gain: 0 },
-            envelope_value: 0,
-            output_sample: 0,
-        }
-    }
-}
-
-struct SPCDSP {
-    volume: [i8; 2],
-    echo_volume: [i8; 2],
-    keyon: [bool; 8],
-    keyoff: [bool; 8],
-    flag: u8,
-    end: [bool; 8],
-    echo_feedback: i8,
-    pitch_mod_enable: [bool; 8],
-    noise_enable: [bool; 8],
-    echo_enable: [bool; 8],
-    sample_dir_page: u8,
-    echo_start_page: u8,
-    echo_delay: u8,
-    fir_coef: [i8; 8],
-    voice: [SPCVoiceRegister; 8],
-}
-
-impl SPCDSP {
-    fn new() -> Self {
-        Self {
-            volume: [0; 2],
-            echo_volume: [0; 2],
-            keyon: [false; 8],
-            keyoff: [false; 8],
-            flag: 0,
-            end: [false; 8],
-            echo_feedback: 0,
-            pitch_mod_enable: [false; 8],
-            noise_enable: [false; 8],
-            echo_enable: [false; 8],
-            sample_dir_page: 0,
-            echo_start_page: 0,
-            echo_delay: 0,
-            fir_coef: [0; 8],
-            voice: [SPCVoiceRegister::new(); 8],
-        }
-    }
-
-    /// 8bitパターンを8個のフラグに変換
-    fn get_enable_bools(value: u8) -> [bool; 8] {
-        let mut ret = [false; 8];
-        for id in 0..8 {
-            ret[id] = ((value >> id) & 0x1) != 0;
-        }
-        ret
-    }
-
-    /// 8個のフラグを8bitパターンに変換
-    fn get_bit_enable_flag(flags: &[bool; 8]) -> u8 {
-        let mut ret = 0;
-        let mut bit = 1;
-        for id in 0..8 {
-            if flags[id] {
-                ret |= bit;
-            }
-            bit <<= 1;
-        }
-        ret
-    }
-
-    /// DSPレジスタの書き込み処理
-    fn write_dsp_register(&mut self, address: u8, value: u8) {
-        match address {
-            MVOLL_ADDRESS => {
-                self.volume[0] = value as i8;
-            }
-            MVOLR_ADDRESS => {
-                self.volume[1] = value as i8;
-            }
-            EVOLL_ADDRESS => {
-                self.echo_volume[0] = value as i8;
-            }
-            EVOLR_ADDRESS => {
-                self.echo_volume[1] = value as i8;
-            }
-            KON_ADDRESS => {
-                self.keyon = Self::get_enable_bools(value);
-            }
-            KOFF_ADDRESS => {
-                self.keyoff = Self::get_enable_bools(value);
-            }
-            FLG_ADDRESS => {
-                self.flag = value;
-            }
-            ENDX_ADDRESS => {
-                self.end = Self::get_enable_bools(value);
-            }
-            EFB_ADDRESS => {
-                self.echo_feedback = value as i8;
-            }
-            PMON_ADDRESS => {
-                for id in 1..8 {
-                    /* NOTE! 0は無効 */
-                    self.pitch_mod_enable[id] = ((value >> id) & 0x1) != 0;
-                }
-            }
-            NON_ADDRESS => {
-                self.noise_enable = Self::get_enable_bools(value);
-            }
-            EON_ADDRESS => {
-                self.echo_enable = Self::get_enable_bools(value);
-            }
-            DIR_ADDRESS => {
-                self.sample_dir_page = value;
-            }
-            ESA_ADDRESS => {
-                self.echo_start_page = value;
-            }
-            EDL_ADDRESS => {
-                self.echo_delay = value & 0x0F;
-            }
-            FIR0_ADDRESS | FIR1_ADDRESS | FIR2_ADDRESS | FIR3_ADDRESS | FIR4_ADDRESS
-            | FIR5_ADDRESS | FIR6_ADDRESS | FIR7_ADDRESS => {
-                let index = address >> 4;
-                self.fir_coef[index as usize] = value as i8;
-            }
-            address if ((address & 0xF) <= 0x9) => {
-                let id = (address >> 4) as usize;
-                match address & 0xF {
-                    V0VOLL_ADDRESS => {
-                        self.voice[id].volume[0] = value as i8;
-                    }
-                    V0VOLR_ADDRESS => {
-                        self.voice[id].volume[1] = value as i8;
-                    }
-                    V0PITCHL_ADDRESS => {
-                        self.voice[id].pitch = (self.voice[id].pitch & 0xFF00) | (value as u16);
-                    }
-                    V0PITCHH_ADDRESS => {
-                        self.voice[id].pitch =
-                            ((value as u16) << 8) | (self.voice[id].pitch & 0x00FF);
-                    }
-                    V0SRCN_ADDRESS => {
-                        self.voice[id].sample_source = value;
-                    }
-                    V0ADSR1_ADDRESS => {
-                        self.voice[id].adsr_enable = (value >> 7) != 0;
-                        self.voice[id].attack_rate = value & 0xF;
-                        self.voice[id].decay_rate = (value >> 4) & 0x7;
-                    }
-                    V0ADSR2_ADDRESS => {
-                        self.voice[id].sustain_rate = value & 0x1F;
-                        self.voice[id].sustain_level = (value >> 5) & 0x7;
-                    }
-                    V0GAIN_ADDRESS => {
-                        if (value >> 7) == 0 {
-                            self.voice[id].gain_mode =
-                                SPCVoiceGainMode::Fixed { gain: value & 0x7F };
-                        } else {
-                            let rate = value & 0x1F;
-                            self.voice[id].gain_mode = match (value >> 5) & 0x3 {
-                                0 => SPCVoiceGainMode::LinearDecrease { rate: rate },
-                                1 => SPCVoiceGainMode::ExponentialDecrease { rate: rate },
-                                2 => SPCVoiceGainMode::LinearIncrease { rate: rate },
-                                3 => SPCVoiceGainMode::BentIncrease { rate: rate },
-                                _ => panic!("Unsupported Gain Type!"),
-                            };
-                        }
-                    }
-                    V0ENVX_ADDRESS => {
-                        // 書き込めるけど意味はない（読み取り用レジスタ）
-                        self.voice[id].envelope_value = value;
-                    }
-                    V0OUTX_ADDRESS => {
-                        // 書き込めるけど意味はない（読み取り用レジスタ）
-                        self.voice[id].output_sample = value as i8;
-                    }
-                    _ => {
-                        panic!("Unsupported DSP address!");
-                    }
-                }
-            }
-            _ => {
-                panic!("Unsupported DSP address!");
-            }
-        }
-    }
-
-    /// DSPレジスタの読み込み処理
-    fn read_dsp_register(&mut self, address: u8) -> u8 {
-        match address {
-            MVOLL_ADDRESS => self.volume[0] as u8,
-            MVOLR_ADDRESS => self.volume[1] as u8,
-            EVOLL_ADDRESS => self.echo_volume[0] as u8,
-            EVOLR_ADDRESS => self.echo_volume[1] as u8,
-            KON_ADDRESS => Self::get_bit_enable_flag(&self.keyon),
-            KOFF_ADDRESS => Self::get_bit_enable_flag(&self.keyoff),
-            FLG_ADDRESS => self.flag,
-            ENDX_ADDRESS => Self::get_bit_enable_flag(&self.end),
-            EFB_ADDRESS => self.echo_feedback as u8,
-            PMON_ADDRESS => Self::get_bit_enable_flag(&self.pitch_mod_enable),
-            NON_ADDRESS => Self::get_bit_enable_flag(&self.noise_enable),
-            EON_ADDRESS => Self::get_bit_enable_flag(&self.echo_enable),
-            DIR_ADDRESS => self.sample_dir_page,
-            ESA_ADDRESS => self.echo_start_page,
-            EDL_ADDRESS => self.echo_delay,
-            FIR0_ADDRESS | FIR1_ADDRESS | FIR2_ADDRESS | FIR3_ADDRESS | FIR4_ADDRESS
-            | FIR5_ADDRESS | FIR6_ADDRESS | FIR7_ADDRESS => {
-                let index = address >> 4;
-                self.fir_coef[index as usize] as u8
-            }
-            address if ((address & 0xF) <= 0x9) => {
-                let id = (address >> 4) as usize;
-                match address & 0xF {
-                    V0VOLL_ADDRESS => self.voice[id].volume[0] as u8,
-                    V0VOLR_ADDRESS => self.voice[id].volume[1] as u8,
-                    V0PITCHL_ADDRESS => (self.voice[id].pitch & 0xFF) as u8,
-                    V0PITCHH_ADDRESS => ((self.voice[id].pitch >> 8) & 0xFF) as u8,
-                    V0SRCN_ADDRESS => self.voice[id].sample_source,
-                    V0ADSR1_ADDRESS => {
-                        let adsr_flag = if self.voice[id].adsr_enable {
-                            0x80
-                        } else {
-                            0x00
-                        };
-                        adsr_flag | (self.voice[id].decay_rate << 4) | self.voice[id].attack_rate
-                    }
-                    V0ADSR2_ADDRESS => {
-                        (self.voice[id].sustain_level << 5) | self.voice[id].sustain_rate
-                    }
-                    V0GAIN_ADDRESS => match self.voice[id].gain_mode {
-                        SPCVoiceGainMode::Fixed { gain } => gain & 0x7F,
-                        SPCVoiceGainMode::LinearDecrease { rate } => {
-                            0x80 | (0 << 5) | (rate & 0x1F)
-                        }
-                        SPCVoiceGainMode::ExponentialDecrease { rate } => {
-                            0x80 | (1 << 5) | (rate & 0x1F)
-                        }
-                        SPCVoiceGainMode::LinearIncrease { rate } => {
-                            0x80 | (2 << 5) | (rate & 0x1F)
-                        }
-                        SPCVoiceGainMode::BentIncrease { rate } => 0x80 | (3 << 5) | (rate & 0x1F),
-                    },
-                    V0ENVX_ADDRESS => self.voice[id].envelope_value,
-                    V0OUTX_ADDRESS => self.voice[id].output_sample as u8,
-                    _ => {
-                        panic!("Unsupported DSP address!");
-                    }
-                }
-            }
-            _ => {
-                panic!("Unsupported DSP address!");
-            }
-        }
-    }
-}
-
+/// エミュレータ
 pub struct SPCEmulator {
     reg: SPCRegister,
     dsp: SPCDSP,
@@ -399,11 +76,11 @@ fn check_half_carry_sub_u16(a: u16, b: u16) -> bool {
 }
 
 impl SPCEmulator {
-    pub fn new(reg: &SPCRegister, ram: &[u8]) -> Self {
+    pub fn new(reg: &SPCRegister, ram: &[u8]) -> SPCEmulator {
         let mut emu = Self {
             reg: reg.clone(),
+            ram: [0; 65536],
             dsp: SPCDSP::new(),
-            ram: [0u8; 65536],
             tick_count: 0,
             timer_enable: [false; 3],
             timer_count: [0; 3],
@@ -431,13 +108,13 @@ impl SPCEmulator {
 
     /// クロックカウンタの更新
     fn countup_clock(&mut self, id: usize) {
-        let amount = self.read_ram_u8(T0TARGET_ADDRESS + id);
-        let mut counter = self.read_ram_u8(T0OUT_ADDRESS + id);
+        let target = self.ram[T0TARGET_ADDRESS + id];
         self.timer_count[id] = self.timer_count[id].overflowing_add(1).0;
-        if self.timer_count[id] >= amount {
+        if self.timer_count[id] >= target {
+            let mut counter = self.ram[T0OUT_ADDRESS + id];
             self.timer_count[id] = 0;
             counter += 1;
-            self.write_ram_u8(T0TARGET_ADDRESS + id, counter & 0x0F);
+            self.ram[T0OUT_ADDRESS + id] = counter & 0x0F;
         }
     }
 
@@ -459,7 +136,7 @@ impl SPCEmulator {
         }
         // 32kHz周期で出力サンプル計算
         if self.tick_count % 2 == 0 {
-            // TODO
+            let _ = self.dsp.compute_sample(&self.ram);
         }
     }
 
