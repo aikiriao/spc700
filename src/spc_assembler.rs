@@ -125,7 +125,7 @@ pub fn parse_opcode(ram: &[u8]) -> (SPCOpcode, u16) {
             ram,
             SPCOpcode::OR {
                 oprand: SPCOprand::DirectPageIndirectY {
-                    address: ram[1],
+                    direct_page: ram[1],
                 },
             },
             2
