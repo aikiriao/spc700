@@ -46,6 +46,7 @@ pub struct SPCEmulator {
     tick_count: u64,
     timer_enable: [bool; 3],
     timer_count: [u8; 3],
+    ipl_rom: bool,
 }
 
 /// メモリビットのアドレスとビット位置を取得
@@ -84,6 +85,7 @@ impl SPCEmulator {
             tick_count: 0,
             timer_enable: [false; 3],
             timer_count: [0; 3],
+            ipl_rom: false,
         };
         emu.ram.copy_from_slice(ram);
 
@@ -157,6 +159,18 @@ impl SPCEmulator {
         }
     }
 
+    /// CPUIOリードポートのクリア
+    fn clear_cpuio_read_ports(&mut self, value: u8) {
+        if (value & (1 << 4)) != 0 {
+            self.write_ram_u8(CPUIO0_ADDRESS, 0);
+            self.write_ram_u8(CPUIO1_ADDRESS, 0);
+        }
+        if (value & (1 << 5)) != 0 {
+            self.write_ram_u8(CPUIO2_ADDRESS, 0);
+            self.write_ram_u8(CPUIO3_ADDRESS, 0);
+        }
+    }
+
     /// RAMへの書き込み
     fn write_ram_u8(&mut self, address: usize, value: u8) {
         // CPUレジスタへの書き込み
@@ -167,7 +181,10 @@ impl SPCEmulator {
                 }
                 CONTROL_ADDRESS => {
                     self.write_timer_register(value);
-                    // TODO: IPL ROM enable, Clear CPUIO ports
+                    self.clear_cpuio_read_ports(value);
+                    if (value & (1 << 7)) != 0 {
+                        self.ipl_rom = true;
+                    }
                 }
                 DSPADDR_ADDRESS => {
                     // 何もしないがアドレスをラッチすべき？
