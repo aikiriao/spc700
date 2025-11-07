@@ -112,18 +112,18 @@ impl SPCEmulator {
     /// クロックカウンタの更新
     fn countup_clock(&mut self, id: usize) {
         let target = self.ram[T0TARGET_ADDRESS + id];
-        self.timer_count[id] = self.timer_count[id].overflowing_add(1).0;
+        self.timer_count[id] = self.timer_count[id].wrapping_add(1);
         if self.timer_count[id] >= target {
             let mut counter = self.ram[T0OUT_ADDRESS + id];
             self.timer_count[id] = 0;
-            counter += 1;
+            counter = counter.wrapping_add(1);
             self.ram[T0OUT_ADDRESS + id] = counter & 0x0F;
         }
     }
 
     /// クロックティック
     pub fn clock_tick_64k_hz(&mut self) {
-        self.tick_count = self.tick_count.overflowing_add(1).0;
+        self.tick_count = self.tick_count.wrapping_add(1);
         // 8kHzタイマー
         if self.tick_count % 8 == 0 {
             if self.timer_enable[0] {
@@ -354,7 +354,7 @@ impl SPCEmulator {
                 SPCOprand::DirectPage { direct_page } => {
                     let address = self.get_direct_page_address(*direct_page);
                     let mut wval = self.read_ram_u16(address);
-                    wval = wval.overflowing_sub(1).0;
+                    wval = wval.overwrapping_sub(1);
                     self.write_ram_u8(address + 0, ((wval >> 8) & 0xFF) as u8);
                     self.write_ram_u8(address + 1, ((wval >> 0) & 0xFF) as u8);
                     self.set_psw_flag(PSW_FLAG_N, (wval >> 15) != 0);
@@ -386,7 +386,7 @@ impl SPCEmulator {
                 SPCOprand::DirectPage { direct_page } => {
                     let address = self.get_direct_page_address(*direct_page);
                     let mut wval = self.read_ram_u16(address);
-                    wval = wval.overflowing_add(1).0;
+                    wval = wval.wrapping_add(1);
                     self.write_ram_u8(address + 0, ((wval >> 8) & 0xFF) as u8);
                     self.write_ram_u8(address + 1, ((wval >> 0) & 0xFF) as u8);
                     self.set_psw_flag(PSW_FLAG_N, (wval >> 15) != 0);
@@ -771,7 +771,7 @@ impl SPCEmulator {
                 } => {
                     let address = self.get_direct_page_address(*direct_page);
                     let mut memval = self.read_ram_u8(address);
-                    memval = memval.overflowing_sub(1).0;
+                    memval = memval.wrapping_sub(1);
                     self.write_ram_u8(address, memval);
                     if memval != 0 {
                         self.reg.pc = (self.reg.pc as i32 + *pc_relative as i32) as u16;
@@ -781,7 +781,7 @@ impl SPCEmulator {
                     }
                 }
                 SPCOprand::YPCRelative { pc_relative } => {
-                    self.reg.y = self.reg.y.overflowing_sub(1).0;
+                    self.reg.y = self.reg.y.wrapping_sub(1);
                     if self.reg.y != 0 {
                         self.reg.pc = (self.reg.pc as i32 + *pc_relative as i32) as u16;
                         7
@@ -933,7 +933,7 @@ impl SPCEmulator {
             SPCOprand::IndirectAutoIncrementToA => {
                 val = self.read_ram_u8(self.reg.x as usize);
                 self.reg.a = val;
-                self.reg.x = self.reg.x.overflowing_add(1).0;
+                self.reg.x = self.reg.x.wrapping_add(1);
                 cycle = 4;
             }
             SPCOprand::DirectPageToA { direct_page } => {
@@ -1418,7 +1418,7 @@ impl SPCEmulator {
     /// INC命令の実行
     fn execute_inc(&mut self, oprand: &SPCOprand) -> u8 {
         fn inc(a: u8) -> u8 {
-            a.overflowing_add(1).0
+            a.wrapping_add(1)
         }
         self.execute_inc_dec(oprand, inc)
     }
@@ -1426,7 +1426,7 @@ impl SPCEmulator {
     /// DEC命令の実行
     fn execute_dec(&mut self, oprand: &SPCOprand) -> u8 {
         fn dec(a: u8) -> u8 {
-            a.overflowing_sub(1).0
+            a.wrapping_sub(1)
         }
         self.execute_inc_dec(oprand, dec)
     }
