@@ -196,7 +196,7 @@ impl SPCEmulator {
                     panic!("CANNOT read from test register!!");
                 }
                 CONTROL_ADDRESS => {
-                    panic!("CANNOT read from control register!!");
+                    // 何もしない
                 }
                 DSPADDR_ADDRESS => {
                     // 何もしないがアドレスをラッチすべき？
