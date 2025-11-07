@@ -1612,7 +1612,7 @@ impl SPCEmulator {
         fn sub(a: u8, b: u8, carry: bool) -> (u8, bool, bool, bool) {
             let mut ret = (a as i16) - (b as i16);
             if !carry {
-                ret += 1;
+                ret -= 1;
             }
             (
                 (ret & 0xFF) as u8,
