@@ -251,7 +251,7 @@ impl SPCDSP {
     }
 
     /// DSPレジスタの読み込み処理
-    pub fn read_dsp_register(&mut self, address: u8) -> u8 {
+    pub fn read_dsp_register(&self, address: u8) -> u8 {
         match address {
             MVOLL_ADDRESS => self.volume[0] as u8,
             MVOLR_ADDRESS => self.volume[1] as u8,

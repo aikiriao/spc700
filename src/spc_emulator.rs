@@ -156,7 +156,7 @@ impl SPCEmulator {
         }
     }
 
-    /// RAMへの書き込み（デバッグするため関数化）
+    /// RAMへの書き込み
     fn write_ram_u8(&mut self, address: usize, value: u8) {
         // CPUレジスタへの書き込み
         if (address >= TEST_ADDRESS) && (address <= T2OUT_ADDRESS) {
@@ -185,9 +185,27 @@ impl SPCEmulator {
         // println!("W: 0x{:04X} <- {:02X}", address, value);
     }
 
-    /// RAMからの読み込み（デバッグのため関数化）
+    /// RAMからの読み込み
     fn read_ram_u8(&self, address: usize) -> u8 {
         // println!("R: 0x{:04X} -> {:02X}", address, self.ram[address]);
+        // CPUレジスタからの読み込み
+        if (address >= TEST_ADDRESS) && (address <= DSPDATA_ADDRESS) {
+            match address {
+                TEST_ADDRESS => {
+                    panic!("CANNOT read from test register!!");
+                }
+                CONTROL_ADDRESS => {
+                    panic!("CANNOT read from control register!!");
+                }
+                DSPADDR_ADDRESS => {
+                    // 何もしないがアドレスをラッチすべき？
+                }
+                DSPDATA_ADDRESS => {
+                    return self.dsp.read_dsp_register(address as u8);
+                }
+                _ => {}
+            }
+        }
         self.ram[address]
     }
 
