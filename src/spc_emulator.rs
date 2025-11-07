@@ -210,7 +210,7 @@ impl SPCEmulator {
         if (address >= TEST_ADDRESS) && (address <= DSPDATA_ADDRESS) {
             match address {
                 TEST_ADDRESS => {
-                    panic!("CANNOT read from test register!!");
+                    // 何もしない（実機でどうなるかは不明）
                 }
                 CONTROL_ADDRESS => {
                     // 何もしない
