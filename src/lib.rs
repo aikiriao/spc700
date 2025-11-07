@@ -4,3 +4,4 @@ pub mod types;
 pub mod spc_file_parser;
 pub mod spc_assembler;
 pub mod spc_emulator;
+mod spc_dsp;
