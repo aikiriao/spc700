@@ -88,6 +88,7 @@ impl SPCEmulator {
         emu.ram.copy_from_slice(ram);
 
         // TODO: ramの内容からエミュレータをセットアップ
+        emu.write_ram_u8(CONTROL_ADDRESS, ram[CONTROL_ADDRESS]);
 
         emu
     }
