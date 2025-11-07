@@ -624,7 +624,7 @@ impl SPCEmulator {
             },
             SPCOpcode::BCC { oprand } => match oprand {
                 SPCOprand::PCRelative { pc_relative } => {
-                    if self.test_psw_flag(PSW_FLAG_C) {
+                    if !self.test_psw_flag(PSW_FLAG_C) {
                         self.reg.pc = (self.reg.pc as i32 + *pc_relative as i32) as u16;
                         4
                     } else {
@@ -679,7 +679,7 @@ impl SPCEmulator {
             },
             SPCOpcode::BPL { oprand } => match oprand {
                 SPCOprand::PCRelative { pc_relative } => {
-                    if !self.test_psw_flag(PSW_FLAG_Z) {
+                    if !self.test_psw_flag(PSW_FLAG_N) {
                         self.reg.pc = (self.reg.pc as i32 + *pc_relative as i32) as u16;
                         4
                     } else {
@@ -691,7 +691,7 @@ impl SPCEmulator {
             SPCOpcode::BRA { oprand } => match oprand {
                 SPCOprand::PCRelative { pc_relative } => {
                     self.reg.pc = (self.reg.pc as i32 + *pc_relative as i32) as u16;
-                    2
+                    4
                 }
                 _ => panic!("Invalid oprand!"),
             },
