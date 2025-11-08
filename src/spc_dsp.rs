@@ -308,6 +308,11 @@ impl SPCVoiceRegister {
             // 最後の出力サンプル更新
             self.output_sample = ((out >> 8) & 0xFF) as i8;
             [out, out]
+            // 左右ボリューム適用
+            let lout = (out * (self.volume[0] as i16)) >> 8;
+            let rout = (out * (self.volume[1] as i16)) >> 8;
+            // 最後の出力サンプル更新
+            [lout, rout]
         } else {
             [0, 0]
         }
