@@ -309,10 +309,10 @@ impl SPCVoiceRegister {
             self.output_sample = ((out >> 8) & 0xFF) as i8;
             [out, out]
             // 左右ボリューム適用
-            let lout = (out * (self.volume[0] as i16)) >> 8;
-            let rout = (out * (self.volume[1] as i16)) >> 8;
+            let lout = ((out as i32) * (self.volume[0] as i32)) >> 7;
+            let rout = ((out as i32) * (self.volume[1] as i32)) >> 7;
             // 最後の出力サンプル更新
-            [lout, rout]
+            [lout as i16, rout as i16]
         } else {
             [0, 0]
         }
@@ -610,7 +610,7 @@ impl SPCDSP {
         }
         // マスターボリューム適用
         for ch in 0..2 {
-            out[ch] = (out[ch] * (self.volume[ch] as i32)) >> 8;
+            out[ch] = (out[ch] * (self.volume[ch] as i32)) >> 7;
         }
         [out[0] as i16, out[1] as i16]
     }
