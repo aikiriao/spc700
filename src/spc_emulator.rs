@@ -1322,7 +1322,7 @@ impl SPCEmulator {
     /// LSR命令の実行
     fn execute_lsr(&mut self, oprand: &SPCOprand) -> u8 {
         fn lsr(a: u8, _: bool) -> (u8, bool) {
-            (a << 1, (a & 0x01) != 0)
+            (a >> 1, (a & 0x01) != 0)
         }
         self.execute_unary_bit_opration(oprand, lsr)
     }
