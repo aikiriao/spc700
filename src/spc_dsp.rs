@@ -89,6 +89,16 @@ enum SPCVoiceGainMode {
 }
 
 #[derive(Copy, Clone, Debug)]
+enum SPCEnvelopeState {
+    Initial, // FIXME:
+             // エミュレータの初期状態。実際にはこんな状況はないので適切な初期状態に変えておくべき
+    Attack,
+    Decay,
+    Sustain,
+    Release,
+}
+
+#[derive(Copy, Clone, Debug)]
 struct SPCDecoder {
     decode_buffer: [i16; 16],
     decode_history: [i32; 4],
@@ -105,12 +115,14 @@ struct SPCVoiceRegister {
     pitch: u16,
     sample_source: u8,
     brr_dir_address: usize,
+    decode_address: usize,
     adsr_enable: bool,
     attack_rate: u8,
     decay_rate: u8,
     sustain_rate: u8,
     sustain_level: u8,
     gain_mode: SPCVoiceGainMode,
+    envelope_state: SPCEnvelopeState,
     envelope_value: u8,
     output_sample: i8,
     keyon: bool,
@@ -139,7 +151,7 @@ impl SPCDecoder {
         Self {
             decode_buffer: [0; 16],
             decode_history: [0; 4],
-            decode_buffer_pos: 0,
+            decode_buffer_pos: 16,
             read_pos: 0,
             sample_count: 0,
             loop_flag: false,
@@ -170,7 +182,6 @@ impl SPCDecoder {
         sample_count: usize,
         nibble: u8,
     ) -> i16 {
-
         // 符号付き4bit値の読み取り
         let mut sample = if (nibble & 0x8) != 0 {
             ((nibble & 0x7) as i32) - 8
@@ -250,23 +261,24 @@ impl SPCDecoder {
         self.end = ((rfreg >> 0) & 0x1) != 0;
     }
 
-    /// 1サンプル出力
+    /// 1サンプルデコード
     fn process(&mut self, ram: &[u8], pitch: u16) -> i16 {
-        let out = self.decode_buffer[self.decode_buffer_pos];
-        self.decode_buffer_pos += 1;
-
         // バッファが尽きたら次のブロックをデコード
         if self.decode_buffer_pos >= 16 {
-            if self.end && self.loop_flag {
+            if self.end {
+                // ループ先頭からデコードし直す
                 self.read_pos = 0;
-            } else if self.end {
-                // TODO: リリース処理へ
             } else {
+                // 次のブロックに進む
                 self.read_pos += 9;
             }
             self.decode_block(&ram[self.read_pos..], pitch);
             self.decode_buffer_pos = 0;
         }
+
+        // バッファからデータを取り出し
+        let out = self.decode_buffer[self.decode_buffer_pos];
+        self.decode_buffer_pos += 1;
 
         out
     }
@@ -279,6 +291,7 @@ impl SPCVoiceRegister {
             pitch: 0,
             sample_source: 0,
             brr_dir_address: 0,
+            decode_address: 0,
             adsr_enable: false,
             attack_rate: 0,
             decay_rate: 0,
@@ -291,31 +304,48 @@ impl SPCVoiceRegister {
             keyoff: false,
             pitch_mod: false,
             noise: false,
+            envelope_state: SPCEnvelopeState::Initial,
             decoder: SPCDecoder::new(),
         }
     }
 
     fn compute_sample(&mut self, ram: &[u8]) -> [i16; 2] {
-        if self.keyon {
-            // TODO: KONの前にアドレスは確定させておきたい...
-            let decode_address = if self.decoder.end {
-                make_u16_from_u8(&ram[(self.brr_dir_address + 2)..(self.brr_dir_address + 4)])
-                    as usize
-            } else {
-                make_u16_from_u8(&ram[self.brr_dir_address..(self.brr_dir_address + 2)]) as usize
-            };
-            let out = self.decoder.process(&ram[decode_address..], self.pitch);
-            // 最後の出力サンプル更新
-            self.output_sample = ((out >> 8) & 0xFF) as i8;
-            [out, out]
-            // 左右ボリューム適用
-            let lout = ((out as i32) * (self.volume[0] as i32)) >> 7;
-            let rout = ((out as i32) * (self.volume[1] as i32)) >> 7;
-            // 最後の出力サンプル更新
-            [lout as i16, rout as i16]
-        } else {
-            [0, 0]
+        match self.envelope_state {
+            SPCEnvelopeState::Initial => return [0, 0],
+            SPCEnvelopeState::Attack => {
+                // 再生開始直後
+                if self.envelope_value == 0 {
+                    self.decode_address = make_u16_from_u8(&ram[self.brr_dir_address ..(self.brr_dir_address + 2)]) as usize;
+                }
+            }
+            _ => {}
         }
+
+        // ENDフラグ
+        if self.decoder.end {
+            self.decode_address = make_u16_from_u8(
+                &ram[(self.brr_dir_address + 2)..(self.brr_dir_address + 4)],
+            ) as usize;
+            // リリース処理へ
+            if !self.decoder.loop_flag {
+                self.envelope_state = SPCEnvelopeState::Release;
+                self.envelope_value = 0;
+            }
+        }
+
+        // デコード
+        let mut out = self
+            .decoder
+            .process(&ram[self.decode_address..], self.pitch);
+        // 最後の出力サンプル更新
+        self.output_sample = ((out >> 8) & 0xFF) as i8;
+        // TODO: PMON
+        // TODO: NON
+        // TODO: ADSR
+        // 左右ボリューム適用
+        let lout = ((out as i32) * (self.volume[0] as i32)) >> 7;
+        let rout = ((out as i32) * (self.volume[1] as i32)) >> 7;
+        [lout as i16, rout as i16]
     }
 }
 
@@ -354,15 +384,22 @@ impl SPCDSP {
                 for ch in 0..8 {
                     let keyon = ((value >> ch) & 0x1) != 0;
                     self.voice[ch].keyon = keyon;
-                    // キーオンが入ったらENDXフラグをクリア
+                    // キーオンが入ったとき
                     if keyon {
+                        self.voice[ch].envelope_state = SPCEnvelopeState::Attack;
+                        self.voice[ch].envelope_value = 0;
                         self.voice[ch].decoder.end = false;
                     }
                 }
             }
             KOFF_ADDRESS => {
                 for ch in 0..8 {
-                    self.voice[ch].keyoff = ((value >> ch) & 0x1) != 0;
+                    let keyoff = ((value >> ch) & 0x1) != 0;
+                    self.voice[ch].keyoff = keyoff;
+                    // キーオフが入ったとき
+                    if keyoff {
+                        self.voice[ch].envelope_state = SPCEnvelopeState::Release;
+                    }
                 }
             }
             FLG_ADDRESS => {
@@ -402,10 +439,10 @@ impl SPCDSP {
                 self.echo_delay = value & 0x0F;
             }
             FIR0_ADDRESS | FIR1_ADDRESS | FIR2_ADDRESS | FIR3_ADDRESS | FIR4_ADDRESS
-            | FIR5_ADDRESS | FIR6_ADDRESS | FIR7_ADDRESS => {
-                let index = address >> 4;
-                self.fir_coef[index as usize] = value as i8;
-            }
+                | FIR5_ADDRESS | FIR6_ADDRESS | FIR7_ADDRESS => {
+                    let index = address >> 4;
+                    self.fir_coef[index as usize] = value as i8;
+                }
             address if ((address & 0xF) <= 0x9) => {
                 let ch = (address >> 4) as usize;
                 match address & 0xF {
@@ -460,7 +497,7 @@ impl SPCDSP {
                         self.voice[ch].output_sample = value as i8;
                     }
                     _ => {
-                        panic!("Unsupported DSP address!");
+                        // 他のアドレスへの書き込みは効果なし
                     }
                 }
             }
@@ -550,10 +587,10 @@ impl SPCDSP {
             ESA_ADDRESS => self.echo_start_page,
             EDL_ADDRESS => self.echo_delay,
             FIR0_ADDRESS | FIR1_ADDRESS | FIR2_ADDRESS | FIR3_ADDRESS | FIR4_ADDRESS
-            | FIR5_ADDRESS | FIR6_ADDRESS | FIR7_ADDRESS => {
-                let index = address >> 4;
-                self.fir_coef[index as usize] as u8
-            }
+                | FIR5_ADDRESS | FIR6_ADDRESS | FIR7_ADDRESS => {
+                    let index = address >> 4;
+                    self.fir_coef[index as usize] as u8
+                }
             address if ((address & 0xF) <= 0x9) => {
                 let ch = (address >> 4) as usize;
                 match address & 0xF {
