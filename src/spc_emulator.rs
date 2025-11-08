@@ -312,8 +312,8 @@ impl SPCEmulator {
                 _ => panic!("Invalid oprand!"),
             },
             SPCOpcode::XCN => {
-                let ret = (self.reg.x >> 4) | (self.reg.x << 4);
-                self.reg.x = ret;
+                let ret = (self.reg.a >> 4) | (self.reg.a << 4);
+                self.reg.a = ret;
                 self.set_psw_flag(PSW_FLAG_N, (ret >> 7) != 0);
                 self.set_psw_flag(PSW_FLAG_Z, ret == 0);
                 5
