@@ -1294,73 +1294,69 @@ impl SPCEmulator {
 
     /// ASL命令の実行
     fn execute_asl(&mut self, oprand: &SPCOprand) -> u8 {
-        fn asl(a: u8) -> u8 {
+        fn asl(a: u8, _: bool) -> (u8, bool) {
             // NOTE: 最上位ビットはキャリーフラグに入る（よくある算術左シフトと異なる）
-            a << 1
+            (a << 1, (a & 0x80) != 0)
         }
         self.execute_unary_bit_opration(oprand, asl)
     }
 
     /// ROL命令の実行
     fn execute_rol(&mut self, oprand: &SPCOprand) -> u8 {
-        fn rol(a: u8) -> u8 {
-            let msb = a >> 7;
-            (a << 1) | msb
+        fn rol(a: u8, c: bool) -> (u8, bool) {
+            let low = if c { 0x01 } else { 0x00 };
+            ((a << 1) | low, (a & 0x80) != 0)
         }
         self.execute_unary_bit_opration(oprand, rol)
     }
 
     /// ROR命令の実行
     fn execute_ror(&mut self, oprand: &SPCOprand) -> u8 {
-        fn ror(a: u8) -> u8 {
-            let lsb = a & 1;
-            (a >> 1) | (lsb << 7)
+        fn ror(a: u8, c: bool) -> (u8, bool) {
+            let high = if c { 0x80 } else { 0x00 };
+            ((a >> 1) | high, (a & 0x01) != 0)
         }
         self.execute_unary_bit_opration(oprand, ror)
     }
 
     /// LSR命令の実行
     fn execute_lsr(&mut self, oprand: &SPCOprand) -> u8 {
-        fn lsr(a: u8) -> u8 {
-            a >> 1
+        fn lsr(a: u8, _: bool) -> (u8, bool) {
+            (a << 1, (a & 0x01) != 0)
         }
         self.execute_unary_bit_opration(oprand, lsr)
     }
 
     /// 単項ビット演算命令の実行
-    fn execute_unary_bit_opration(&mut self, oprand: &SPCOprand, op: fn(u8) -> u8) -> u8 {
+    fn execute_unary_bit_opration(&mut self, oprand: &SPCOprand, op: fn(u8, bool) -> (u8, bool)) -> u8 {
         let ret;
-        let prev_msb;
+        let carry;
         let cycle;
 
         match oprand {
             SPCOprand::Accumulator => {
-                prev_msb = self.reg.a & 0x80;
-                ret = op(self.reg.a);
+                (ret, carry) = op(self.reg.a, self.test_psw_flag(PSW_FLAG_C));
                 self.reg.a = ret;
                 cycle = 2;
             }
             SPCOprand::DirectPage { direct_page } => {
                 let address = self.get_direct_page_address(*direct_page);
                 let memval = self.read_ram_u8(address);
-                prev_msb = memval & 0x80;
-                ret = op(memval);
+                (ret, carry) = op(memval, self.test_psw_flag(PSW_FLAG_C));
                 self.write_ram_u8(address, ret);
                 cycle = 4;
             }
             SPCOprand::DirectPageX { direct_page } => {
                 let address = self.get_direct_page_address(*direct_page) + self.reg.x as usize;
                 let memval = self.read_ram_u8(address);
-                prev_msb = memval & 0x80;
-                ret = op(memval);
+                (ret, carry) = op(memval, self.test_psw_flag(PSW_FLAG_C));
                 self.write_ram_u8(address, ret);
                 cycle = 5;
             }
             SPCOprand::Absolute { address } => {
                 let addr = *address as usize;
                 let memval = self.read_ram_u8(addr);
-                prev_msb = memval & 0x80;
-                ret = op(memval);
+                (ret, carry) = op(memval, self.test_psw_flag(PSW_FLAG_C));
                 self.write_ram_u8(addr, ret);
                 cycle = 5;
             }
@@ -1370,7 +1366,7 @@ impl SPCEmulator {
         // フラグ更新
         self.set_psw_flag(PSW_FLAG_N, (ret & PSW_FLAG_N) != 0);
         self.set_psw_flag(PSW_FLAG_Z, ret == 0);
-        self.set_psw_flag(PSW_FLAG_C, prev_msb != 0);
+        self.set_psw_flag(PSW_FLAG_C, carry);
 
         cycle
     }
