@@ -90,8 +90,6 @@ enum SPCVoiceGainMode {
 
 #[derive(Copy, Clone, Debug)]
 enum SPCEnvelopeState {
-    Initial, // FIXME:
-             // エミュレータの初期状態。実際にはこんな状況はないので適切な初期状態に変えておくべき
     Attack,
     Decay,
     Sustain,
@@ -104,7 +102,7 @@ struct SPCDecoder {
     decode_history: [i32; 4],
     decode_buffer_pos: usize,
     sample_count: usize,
-    read_pos: usize,
+    pub decode_address: usize,
     pub loop_flag: bool,
     pub end: bool,
 }
@@ -115,7 +113,6 @@ struct SPCVoiceRegister {
     pitch: u16,
     sample_source: u8,
     brr_dir_address: usize,
-    decode_address: usize,
     adsr_enable: bool,
     attack_rate: u8,
     decay_rate: u8,
@@ -152,7 +149,7 @@ impl SPCDecoder {
             decode_buffer: [0; 16],
             decode_history: [0; 4],
             decode_buffer_pos: 16,
-            read_pos: 0,
+            decode_address: 0,
             sample_count: 0,
             loop_flag: false,
             end: false,
@@ -265,14 +262,9 @@ impl SPCDecoder {
     fn process(&mut self, ram: &[u8], pitch: u16) -> i16 {
         // バッファが尽きたら次のブロックをデコード
         if self.decode_buffer_pos >= 16 {
-            if self.end {
-                // ループ先頭からデコードし直す
-                self.read_pos = 0;
-            } else {
-                // 次のブロックに進む
-                self.read_pos += 9;
-            }
-            self.decode_block(&ram[self.read_pos..], pitch);
+            self.decode_block(&ram[self.decode_address..], pitch);
+            // 次のブロックに進む
+            self.decode_address += 9;
             self.decode_buffer_pos = 0;
         }
 
@@ -291,7 +283,6 @@ impl SPCVoiceRegister {
             pitch: 0,
             sample_source: 0,
             brr_dir_address: 0,
-            decode_address: 0,
             adsr_enable: false,
             attack_rate: 0,
             decay_rate: 0,
@@ -304,18 +295,25 @@ impl SPCVoiceRegister {
             keyoff: false,
             pitch_mod: false,
             noise: false,
-            envelope_state: SPCEnvelopeState::Initial,
+            envelope_state: SPCEnvelopeState::Release,
             decoder: SPCDecoder::new(),
         }
     }
 
     fn compute_sample(&mut self, ram: &[u8]) -> [i16; 2] {
         match self.envelope_state {
-            SPCEnvelopeState::Initial => return [0, 0],
             SPCEnvelopeState::Attack => {
                 // 再生開始直後
                 if self.envelope_value == 0 {
-                    self.decode_address = make_u16_from_u8(&ram[self.brr_dir_address ..(self.brr_dir_address + 2)]) as usize;
+                    self.decoder.decode_address =
+                        make_u16_from_u8(&ram[self.brr_dir_address..(self.brr_dir_address + 2)])
+                            as usize;
+                }
+            }
+            SPCEnvelopeState::Release => {
+                // リリース終了後
+                if self.envelope_value == 0 {
+                    return [0, 0];
                 }
             }
             _ => {}
@@ -323,9 +321,9 @@ impl SPCVoiceRegister {
 
         // ENDフラグ
         if self.decoder.end {
-            self.decode_address = make_u16_from_u8(
-                &ram[(self.brr_dir_address + 2)..(self.brr_dir_address + 4)],
-            ) as usize;
+            self.decoder.decode_address =
+                make_u16_from_u8(&ram[(self.brr_dir_address + 2)..(self.brr_dir_address + 4)])
+                    as usize;
             // リリース処理へ
             if !self.decoder.loop_flag {
                 self.envelope_state = SPCEnvelopeState::Release;
@@ -334,9 +332,9 @@ impl SPCVoiceRegister {
         }
 
         // デコード
-        let mut out = self
-            .decoder
-            .process(&ram[self.decode_address..], self.pitch);
+        // println!("Decode Address: {:04X}", self.decoder.decode_address);
+        // println!("{:?}", self);
+        let mut out = self.decoder.process(ram, self.pitch);
         // 最後の出力サンプル更新
         self.output_sample = ((out >> 8) & 0xFF) as i8;
         // TODO: PMON
@@ -439,10 +437,10 @@ impl SPCDSP {
                 self.echo_delay = value & 0x0F;
             }
             FIR0_ADDRESS | FIR1_ADDRESS | FIR2_ADDRESS | FIR3_ADDRESS | FIR4_ADDRESS
-                | FIR5_ADDRESS | FIR6_ADDRESS | FIR7_ADDRESS => {
-                    let index = address >> 4;
-                    self.fir_coef[index as usize] = value as i8;
-                }
+            | FIR5_ADDRESS | FIR6_ADDRESS | FIR7_ADDRESS => {
+                let index = address >> 4;
+                self.fir_coef[index as usize] = value as i8;
+            }
             address if ((address & 0xF) <= 0x9) => {
                 let ch = (address >> 4) as usize;
                 match address & 0xF {
@@ -587,10 +585,10 @@ impl SPCDSP {
             ESA_ADDRESS => self.echo_start_page,
             EDL_ADDRESS => self.echo_delay,
             FIR0_ADDRESS | FIR1_ADDRESS | FIR2_ADDRESS | FIR3_ADDRESS | FIR4_ADDRESS
-                | FIR5_ADDRESS | FIR6_ADDRESS | FIR7_ADDRESS => {
-                    let index = address >> 4;
-                    self.fir_coef[index as usize] as u8
-                }
+            | FIR5_ADDRESS | FIR6_ADDRESS | FIR7_ADDRESS => {
+                let index = address >> 4;
+                self.fir_coef[index as usize] as u8
+            }
             address if ((address & 0xF) <= 0x9) => {
                 let ch = (address >> 4) as usize;
                 match address & 0xF {
