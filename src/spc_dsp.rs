@@ -305,6 +305,8 @@ impl SPCVoiceRegister {
                 make_u16_from_u8(&ram[self.brr_dir_address..(self.brr_dir_address + 2)]) as usize
             };
             let out = self.decoder.process(&ram[decode_address..], self.pitch);
+            // 最後の出力サンプル更新
+            self.output_sample = ((out >> 8) & 0xFF) as i8;
             [out, out]
         } else {
             [0, 0]
