@@ -344,45 +344,45 @@ impl SPCDSP {
                 self.echo_volume[1] = value as i8;
             }
             KON_ADDRESS => {
-                for id in 0..8 {
-                    let keyon = ((value >> id) & 0x1) != 0;
-                    self.voice[id].keyon = keyon;
+                for ch in 0..8 {
+                    let keyon = ((value >> ch) & 0x1) != 0;
+                    self.voice[ch].keyon = keyon;
                     // キーオンが入ったらENDXフラグをクリア
                     if keyon {
-                        self.voice[id].decoder.end = false;
+                        self.voice[ch].decoder.end = false;
                     }
                 }
             }
             KOFF_ADDRESS => {
-                for id in 0..8 {
-                    self.voice[id].keyoff = ((value >> id) & 0x1) != 0;
+                for ch in 0..8 {
+                    self.voice[ch].keyoff = ((value >> ch) & 0x1) != 0;
                 }
             }
             FLG_ADDRESS => {
                 self.flag = value;
             }
             ENDX_ADDRESS => {
-                for id in 0..8 {
-                    self.voice[id].decoder.end = ((value >> id) & 0x1) != 0;
+                for ch in 0..8 {
+                    self.voice[ch].decoder.end = ((value >> ch) & 0x1) != 0;
                 }
             }
             EFB_ADDRESS => {
                 self.echo_feedback = value as i8;
             }
             PMON_ADDRESS => {
-                for id in 1..8 {
+                for ch in 1..8 {
                     /* NOTE! 0は無効 */
-                    self.voice[id].pitch_mod = ((value >> id) & 0x1) != 0;
+                    self.voice[ch].pitch_mod = ((value >> ch) & 0x1) != 0;
                 }
             }
             NON_ADDRESS => {
-                for id in 0..8 {
-                    self.voice[id].noise = ((value >> id) & 0x1) != 0;
+                for ch in 0..8 {
+                    self.voice[ch].noise = ((value >> ch) & 0x1) != 0;
                 }
             }
             EON_ADDRESS => {
-                for id in 0..8 {
-                    self.echo[id] = ((value >> id) & 0x1) != 0;
+                for ch in 0..8 {
+                    self.echo[ch] = ((value >> ch) & 0x1) != 0;
                 }
             }
             DIR_ADDRESS => {
@@ -400,42 +400,42 @@ impl SPCDSP {
                 self.fir_coef[index as usize] = value as i8;
             }
             address if ((address & 0xF) <= 0x9) => {
-                let id = (address >> 4) as usize;
+                let ch = (address >> 4) as usize;
                 match address & 0xF {
                     V0VOLL_ADDRESS => {
-                        self.voice[id].volume[0] = value as i8;
+                        self.voice[ch].volume[0] = value as i8;
                     }
                     V0VOLR_ADDRESS => {
-                        self.voice[id].volume[1] = value as i8;
+                        self.voice[ch].volume[1] = value as i8;
                     }
                     V0PITCHL_ADDRESS => {
-                        self.voice[id].pitch = (self.voice[id].pitch & 0xFF00) | (value as u16);
+                        self.voice[ch].pitch = (self.voice[ch].pitch & 0xFF00) | (value as u16);
                     }
                     V0PITCHH_ADDRESS => {
-                        self.voice[id].pitch =
-                            ((value as u16) << 8) | (self.voice[id].pitch & 0x00FF);
+                        self.voice[ch].pitch =
+                            ((value as u16) << 8) | (self.voice[ch].pitch & 0x00FF);
                     }
                     V0SRCN_ADDRESS => {
-                        self.voice[id].sample_source = value;
-                        self.voice[id].brr_dir_address =
+                        self.voice[ch].sample_source = value;
+                        self.voice[ch].brr_dir_address =
                             ((self.brr_dir_page as usize) << 8) + 4 * (value as usize);
                     }
                     V0ADSR1_ADDRESS => {
-                        self.voice[id].adsr_enable = (value >> 7) != 0;
-                        self.voice[id].attack_rate = value & 0xF;
-                        self.voice[id].decay_rate = (value >> 4) & 0x7;
+                        self.voice[ch].adsr_enable = (value >> 7) != 0;
+                        self.voice[ch].attack_rate = value & 0xF;
+                        self.voice[ch].decay_rate = (value >> 4) & 0x7;
                     }
                     V0ADSR2_ADDRESS => {
-                        self.voice[id].sustain_rate = value & 0x1F;
-                        self.voice[id].sustain_level = (value >> 5) & 0x7;
+                        self.voice[ch].sustain_rate = value & 0x1F;
+                        self.voice[ch].sustain_level = (value >> 5) & 0x7;
                     }
                     V0GAIN_ADDRESS => {
                         if (value >> 7) == 0 {
-                            self.voice[id].gain_mode =
+                            self.voice[ch].gain_mode =
                                 SPCVoiceGainMode::Fixed { gain: value & 0x7F };
                         } else {
                             let rate = value & 0x1F;
-                            self.voice[id].gain_mode = match (value >> 5) & 0x3 {
+                            self.voice[ch].gain_mode = match (value >> 5) & 0x3 {
                                 0 => SPCVoiceGainMode::LinearDecrease { rate: rate },
                                 1 => SPCVoiceGainMode::ExponentialDecrease { rate: rate },
                                 2 => SPCVoiceGainMode::LinearIncrease { rate: rate },
@@ -446,11 +446,11 @@ impl SPCDSP {
                     }
                     V0ENVX_ADDRESS => {
                         // 書き込めるけど意味はない（読み取り用レジスタ）
-                        self.voice[id].envelope_value = value;
+                        self.voice[ch].envelope_value = value;
                     }
                     V0OUTX_ADDRESS => {
                         // 書き込めるけど意味はない（読み取り用レジスタ）
-                        self.voice[id].output_sample = value as i8;
+                        self.voice[ch].output_sample = value as i8;
                     }
                     _ => {
                         panic!("Unsupported DSP address!");
@@ -473,8 +473,8 @@ impl SPCDSP {
             KON_ADDRESS => {
                 let mut ret = 0;
                 let mut bit = 1;
-                for id in 0..8 {
-                    if self.voice[id].keyon {
+                for ch in 0..8 {
+                    if self.voice[ch].keyon {
                         ret |= bit;
                     }
                     bit <<= 1;
@@ -484,8 +484,8 @@ impl SPCDSP {
             KOFF_ADDRESS => {
                 let mut ret = 0;
                 let mut bit = 1;
-                for id in 0..8 {
-                    if self.voice[id].keyoff {
+                for ch in 0..8 {
+                    if self.voice[ch].keyoff {
                         ret |= bit;
                     }
                     bit <<= 1;
@@ -496,8 +496,8 @@ impl SPCDSP {
             ENDX_ADDRESS => {
                 let mut ret = 0;
                 let mut bit = 1;
-                for id in 0..8 {
-                    if self.voice[id].decoder.end {
+                for ch in 0..8 {
+                    if self.voice[ch].decoder.end {
                         ret |= bit;
                     }
                     bit <<= 1;
@@ -508,9 +508,9 @@ impl SPCDSP {
             PMON_ADDRESS => {
                 let mut ret = 0;
                 let mut bit = 1;
-                for id in 1..8 {
-                    /* NOTE! id==0は常に無効 */
-                    if self.voice[id].pitch_mod {
+                for ch in 1..8 {
+                    /* NOTE! ch==0は常に無効 */
+                    if self.voice[ch].pitch_mod {
                         ret |= bit;
                     }
                     bit <<= 1;
@@ -520,8 +520,8 @@ impl SPCDSP {
             NON_ADDRESS => {
                 let mut ret = 0;
                 let mut bit = 1;
-                for id in 0..8 {
-                    if self.voice[id].noise {
+                for ch in 0..8 {
+                    if self.voice[ch].noise {
                         ret |= bit;
                     }
                     bit <<= 1;
@@ -531,8 +531,8 @@ impl SPCDSP {
             EON_ADDRESS => {
                 let mut ret = 0;
                 let mut bit = 1;
-                for id in 0..8 {
-                    if self.echo[id] {
+                for ch in 0..8 {
+                    if self.echo[ch] {
                         ret |= bit;
                     }
                     bit <<= 1;
@@ -548,25 +548,25 @@ impl SPCDSP {
                 self.fir_coef[index as usize] as u8
             }
             address if ((address & 0xF) <= 0x9) => {
-                let id = (address >> 4) as usize;
+                let ch = (address >> 4) as usize;
                 match address & 0xF {
-                    V0VOLL_ADDRESS => self.voice[id].volume[0] as u8,
-                    V0VOLR_ADDRESS => self.voice[id].volume[1] as u8,
-                    V0PITCHL_ADDRESS => (self.voice[id].pitch & 0xFF) as u8,
-                    V0PITCHH_ADDRESS => ((self.voice[id].pitch >> 8) & 0xFF) as u8,
-                    V0SRCN_ADDRESS => self.voice[id].sample_source,
+                    V0VOLL_ADDRESS => self.voice[ch].volume[0] as u8,
+                    V0VOLR_ADDRESS => self.voice[ch].volume[1] as u8,
+                    V0PITCHL_ADDRESS => (self.voice[ch].pitch & 0xFF) as u8,
+                    V0PITCHH_ADDRESS => ((self.voice[ch].pitch >> 8) & 0xFF) as u8,
+                    V0SRCN_ADDRESS => self.voice[ch].sample_source,
                     V0ADSR1_ADDRESS => {
-                        let adsr_flag = if self.voice[id].adsr_enable {
+                        let adsr_flag = if self.voice[ch].adsr_enable {
                             0x80
                         } else {
                             0x00
                         };
-                        adsr_flag | (self.voice[id].decay_rate << 4) | self.voice[id].attack_rate
+                        adsr_flag | (self.voice[ch].decay_rate << 4) | self.voice[ch].attack_rate
                     }
                     V0ADSR2_ADDRESS => {
-                        (self.voice[id].sustain_level << 5) | self.voice[id].sustain_rate
+                        (self.voice[ch].sustain_level << 5) | self.voice[ch].sustain_rate
                     }
-                    V0GAIN_ADDRESS => match self.voice[id].gain_mode {
+                    V0GAIN_ADDRESS => match self.voice[ch].gain_mode {
                         SPCVoiceGainMode::Fixed { gain } => gain & 0x7F,
                         SPCVoiceGainMode::LinearDecrease { rate } => {
                             0x80 | (0 << 5) | (rate & 0x1F)
@@ -579,8 +579,8 @@ impl SPCDSP {
                         }
                         SPCVoiceGainMode::BentIncrease { rate } => 0x80 | (3 << 5) | (rate & 0x1F),
                     },
-                    V0ENVX_ADDRESS => self.voice[id].envelope_value,
-                    V0OUTX_ADDRESS => self.voice[id].output_sample as u8,
+                    V0ENVX_ADDRESS => self.voice[ch].envelope_value,
+                    V0OUTX_ADDRESS => self.voice[ch].output_sample as u8,
                     _ => {
                         panic!("Unsupported DSP address!");
                     }
