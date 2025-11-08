@@ -608,6 +608,10 @@ impl SPCDSP {
             out[0] += vout[0] as i32;
             out[1] += vout[1] as i32;
         }
+        // マスターボリューム適用
+        for ch in 0..2 {
+            out[ch] = (out[ch] * (self.volume[ch] as i32)) >> 8;
+        }
         [out[0] as i16, out[1] as i16]
     }
 }
