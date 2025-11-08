@@ -1468,21 +1468,21 @@ pub fn parse_opcode(ram: &[u8]) -> (SPCOpcode, u16) {
         0x8E => create_opcode_with_length_check!(
             ram,
             SPCOpcode::POP {
-                oprand: SPCOprand::Accumulator
+                oprand: SPCOprand::ProgramStatusWord
             },
             1
         ),
         0xAE => create_opcode_with_length_check!(
             ram,
             SPCOpcode::POP {
-                oprand: SPCOprand::XIndexRegister
+                oprand: SPCOprand::Accumulator
             },
             1
         ),
         0xCE => create_opcode_with_length_check!(
             ram,
             SPCOpcode::POP {
-                oprand: SPCOprand::ProgramStatusWord
+                oprand: SPCOprand::XIndexRegister
             },
             1
         ),
