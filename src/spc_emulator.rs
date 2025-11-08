@@ -354,7 +354,7 @@ impl SPCEmulator {
                 SPCOprand::DirectPage { direct_page } => {
                     let address = self.get_direct_page_address(*direct_page);
                     let mut wval = self.read_ram_u16(address);
-                    wval = wval.overwrapping_sub(1);
+                    wval = wval.wrapping_sub(1);
                     self.write_ram_u8(address + 0, ((wval >> 8) & 0xFF) as u8);
                     self.write_ram_u8(address + 1, ((wval >> 0) & 0xFF) as u8);
                     self.set_psw_flag(PSW_FLAG_N, (wval >> 15) != 0);
