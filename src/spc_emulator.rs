@@ -47,7 +47,7 @@ pub struct SPCEmulator {
     ram: [u8; 65536],
     tick_count: u64,
     timer_enable: [bool; 3],
-    timer_count: [u8; 3],
+    timer_internal_count: [u8; 3],
     ipl_rom: bool,
 }
 
@@ -86,7 +86,7 @@ impl SPCEmulator {
             dsp: SPCDSP::new(),
             tick_count: 0,
             timer_enable: [false; 3],
-            timer_count: [0; 3],
+            timer_internal_count: [0; 3],
             ipl_rom: false,
         };
         emu.ram.copy_from_slice(ram);
@@ -121,10 +121,10 @@ impl SPCEmulator {
     /// クロックカウンタの更新
     fn countup_clock(&mut self, id: usize) {
         let target = self.ram[T0TARGET_ADDRESS + id];
-        self.timer_count[id] = self.timer_count[id].wrapping_add(1);
-        if self.timer_count[id] >= target {
+        self.timer_internal_count[id] = self.timer_internal_count[id].wrapping_add(1);
+        if self.timer_internal_count[id] >= target {
             let mut counter = self.ram[T0OUT_ADDRESS + id];
-            self.timer_count[id] = 0;
+            self.timer_internal_count[id] = 0;
             counter = counter.wrapping_add(1);
             self.ram[T0OUT_ADDRESS + id] = counter & 0x0F;
         }
@@ -159,7 +159,7 @@ impl SPCEmulator {
             if (value & id_bit) != 0 {
                 self.timer_enable[id] = true;
                 if (self.ram[CONTROL_ADDRESS] & id_bit) == 0 {
-                    self.timer_count[id] = 0;
+                    self.timer_internal_count[id] = 0;
                     self.ram[T0OUT_ADDRESS + id] = 0;
                 }
             } else {
