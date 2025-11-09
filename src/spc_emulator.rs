@@ -53,8 +53,8 @@ pub struct SPCEmulator {
 
 /// メモリビットのアドレスとビット位置を取得
 fn get_address_bit(address_bit: u16) -> (u8, usize) {
-    let bit_pos = ((address_bit >> 13) & 0x07) as u8;
-    let address = ((address_bit >> 0) & 0x1F) as usize;
+    let bit_pos = ((address_bit >> 13) & 0x0007) as u8;
+    let address = ((address_bit >> 0) & 0x1FFF) as usize;
     (bit_pos, address)
 }
 
