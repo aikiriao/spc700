@@ -1332,7 +1332,11 @@ impl SPCEmulator {
     }
 
     /// 単項ビット演算命令の実行
-    fn execute_unary_bit_opration(&mut self, oprand: &SPCOprand, op: fn(u8, bool) -> (u8, bool)) -> u8 {
+    fn execute_unary_bit_opration(
+        &mut self,
+        oprand: &SPCOprand,
+        op: fn(u8, bool) -> (u8, bool),
+    ) -> u8 {
         let ret;
         let carry;
         let cycle;
@@ -1487,55 +1491,62 @@ impl SPCEmulator {
         let ret;
         let cycle;
 
+        /// 比較のための減算
+        macro_rules! cmpsub {
+            ($a:expr, $b:expr) => {{
+                (($a as i8) as i16) - (($b as i8) as i16)
+            }};
+        }
+
         match oprand {
             SPCOprand::Immediate { immediate } => {
-                ret = self.reg.a as i16 - *immediate as i16;
+                ret = cmpsub!(self.reg.a, *immediate);
                 cycle = 2;
             }
             SPCOprand::IndirectPage => {
                 let memval = self.read_ram_u8(self.reg.x as usize);
-                ret = self.reg.a as i16 - memval as i16;
+                ret = cmpsub!(self.reg.a, memval);
                 cycle = 3;
             }
             SPCOprand::DirectPage { direct_page } => {
                 let address = self.get_direct_page_address(*direct_page);
                 let memval = self.read_ram_u8(address);
-                ret = self.reg.a as i16 - memval as i16;
+                ret = cmpsub!(self.reg.a, memval);
                 cycle = 3;
             }
             SPCOprand::DirectPageX { direct_page } => {
                 let address = self.get_direct_page_address(*direct_page) + self.reg.x as usize;
                 let memval = self.read_ram_u8(address);
-                ret = self.reg.a as i16 - memval as i16;
+                ret = cmpsub!(self.reg.a, memval);
                 cycle = 4;
             }
             SPCOprand::Absolute { address } => {
                 let memval = self.read_ram_u8(*address as usize);
-                ret = self.reg.a as i16 - memval as i16;
+                ret = cmpsub!(self.reg.a, memval);
                 cycle = 4;
             }
             SPCOprand::AbsoluteX { address } => {
                 let addr = *address + self.reg.x as u16;
                 let memval = self.read_ram_u8(addr as usize);
-                ret = self.reg.a as i16 - memval as i16;
+                ret = cmpsub!(self.reg.a, memval);
                 cycle = 5;
             }
             SPCOprand::AbsoluteY { address } => {
                 let addr = *address + self.reg.y as u16;
                 let memval = self.read_ram_u8(addr as usize);
-                ret = self.reg.a as i16 - memval as i16;
+                ret = cmpsub!(self.reg.a, memval);
                 cycle = 5;
             }
             SPCOprand::DirectPageXIndirect { direct_page } => {
                 let address = self.get_direct_page_x_indexed_indirect_address(*direct_page);
                 let memval = self.read_ram_u8(address);
-                ret = self.reg.a as i16 - memval as i16;
+                ret = cmpsub!(self.reg.a, memval);
                 cycle = 6;
             }
             SPCOprand::DirectPageIndirectY { direct_page } => {
                 let address = self.get_direct_page_indirect_y_indexed_address(*direct_page);
                 let memval = self.read_ram_u8(address);
-                ret = self.reg.a as i16 - memval as i16;
+                ret = cmpsub!(self.reg.a, memval);
                 cycle = 6;
             }
             SPCOprand::IndirectPageToIndirectPage => {
@@ -1543,7 +1554,7 @@ impl SPCEmulator {
                 let address2 = self.get_direct_page_address(self.reg.y);
                 let memval1 = self.read_ram_u8(address1);
                 let memval2 = self.read_ram_u8(address2);
-                ret = memval1 as i16 - memval2 as i16;
+                ret = cmpsub!(memval1, memval2);
                 cycle = 6;
             }
             SPCOprand::DirectPageToDirectPage {
@@ -1554,7 +1565,7 @@ impl SPCEmulator {
                 let address2 = self.get_direct_page_address(*direct_page_src);
                 let memval1 = self.read_ram_u8(address1);
                 let memval2 = self.read_ram_u8(address2);
-                ret = memval1 as i16 - memval2 as i16;
+                ret = cmpsub!(memval1, memval2);
                 cycle = 6;
             }
             SPCOprand::ImmediateToDirectPage {
@@ -1563,37 +1574,37 @@ impl SPCEmulator {
             } => {
                 let address = self.get_direct_page_address(*direct_page);
                 let memval = self.read_ram_u8(address);
-                ret = memval as i16 - *immediate as i16;
+                ret = cmpsub!(memval, *immediate);
                 cycle = 5;
             }
             SPCOprand::ImmediateToX { immediate } => {
-                ret = self.reg.x as i16 - *immediate as i16;
+                ret = cmpsub!(self.reg.x, *immediate);
                 cycle = 2;
             }
             SPCOprand::DirectPageToX { direct_page } => {
                 let address = self.get_direct_page_address(*direct_page);
                 let memval = self.read_ram_u8(address);
-                ret = self.reg.x as i16 - memval as i16;
+                ret = cmpsub!(self.reg.x, memval);
                 cycle = 3;
             }
             SPCOprand::AbsoluteToX { address } => {
                 let memval = self.read_ram_u8(*address as usize);
-                ret = self.reg.x as i16 - memval as i16;
+                ret = cmpsub!(self.reg.x, memval);
                 cycle = 4;
             }
             SPCOprand::ImmediateToY { immediate } => {
-                ret = self.reg.y as i16 - *immediate as i16;
+                ret = cmpsub!(self.reg.y, *immediate);
                 cycle = 2;
             }
             SPCOprand::DirectPageToY { direct_page } => {
                 let address = self.get_direct_page_address(*direct_page);
                 let memval = self.read_ram_u8(address);
-                ret = self.reg.y as i16 - memval as i16;
+                ret = cmpsub!(self.reg.y, memval);
                 cycle = 3;
             }
             SPCOprand::AbsoluteToY { address } => {
                 let memval = self.read_ram_u8(*address as usize);
-                ret = self.reg.y as i16 - memval as i16;
+                ret = cmpsub!(self.reg.y, memval);
                 cycle = 4;
             }
             _ => panic!("Invalid oprand!"),
@@ -1610,14 +1621,14 @@ impl SPCEmulator {
     /// ADC命令の実行
     fn execute_adc(&mut self, oprand: &SPCOprand) -> u8 {
         fn add(a: u8, b: u8, carry: bool) -> (u8, bool, bool, bool) {
-            let mut ret = (a as u16) + (b as u16);
+            let mut ret = ((a as i8) as i16) + ((b as i8) as i16);
             if carry {
                 ret += 1;
             }
             (
                 (ret & 0xFF) as u8,
                 (ret & 0x100) != 0,
-                ((a & 0x80) == (b & 0x80)) && (((a & 0x80) as u16) != (ret & 0x80)),
+                ((a & 0x80) == (b & 0x80)) && (((a & 0x80) as i16) != (ret & 0x80)),
                 check_half_carry_add_u8(a, b),
             )
         }
@@ -1627,7 +1638,7 @@ impl SPCEmulator {
     /// SBC命令の実行
     fn execute_sbc(&mut self, oprand: &SPCOprand) -> u8 {
         fn sub(a: u8, b: u8, carry: bool) -> (u8, bool, bool, bool) {
-            let mut ret = (a as i16) - (b as i16);
+            let mut ret = ((a as i8) as i16) - ((b as i8) as i16);
             if !carry {
                 ret -= 1;
             }
