@@ -10,6 +10,8 @@ const PSW_FLAG_V: u8 = 1 << 6;
 const PSW_FLAG_P: u8 = 1 << 5;
 /// ハーフキャリーフラグ
 const PSW_FLAG_H: u8 = 1 << 3;
+/// 割り込み可能フラグ（セット/リセットは可能だが効果なし）
+const PSW_FLAG_I: u8 = 1 << 2;
 /// ゼロフラグ
 const PSW_FLAG_Z: u8 = 1 << 1;
 /// キャリーフラグ
@@ -892,10 +894,10 @@ impl SPCEmulator {
             },
             // 割り込み命令
             SPCOpcode::EI => {
-                panic!("This emulator does not support EI instruction!");
+                self.set_psw_flag(PSW_FLAG_I, true);
             }
             SPCOpcode::DI => {
-                panic!("This emulator does not support DI instruction!");
+                self.set_psw_flag(PSW_FLAG_I, false);
             }
             SPCOpcode::BRK => {
                 panic!("This emulator does not support BRK instruction!");
