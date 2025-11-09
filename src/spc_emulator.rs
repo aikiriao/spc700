@@ -373,7 +373,7 @@ impl SPCEmulator {
                 _ => panic!("Invalid oprand!"),
             },
             SPCOpcode::DIV => {
-                let ya = ((self.reg.y as u16) << 8) | self.reg.a as u16;
+                let ya = ((self.reg.y as u16) << 8) | (self.reg.a as u16);
                 let quot = ya / (self.reg.x as u16);
                 let rem = ya % (self.reg.x as u16);
 
