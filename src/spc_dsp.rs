@@ -501,7 +501,7 @@ impl SPCDSP {
                 }
             }
             _ => {
-                panic!("Unsupported DSP address!");
+                // 他のアドレスへの書き込みは効果なし
             }
         }
     }
