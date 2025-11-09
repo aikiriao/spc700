@@ -306,16 +306,16 @@ impl SPCEmulator {
             SPCOpcode::MOVW { oprand } => match oprand {
                 SPCOprand::DirectPageToYA { direct_page } => {
                     let address = self.get_direct_page_address(*direct_page);
-                    self.reg.y = self.read_ram_u8(address + 0);
-                    self.reg.a = self.read_ram_u8(address + 1);
+                    self.reg.a = self.read_ram_u8(address + 0);
+                    self.reg.y = self.read_ram_u8(address + 1);
                     self.set_psw_flag(PSW_FLAG_N, (self.reg.y >> 7) != 0);
-                    self.set_psw_flag(PSW_FLAG_N, (self.reg.y == 0) && (self.reg.a == 0));
+                    self.set_psw_flag(PSW_FLAG_Z, (self.reg.y == 0) && (self.reg.a == 0));
                     5
                 }
                 SPCOprand::YAToDirectPage { direct_page } => {
                     let address = self.get_direct_page_address(*direct_page);
-                    self.write_ram_u8(address + 0, self.reg.y);
-                    self.write_ram_u8(address + 1, self.reg.a);
+                    self.write_ram_u8(address + 0, self.reg.a);
+                    self.write_ram_u8(address + 1, self.reg.y);
                     4
                 }
                 _ => panic!("Invalid oprand!"),
