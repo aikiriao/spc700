@@ -1521,7 +1521,7 @@ pub fn parse_opcode(ram: &[u8]) -> (SPCOpcode, u16) {
                     direct_page: ram[1]
                 }
             },
-            1
+            2
         ),
         0xA5 => create_opcode_with_length_check!(
             ram,
