@@ -17,9 +17,9 @@ fn naive_disassemble(ram: &[u8]) {
 }
 
 /// 実行してみる
-fn naive_execution(register: &SPCRegister, ram: &[u8]) {
+fn naive_execution(register: &SPCRegister, ram: &[u8], dsp_register: &[u8; 128]) {
     const CLOCK_TICK_CYCLE_64KHZ: u64 = 384;
-    let mut emu = SPCEmulator::new(&register, ram);
+    let mut emu = SPCEmulator::new(&register, ram, dsp_register);
     let mut total_cycle = 0u64;
     let mut next_tick_cycle = CLOCK_TICK_CYCLE_64KHZ;
     loop {

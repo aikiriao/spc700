@@ -79,7 +79,7 @@ fn check_half_carry_sub_u16(a: u16, b: u16) -> bool {
 }
 
 impl SPCEmulator {
-    pub fn new(reg: &SPCRegister, ram: &[u8]) -> SPCEmulator {
+    pub fn new(reg: &SPCRegister, ram: &[u8], dsp_register: &[u8; 128]) -> SPCEmulator {
         let mut emu = Self {
             reg: reg.clone(),
             ram: [0; 65536],
@@ -91,8 +91,15 @@ impl SPCEmulator {
         };
         emu.ram.copy_from_slice(ram);
 
-        // TODO: ramの内容からエミュレータをセットアップ
+        // ramの内容からエミュレータをセットアップ
         emu.write_ram_u8(CONTROL_ADDRESS, ram[CONTROL_ADDRESS]);
+
+        // DSPレジスタのセットアップ
+        // DIRは先に設定する（初期状態でKONがある場合にアドレスを正しくするため）
+        emu.dsp.write_dsp_register(DIR_ADDRESS, dsp_register[DIR_ADDRESS as usize]);
+        for i in 0..128 {
+            emu.dsp.write_dsp_register(i, dsp_register[i as usize]);
+        }
 
         emu
     }

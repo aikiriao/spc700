@@ -13,7 +13,7 @@ const EFB_ADDRESS: u8 = 0x0D;
 const PMON_ADDRESS: u8 = 0x2D;
 const NON_ADDRESS: u8 = 0x3D;
 const EON_ADDRESS: u8 = 0x4D;
-const DIR_ADDRESS: u8 = 0x5D;
+pub const DIR_ADDRESS: u8 = 0x5D;
 const ESA_ADDRESS: u8 = 0x6D;
 const EDL_ADDRESS: u8 = 0x7D;
 const FIR0_ADDRESS: u8 = 0x0F;
@@ -130,6 +130,7 @@ struct SPCVoiceRegister {
 }
 
 /// S-DSP
+#[derive(Copy, Clone, Debug)]
 pub struct SPCDSP {
     volume: [i8; 2],
     echo_volume: [i8; 2],
