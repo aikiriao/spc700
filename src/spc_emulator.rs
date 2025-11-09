@@ -1804,6 +1804,14 @@ impl SPCEmulator {
                 self.write_ram_u8(address, ret);
                 cycle = 5;
             }
+            SPCOprand::IndirectToIndirect => {
+                let memval1 = self.read_ram_u8(self.reg.x as usize);
+                let memval2 = self.read_ram_u8(self.reg.y as usize);
+                (ret, arith_overflow, sign_overflow, half_carry) =
+                    op(memval1, memval2, self.test_psw_flag(PSW_FLAG_C));
+                self.reg.x = ret;
+                cycle = 5;
+            }
             _ => panic!("Invalid oprand!"),
         }
 
