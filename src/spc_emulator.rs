@@ -213,10 +213,10 @@ impl SPCEmulator {
     }
 
     /// RAMからの読み込み
-    fn read_ram_u8(&self, address: usize) -> u8 {
-        // println!("R: 0x{:04X} -> {:02X}", address, self.ram[address]);
+    fn read_ram_u8(&mut self, address: usize) -> u8 {
+        println!("R: 0x{:04X} -> {:02X}", address, self.ram[address]);
         // CPUレジスタからの読み込み
-        if (address >= TEST_ADDRESS) && (address <= DSPDATA_ADDRESS) {
+        if (address >= TEST_ADDRESS) && (address <= T2OUT_ADDRESS) {
             match address {
                 TEST_ADDRESS => {
                     // 何もしない（実機でどうなるかは不明）
@@ -229,6 +229,12 @@ impl SPCEmulator {
                 }
                 DSPDATA_ADDRESS => {
                     return self.dsp.read_dsp_register(address as u8);
+                }
+                T0OUT_ADDRESS | T1OUT_ADDRESS | T2OUT_ADDRESS => {
+                    // 注意：読み出しによってタイマーの値はクリアされる
+                    let ret = self.ram[address];
+                    self.ram[address] = 0;
+                    return ret;
                 }
                 _ => {}
             }
