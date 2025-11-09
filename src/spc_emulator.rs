@@ -228,7 +228,7 @@ impl SPCEmulator {
                     // 何もしないがアドレスをラッチすべき？
                 }
                 DSPDATA_ADDRESS => {
-                    return self.dsp.read_dsp_register(address as u8);
+                    return self.dsp.read_dsp_register(self.ram[DSPADDR_ADDRESS]);
                 }
                 T0OUT_ADDRESS | T1OUT_ADDRESS | T2OUT_ADDRESS => {
                     // 注意：読み出しによってタイマーの値はクリアされる
