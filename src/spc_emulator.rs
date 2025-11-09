@@ -1501,7 +1501,7 @@ impl SPCEmulator {
         /// 比較のための減算
         macro_rules! cmpsub {
             ($a:expr, $b:expr) => {{
-                (($a as i8) as i16) - (($b as i8) as i16)
+                ($a as i16) - ($b as i16)
             }};
         }
 
@@ -1628,7 +1628,7 @@ impl SPCEmulator {
     /// ADC命令の実行
     fn execute_adc(&mut self, oprand: &SPCOprand) -> u8 {
         fn add(a: u8, b: u8, carry: bool) -> (u8, bool, bool, bool) {
-            let mut ret = ((a as i8) as i16) + ((b as i8) as i16);
+            let mut ret = (a as i16) + (b as i16);
             if carry {
                 ret += 1;
             }
@@ -1645,7 +1645,7 @@ impl SPCEmulator {
     /// SBC命令の実行
     fn execute_sbc(&mut self, oprand: &SPCOprand) -> u8 {
         fn sub(a: u8, b: u8, carry: bool) -> (u8, bool, bool, bool) {
-            let mut ret = ((a as i8) as i16) - ((b as i8) as i16);
+            let mut ret = (a as i16) - (b as i16);
             if !carry {
                 ret -= 1;
             }
