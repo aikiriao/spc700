@@ -617,7 +617,7 @@ impl SPCEmulator {
                 } => {
                     let address = self.get_direct_page_address(*direct_page);
                     let memval = self.read_ram_u8(address);
-                    if memval & (1 << (*bit)) == 0 {
+                    if (memval & (1 << (*bit))) == 0 {
                         self.reg.pc = (self.reg.pc as i32 + *pc_relative as i32) as u16;
                         7
                     } else {
@@ -633,7 +633,7 @@ impl SPCEmulator {
                 } => {
                     let address = self.get_direct_page_address(*direct_page);
                     let memval = self.read_ram_u8(address);
-                    if memval & (1 << (*bit)) != 0 {
+                    if (memval & (1 << (*bit))) != 0 {
                         self.reg.pc = (self.reg.pc as i32 + *pc_relative as i32) as u16;
                         7
                     } else {
