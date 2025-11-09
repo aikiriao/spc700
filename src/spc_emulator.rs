@@ -777,18 +777,18 @@ impl SPCEmulator {
                     self.write_ram_u8(address, memval);
                     if memval != 0 {
                         self.reg.pc = (self.reg.pc as i32 + *pc_relative as i32) as u16;
-                        6
+                        7
                     } else {
-                        4
+                        5
                     }
                 }
                 SPCOprand::YPCRelative { pc_relative } => {
                     self.reg.y = self.reg.y.wrapping_sub(1);
                     if self.reg.y != 0 {
                         self.reg.pc = (self.reg.pc as i32 + *pc_relative as i32) as u16;
-                        7
+                        6
                     } else {
-                        5
+                        4
                     }
                 }
                 _ => panic!("Invalid oprand!"),
