@@ -1169,8 +1169,32 @@ impl SPCEmulator {
         }
 
         // フラグ更新
-        self.set_psw_flag(PSW_FLAG_N, (val & PSW_FLAG_N) != 0);
-        self.set_psw_flag(PSW_FLAG_Z, val == 0);
+        match oprand {
+            SPCOprand::AToIndirect
+            | SPCOprand::AToIndirectAutoIncrement
+            | SPCOprand::AToDirectPage { .. }
+            | SPCOprand::AToDirectPageX { .. }
+            | SPCOprand::AToAbsolute { .. }
+            | SPCOprand::AToAbsoluteX { .. }
+            | SPCOprand::AToAbsoluteY { .. }
+            | SPCOprand::AToDirectPageXIndirect { .. }
+            | SPCOprand::AToDirectPageIndirectY { .. }
+            | SPCOprand::XToDirectPage { .. }
+            | SPCOprand::XToDirectPageY { .. }
+            | SPCOprand::XToAbsolute { .. }
+            | SPCOprand::YToDirectPage { .. }
+            | SPCOprand::YToDirectPageX { .. }
+            | SPCOprand::YToAbsolute { .. }
+            | SPCOprand::XToStackPointer
+            | SPCOprand::DirectPageToDirectPage { .. }
+            | SPCOprand::ImmediateToDirectPage { .. } => {
+                // メモリとスタックポインタに対する操作ではステータスフラグを変えない
+            }
+            _ => {
+                self.set_psw_flag(PSW_FLAG_N, (val & PSW_FLAG_N) != 0);
+                self.set_psw_flag(PSW_FLAG_Z, val == 0);
+            }
+        }
 
         cycle
     }
