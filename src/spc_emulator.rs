@@ -895,9 +895,11 @@ impl SPCEmulator {
             // 割り込み命令
             SPCOpcode::EI => {
                 self.set_psw_flag(PSW_FLAG_I, true);
+                3
             }
             SPCOpcode::DI => {
                 self.set_psw_flag(PSW_FLAG_I, false);
+                3
             }
             SPCOpcode::BRK => {
                 panic!("This emulator does not support BRK instruction!");
