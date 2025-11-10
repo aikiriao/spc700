@@ -447,6 +447,12 @@ impl SPCDSP {
                             ((value as u16) << 8) | (self.voice[ch].pitch & 0x00FF);
                     }
                     V0SRCN_ADDRESS => {
+                        // デコードアドレスを更新
+                        let dir_address = ((self.brr_dir_page as usize) << 8) + 4 * (value as usize);
+                        self.voice[ch].decoder.decode_start_address =
+                            make_u16_from_u8(&ram[dir_address..(dir_address + 2)]) as usize;
+                        self.voice[ch].decoder.decode_loop_address =
+                            make_u16_from_u8(&ram[(dir_address + 2)..(dir_address + 4)]) as usize;
                         self.voice[ch].sample_source = value;
                     }
                     V0ADSR1_ADDRESS => {
