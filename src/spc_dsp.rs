@@ -393,8 +393,9 @@ impl SPCDSP {
                 self.flag = value;
             }
             ENDX_ADDRESS => {
+                // 注意：書かれた値に関係なくすべてのフラグをクリア
                 for ch in 0..8 {
-                    self.voice[ch].decoder.end = ((value >> ch) & 0x1) != 0;
+                    self.voice[ch].decoder.end = false;
                 }
             }
             EFB_ADDRESS => {
