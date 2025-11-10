@@ -457,8 +457,8 @@ impl SPCDSP {
                     }
                     V0ADSR1_ADDRESS => {
                         self.voice[ch].adsr_enable = (value >> 7) != 0;
-                        self.voice[ch].attack_rate = value & 0xF;
-                        self.voice[ch].decay_rate = (value >> 4) & 0x7;
+                        self.voice[ch].attack_rate = 2 * (value & 0xF) + 1;
+                        self.voice[ch].decay_rate = 2 * ((value >> 4) & 0x7) + 16;
                     }
                     V0ADSR2_ADDRESS => {
                         self.voice[ch].sustain_rate = value & 0x1F;
