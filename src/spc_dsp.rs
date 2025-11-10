@@ -188,18 +188,28 @@ impl SPCDecoder {
 
         // デコード処理
         let mut output = sample << (granularity as i32);
+        let p1 = self.decode_history[3];
+        let p2 = self.decode_history[2];
         match filter {
             0 => {}
             1 => {
-                output += (self.decode_history[3] * 15) >> 4;
+                // output + (15 / 16) * p1
+                output += p1;
+                output += (-p1) >> 4;
             }
             2 => {
-                output +=
-                    ((self.decode_history[3] * 61) >> 5) - ((self.decode_history[2] * 15) >> 4);
+                // output + (61 / 32) * p1 - (15 / 16) * p2
+                output += p1 << 1;
+                output += (-(p1 << 1) + p1) >> 5;
+                output -= p2;
+                output += p2 >> 4;
             }
             3 => {
-                output +=
-                    ((self.decode_history[3] * 115) >> 6) - ((self.decode_history[2] * 13) >> 4);
+                // output + (115 / 64) * p1 - (13 / 16) * p2
+                output += p1 << 1;
+                output += (-(p1 + (p1 << 2) + (p1 << 3))) >> 6;
+                output -= p2;
+                output += ((p2 << 1) + p2) >> 4;
             }
             _ => panic!("Invalid BRR filter!"),
         }
