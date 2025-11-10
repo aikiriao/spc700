@@ -259,6 +259,9 @@ impl SPCDecoder {
     fn process(&mut self, ram: &[u8], pitch: u16) -> i16 {
         // バッファが尽きたら次のブロックをデコード
         if self.decode_buffer_pos >= 16 {
+            // 1ブロックデコード
+            self.decode_block(&ram[self.decode_read_pos..], pitch);
+            self.decode_buffer_pos = 0;
             // デコードアドレスの更新
             self.decode_read_pos = if self.end {
                 // ループ開始アドレスに戻る
@@ -267,7 +270,6 @@ impl SPCDecoder {
                 // 次のブロックに進む
                 self.decode_read_pos + 9
             };
-            self.decode_block(&ram[self.decode_read_pos..], pitch);
             self.decode_buffer_pos = 0;
         }
 
