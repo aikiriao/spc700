@@ -260,12 +260,9 @@ impl SPCDecoder {
         // バッファが尽きたら次のブロックをデコード
         if self.decode_buffer_pos >= 16 {
             // デコードアドレスの更新
-            self.decode_read_pos = if self.end && self.loop_flag {
+            self.decode_read_pos = if self.end {
                 // ループ開始アドレスに戻る
                 self.decode_loop_address
-            } else if self.end && !self.loop_flag {
-                // 先頭に戻る
-                self.decode_start_address
             } else {
                 // 次のブロックに進む
                 self.decode_read_pos + 9
