@@ -150,7 +150,7 @@ impl SPCDecoder {
         Self {
             decode_buffer: [0; 16],
             decode_history: [0; 4],
-            decode_buffer_pos: 16,
+            decode_buffer_pos: 0,
             decode_start_address: 0,
             decode_loop_address: 0,
             decode_read_pos: 0,
@@ -375,6 +375,7 @@ impl SPCDSP {
                             make_u16_from_u8(&ram[(dir_address + 2)..(dir_address + 4)]) as usize;
                         self.voice[ch].decoder.decode_read_pos =
                             self.voice[ch].decoder.decode_start_address;
+                        self.voice[ch].decoder.decode_buffer_pos = 16;
                     }
                 }
             }
