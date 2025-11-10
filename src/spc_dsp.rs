@@ -270,7 +270,6 @@ impl SPCDecoder {
                 // 次のブロックに進む
                 self.decode_read_pos + 9
             };
-            self.decode_buffer_pos = 0;
         }
 
         // バッファからデータを取り出し
@@ -305,9 +304,12 @@ impl SPCVoiceRegister {
     }
 
     fn compute_sample(&mut self, ram: &[u8]) -> [i16; 2] {
-        // ENDフラグ
+        // デコード
+        let mut out = self.decoder.process(ram, self.pitch);
+        // 最後の出力サンプル更新
+        self.output_sample = ((out >> 8) & 0xFF) as i8;
+        // ENDフラグがセットかつループフラグが立っていなければ即時ミュート
         if self.decoder.end {
-            // ループフラグが立っていなければ即時ミュート
             if !self.decoder.loop_flag {
                 self.envelope_state = SPCEnvelopeState::Release;
                 self.envelope_value = 0;
