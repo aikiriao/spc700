@@ -102,7 +102,9 @@ struct SPCDecoder {
     decode_history: [i32; 4],
     decode_buffer_pos: usize,
     sample_count: usize,
-    pub decode_address: usize,
+    decode_start_address: usize,
+    decode_loop_address: usize,
+    decode_read_pos: usize,
     pub loop_flag: bool,
     pub end: bool,
 }
@@ -112,7 +114,6 @@ struct SPCVoiceRegister {
     volume: [i8; 2],
     pitch: u16,
     sample_source: u8,
-    brr_dir_address: usize,
     adsr_enable: bool,
     attack_rate: u8,
     decay_rate: u8,
@@ -150,7 +151,9 @@ impl SPCDecoder {
             decode_buffer: [0; 16],
             decode_history: [0; 4],
             decode_buffer_pos: 16,
-            decode_address: 0,
+            decode_start_address: 0,
+            decode_loop_address: 0,
+            decode_read_pos: 0,
             sample_count: 0,
             loop_flag: false,
             end: false,
@@ -263,9 +266,18 @@ impl SPCDecoder {
     fn process(&mut self, ram: &[u8], pitch: u16) -> i16 {
         // バッファが尽きたら次のブロックをデコード
         if self.decode_buffer_pos >= 16 {
-            self.decode_block(&ram[self.decode_address..], pitch);
-            // 次のブロックに進む
-            self.decode_address += 9;
+            // デコードアドレスの更新
+            self.decode_read_pos = if self.end && self.loop_flag {
+                // ループ開始アドレスに戻る
+                self.decode_loop_address
+            } else if self.end && !self.loop_flag {
+                // 先頭に戻る
+                self.decode_start_address
+            } else {
+                // 次のブロックに進む
+                self.decode_read_pos + 9
+            };
+            self.decode_block(&ram[self.decode_read_pos..], pitch);
             self.decode_buffer_pos = 0;
         }
 
@@ -283,7 +295,6 @@ impl SPCVoiceRegister {
             volume: [0; 2],
             pitch: 0,
             sample_source: 0,
-            brr_dir_address: 0,
             adsr_enable: false,
             attack_rate: 0,
             decay_rate: 0,
@@ -302,30 +313,9 @@ impl SPCVoiceRegister {
     }
 
     fn compute_sample(&mut self, ram: &[u8]) -> [i16; 2] {
-        match self.envelope_state {
-            SPCEnvelopeState::Attack => {
-                // 再生開始直後
-                if self.envelope_value == 0 {
-                    self.decoder.decode_address =
-                        make_u16_from_u8(&ram[self.brr_dir_address..(self.brr_dir_address + 2)])
-                            as usize;
-                }
-            }
-            SPCEnvelopeState::Release => {
-                // リリース終了後
-                if self.envelope_value == 0 {
-                    return [0, 0];
-                }
-            }
-            _ => {}
-        }
-
         // ENDフラグ
         if self.decoder.end {
-            self.decoder.decode_address =
-                make_u16_from_u8(&ram[(self.brr_dir_address + 2)..(self.brr_dir_address + 4)])
-                    as usize;
-            // リリース処理へ
+            // ループフラグが立っていなければ即時ミュート
             if !self.decoder.loop_flag {
                 self.envelope_state = SPCEnvelopeState::Release;
                 self.envelope_value = 0;
@@ -365,7 +355,7 @@ impl SPCDSP {
     }
 
     /// DSPレジスタの書き込み処理
-    pub fn write_dsp_register(&mut self, address: u8, value: u8) {
+    pub fn write_dsp_register(&mut self, ram: &[u8], address: u8, value: u8) {
         match address {
             MVOLL_ADDRESS => {
                 self.volume[0] = value as i8;
@@ -385,9 +375,16 @@ impl SPCDSP {
                     self.voice[ch].keyon = keyon;
                     // キーオンが入ったとき
                     if keyon {
+                        let dir_address = ((self.brr_dir_page as usize) << 8)
+                            + 4 * (self.voice[ch].sample_source as usize);
                         self.voice[ch].envelope_state = SPCEnvelopeState::Attack;
                         self.voice[ch].envelope_value = 0;
                         self.voice[ch].decoder.end = false;
+                        self.voice[ch].decoder.decode_start_address =
+                            make_u16_from_u8(&ram[dir_address..(dir_address + 2)]) as usize;
+                        self.voice[ch].decoder.decode_loop_address =
+                            make_u16_from_u8(&ram[(dir_address + 2)..(dir_address + 4)]) as usize;
+                        self.voice[ch].decoder.decode_read_pos = 0;
                     }
                 }
             }
@@ -460,8 +457,6 @@ impl SPCDSP {
                     }
                     V0SRCN_ADDRESS => {
                         self.voice[ch].sample_source = value;
-                        self.voice[ch].brr_dir_address =
-                            ((self.brr_dir_page as usize) << 8) + 4 * (value as usize);
                     }
                     V0ADSR1_ADDRESS => {
                         self.voice[ch].adsr_enable = (value >> 7) != 0;
@@ -507,7 +502,7 @@ impl SPCDSP {
     }
 
     /// DSPレジスタの読み込み処理
-    pub fn read_dsp_register(&self, address: u8) -> u8 {
+    pub fn read_dsp_register(&self, _ram: &[u8], address: u8) -> u8 {
         match address {
             MVOLL_ADDRESS => self.volume[0] as u8,
             MVOLR_ADDRESS => self.volume[1] as u8,
