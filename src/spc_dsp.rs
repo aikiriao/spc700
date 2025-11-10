@@ -494,6 +494,8 @@ impl SPCDSP {
     /// DSPレジスタの読み込み処理
     pub fn read_dsp_register(&self, _ram: &[u8], address: u8) -> u8 {
         match address {
+        // 80-FFの読み込みは00-7Fと同等に扱われる
+        match address & 0x7F {
             MVOLL_ADDRESS => self.volume[0] as u8,
             MVOLR_ADDRESS => self.volume[1] as u8,
             EVOLL_ADDRESS => self.echo_volume[0] as u8,
