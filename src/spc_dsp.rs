@@ -319,6 +319,7 @@ impl SPCVoiceRegister {
             if !self.decoder.loop_flag {
                 self.envelope_state = SPCEnvelopeState::Release;
                 self.envelope_value = 0;
+                return [0, 0];
             }
         }
 
