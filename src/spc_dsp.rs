@@ -317,12 +317,6 @@ impl SPCVoiceRegister {
             }
         }
 
-        // デコード
-        // println!("Decode Address: {:04X}", self.decoder.decode_address);
-        // println!("{:?}", self);
-        let mut out = self.decoder.process(ram, self.pitch);
-        // 最後の出力サンプル更新
-        self.output_sample = ((out >> 8) & 0xFF) as i8;
         // TODO: PMON
         // TODO: NON
         // TODO: ADSR
