@@ -385,7 +385,8 @@ impl SPCDSP {
                             make_u16_from_u8(&ram[dir_address..(dir_address + 2)]) as usize;
                         self.voice[ch].decoder.decode_loop_address =
                             make_u16_from_u8(&ram[(dir_address + 2)..(dir_address + 4)]) as usize;
-                        self.voice[ch].decoder.decode_read_pos = 0;
+                        self.voice[ch].decoder.decode_read_pos =
+                            self.voice[ch].decoder.decode_start_address;
                     }
                 }
             }
