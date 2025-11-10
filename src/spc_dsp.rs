@@ -121,7 +121,7 @@ struct SPCVoiceRegister {
     sustain_level: u8,
     gain_mode: SPCVoiceGainMode,
     envelope_state: SPCEnvelopeState,
-    envelope_value: u8,
+    envelope_value: u16,
     output_sample: i8,
     keyon: bool,
     keyoff: bool,
@@ -480,8 +480,8 @@ impl SPCDSP {
                         }
                     }
                     V0ENVX_ADDRESS => {
-                        // 書き込めるけど意味はない（読み取り用レジスタ）
-                        self.voice[ch].envelope_value = value;
+                        // 書き込みは無視される（読み取り用レジスタ）
+                        // 実際は書き込んで操作できるが、そのような使い方は考慮外とする
                     }
                     V0OUTX_ADDRESS => {
                         // 書き込めるけど意味はない（読み取り用レジスタ）
@@ -616,7 +616,7 @@ impl SPCDSP {
                         }
                         SPCVoiceGainMode::BentIncrease { rate } => 0x80 | (3 << 5) | (rate & 0x1F),
                     },
-                    V0ENVX_ADDRESS => self.voice[ch].envelope_value,
+                    V0ENVX_ADDRESS => ((self.voice[ch].envelope_value >> 4) & 0xFF) as u8,
                     V0OUTX_ADDRESS => self.voice[ch].output_sample as u8,
                     _ => {
                         panic!("Unsupported DSP address!");
