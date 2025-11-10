@@ -143,6 +143,7 @@ pub struct SPCDSP {
     echo_delay: u8,
     fir_coef: [i8; 8],
     voice: [SPCVoiceRegister; 8],
+    global_counter: u16,
 }
 
 impl SPCDecoder {
@@ -340,11 +341,13 @@ impl SPCDSP {
             echo_delay: 0,
             fir_coef: [0; 8],
             voice: [SPCVoiceRegister::new(); 8],
+            global_counter: 0,
         }
     }
 
     /// DSPレジスタの書き込み処理
     pub fn write_dsp_register(&mut self, ram: &[u8], address: u8, value: u8) {
+        // println!("DSPW: {:02X} <- {:02X}", address, value);
         match address {
             MVOLL_ADDRESS => {
                 self.volume[0] = value as i8;
@@ -641,6 +644,11 @@ impl SPCDSP {
     /// ステレオサンプル計算処理
     pub fn compute_sample(&mut self, ram: &[u8]) -> [i16; 2] {
         let mut out = [0i32; 2];
+        // グローバルカウンタの更新
+        if self.grobal_counter == 0 {
+            self.grobal_counter = 0x77FF;
+        }
+        self.grobal_counter -= 1;
         // 全チャンネルの出力をミックス
         for ch in 0..8 {
             let vout = self.voice[ch].compute_sample(ram);
