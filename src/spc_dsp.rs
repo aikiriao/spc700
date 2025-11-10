@@ -166,50 +166,40 @@ impl SPCDecoder {
 
         // 前のサンプルを使用し補間
         let mut output: i32 = 0;
-        output += (GAUSS_INTERPOLATION_TABLE[0x0FF - interp_index] * decode_history[3]) >> 10;
-        output += (GAUSS_INTERPOLATION_TABLE[0x1FF - interp_index] * decode_history[2]) >> 10;
-        output += (GAUSS_INTERPOLATION_TABLE[0x100 + interp_index] * decode_history[1]) >> 10;
-        output += (GAUSS_INTERPOLATION_TABLE[0x000 + interp_index] * decode_history[0]) >> 10;
+        output += (GAUSS_INTERPOLATION_TABLE[0x0FF - interp_index] * decode_history[0]) >> 10;
+        output += (GAUSS_INTERPOLATION_TABLE[0x1FF - interp_index] * decode_history[1]) >> 10;
+        output += (GAUSS_INTERPOLATION_TABLE[0x100 + interp_index] * decode_history[2]) >> 10;
+        output += (GAUSS_INTERPOLATION_TABLE[0x000 + interp_index] * decode_history[3]) >> 10;
         output >>= 1;
 
         output as i16
     }
 
     /// 1サンプルデコード
-    fn decode_sample(
-        decode_history: &mut [i32],
-        filter: u8,
-        granularity: u8,
-        sample_count: usize,
-        nibble: u8,
-    ) -> i16 {
+    fn decode_sample(&mut self, filter: u8, granularity: u8, pitch: u16, nibble: u8) -> i16 {
+        assert!(nibble <= 0xF);
+
         // 符号付き4bit値の読み取り
-        let mut sample = if (nibble & 0x8) != 0 {
-            ((nibble & 0x7) as i32) - 8
+        let sample = if nibble >= 8 {
+            (nibble as i32) | !0xFi32
         } else {
             nibble as i32
         };
 
-        // 粒度の読み取り
-        let scale = if granularity <= 12 {
-            (1 << granularity) as i32
-        } else {
-            sample >>= 3;
-            (1 << 12) as i32
-        };
-
         // デコード処理
-        let mut output = sample * scale;
+        let mut output = sample << (granularity as i32);
         match filter {
             0 => {}
             1 => {
-                output += (decode_history[1] * 15) >> 4;
+                output += (self.decode_history[3] * 15) >> 4;
             }
             2 => {
-                output += ((decode_history[1] * 61) >> 5) - ((decode_history[0] * 15) >> 4);
+                output +=
+                    ((self.decode_history[3] * 61) >> 5) - ((self.decode_history[2] * 15) >> 4);
             }
             3 => {
-                output += ((decode_history[1] * 115) >> 6) - ((decode_history[0] * 13) >> 4);
+                output +=
+                    ((self.decode_history[3] * 115) >> 6) - ((self.decode_history[2] * 13) >> 4);
             }
             _ => panic!("Invalid BRR filter!"),
         }
@@ -218,13 +208,18 @@ impl SPCDecoder {
         output = output.clamp(-16378, 16376);
 
         // デコード履歴更新
-        decode_history[0] = decode_history[1];
-        decode_history[1] = decode_history[2];
-        decode_history[2] = decode_history[3];
-        decode_history[3] = output;
+        self.decode_history[0] = self.decode_history[1];
+        self.decode_history[1] = self.decode_history[2];
+        self.decode_history[2] = self.decode_history[3];
+        self.decode_history[3] = output;
 
-        // 補間して出力
-        Self::interpolate_sample(decode_history, sample_count)
+        // ガウス補間
+        let out = Self::interpolate_sample(&self.decode_history, self.sample_count);
+
+        // サンプルインデックス更新
+        self.sample_count = self.sample_count.wrapping_add(pitch as usize);
+
+        out
     }
 
     /// 1ブロックデコード
@@ -239,22 +234,10 @@ impl SPCDecoder {
         // 16サンプル復号
         for i in 0..8 {
             let byte = ram[i + 1];
-            self.decode_buffer[2 * i + 0] = Self::decode_sample(
-                &mut self.decode_history,
-                filter,
-                granularity,
-                self.sample_count,
-                (byte >> 4) & 0xF,
-            );
-            self.sample_count = self.sample_count.wrapping_add(pitch as usize);
-            self.decode_buffer[2 * i + 1] = Self::decode_sample(
-                &mut self.decode_history,
-                filter,
-                granularity,
-                self.sample_count,
-                (byte >> 0) & 0xF,
-            );
-            self.sample_count = self.sample_count.wrapping_add(pitch as usize);
+            self.decode_buffer[2 * i + 0] =
+                self.decode_sample(filter, granularity, pitch, (byte >> 4) & 0xF);
+            self.decode_buffer[2 * i + 1] =
+                self.decode_sample(filter, granularity, pitch, (byte >> 0) & 0xF);
         }
 
         // フラグ更新
