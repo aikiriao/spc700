@@ -100,8 +100,7 @@ enum SPCEnvelopeState {
 struct SPCDecoder {
     decode_buffer: [i16; 16],
     decode_history: [i32; 4],
-    decode_buffer_pos: usize,
-    sample_count: usize,
+    sample_index_fixed: u16,
     decode_start_address: usize,
     decode_loop_address: usize,
     decode_read_pos: usize,
@@ -151,20 +150,17 @@ impl SPCDecoder {
         Self {
             decode_buffer: [0; 16],
             decode_history: [0; 4],
-            decode_buffer_pos: 0,
             decode_start_address: 0,
             decode_loop_address: 0,
             decode_read_pos: 0,
-            sample_count: 0,
+            sample_index_fixed: 0,
             loop_flag: false,
             end: false,
         }
     }
 
     /// 1サンプルをテーブルを使用して補間
-    fn interpolate_sample(decode_history: &[i32], sample_count: usize) -> i16 {
-        let interp_index = (sample_count >> 4) & 0xFF;
-
+    fn interpolate_sample(decode_history: &[i32], interp_index: usize) -> i16 {
         // 前のサンプルを使用し補間
         let mut output: i32 = 0;
         output += (GAUSS_INTERPOLATION_TABLE[0x0FF - interp_index] * decode_history[0]) >> 10;
@@ -177,7 +173,7 @@ impl SPCDecoder {
     }
 
     /// 1サンプルデコード
-    fn decode_sample(&mut self, filter: u8, granularity: u8, pitch: u16, nibble: u8) -> i16 {
+    fn decode_brr_sample(&mut self, filter: u8, granularity: u8, pitch: u16, nibble: u8) -> i16 {
         assert!(nibble <= 0xF);
 
         // 符号付き4bit値の読み取り
@@ -189,8 +185,8 @@ impl SPCDecoder {
 
         // デコード処理
         let mut output = sample << (granularity as i32);
-        let p1 = self.decode_history[3];
-        let p2 = self.decode_history[2];
+        let p1 = self.decode_history[1];
+        let p2 = self.decode_history[0];
         match filter {
             0 => {}
             1 => {
@@ -220,21 +216,13 @@ impl SPCDecoder {
 
         // デコード履歴更新
         self.decode_history[0] = self.decode_history[1];
-        self.decode_history[1] = self.decode_history[2];
-        self.decode_history[2] = self.decode_history[3];
-        self.decode_history[3] = output;
+        self.decode_history[1] = output;
 
-        // ガウス補間
-        let out = Self::interpolate_sample(&self.decode_history, self.sample_count);
-
-        // サンプルインデックス更新
-        self.sample_count = self.sample_count.wrapping_add(pitch as usize);
-
-        out
+        output as i16
     }
 
     /// 1ブロックデコード
-    fn decode_block(&mut self, ram: &[u8], pitch: u16) {
+    fn decode_brr_block(&mut self, ram: &[u8]) {
         assert!(ram.len() >= 9);
 
         // RFレジスタの復号
@@ -242,27 +230,31 @@ impl SPCDecoder {
         let granularity = rfreg >> 4;
         let filter = (rfreg >> 2) & 0x3;
 
+        // フラグ更新
+        self.loop_flag = ((rfreg >> 1) & 0x1) != 0;
+        self.end = ((rfreg >> 0) & 0x1) != 0;
+
         // 16サンプル復号
         for i in 0..8 {
             let byte = ram[i + 1];
             self.decode_buffer[2 * i + 0] =
-                self.decode_sample(filter, granularity, pitch, (byte >> 4) & 0xF);
+                self.decode_brr_sample(filter, granularity, (byte >> 4) & 0xF);
             self.decode_buffer[2 * i + 1] =
-                self.decode_sample(filter, granularity, pitch, (byte >> 0) & 0xF);
+                self.decode_brr_sample(filter, granularity, (byte >> 0) & 0xF);
         }
-
-        // フラグ更新
-        self.loop_flag = ((rfreg >> 1) & 0x1) != 0;
-        self.end = ((rfreg >> 0) & 0x1) != 0;
     }
 
     /// 1サンプルデコード
     fn process(&mut self, ram: &[u8], pitch: u16) -> i16 {
+        let next_block;
+
+        // サンプルを進める
+        (self.sample_index_fixed, next_block) = self.sample_index_fixed.overflowing_add(pitch);
+
         // バッファが尽きたら次のブロックをデコード
-        if self.decode_buffer_pos >= 16 {
+        if next_block {
             // 1ブロックデコード
-            self.decode_block(&ram[self.decode_read_pos..], pitch);
-            self.decode_buffer_pos = 0;
+            self.decode_brr_block(&ram[self.decode_read_pos..]);
             // デコードアドレスの更新
             self.decode_read_pos = if self.end {
                 // ループ開始アドレスに戻る
@@ -274,10 +266,7 @@ impl SPCDecoder {
         }
 
         // バッファからデータを取り出し
-        let out = self.decode_buffer[self.decode_buffer_pos];
-        self.decode_buffer_pos += 1;
-
-        out
+        self.decode_buffer[(self.sample_index_fixed >> 12) as usize]
     }
 }
 
@@ -307,18 +296,18 @@ impl SPCVoiceRegister {
     fn compute_sample(&mut self, ram: &[u8]) -> [i16; 2] {
         // デコード
         let mut out = self.decoder.process(ram, self.pitch);
-        // 最後の出力サンプル更新
-        self.output_sample = ((out >> 8) & 0xFF) as i8;
+
         // ENDフラグがセットかつループフラグが立っていなければ即時ミュート
         if self.decoder.end {
             if !self.decoder.loop_flag {
                 self.envelope_state = SPCEnvelopeState::Release;
                 self.envelope_value = 0;
-                return [0, 0];
             }
         }
 
-        // TODO: PMON
+        // デコード後の出力サンプル更新
+        self.output_sample = ((out >> 8) & 0xFF) as i8;
+
         // TODO: NON
         // TODO: ADSR
         // 左右ボリューム適用
@@ -378,7 +367,6 @@ impl SPCDSP {
                             make_u16_from_u8(&ram[(dir_address + 2)..(dir_address + 4)]) as usize;
                         self.voice[ch].decoder.decode_read_pos =
                             self.voice[ch].decoder.decode_start_address;
-                        self.voice[ch].decoder.decode_buffer_pos = 16;
                     }
                 }
             }
@@ -645,10 +633,10 @@ impl SPCDSP {
     pub fn compute_sample(&mut self, ram: &[u8]) -> [i16; 2] {
         let mut out = [0i32; 2];
         // グローバルカウンタの更新
-        if self.grobal_counter == 0 {
-            self.grobal_counter = 0x77FF;
+        if self.global_counter == 0 {
+            self.global_counter = 0x77FF;
         }
-        self.grobal_counter -= 1;
+        self.global_counter -= 1;
         // 全チャンネルの出力をミックス
         for ch in 0..8 {
             let vout = self.voice[ch].compute_sample(ram);
