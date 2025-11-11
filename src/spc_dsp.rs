@@ -173,7 +173,7 @@ impl SPCDecoder {
     }
 
     /// 1サンプルデコード
-    fn decode_brr_sample(&mut self, filter: u8, granularity: u8, pitch: u16, nibble: u8) -> i16 {
+    fn decode_brr_sample(&mut self, filter: u8, granularity: u8, nibble: u8) -> i16 {
         assert!(nibble <= 0xF);
 
         // 符号付き4bit値の読み取り
@@ -500,7 +500,6 @@ impl SPCDSP {
 
     /// DSPレジスタの読み込み処理
     pub fn read_dsp_register(&self, _ram: &[u8], address: u8) -> u8 {
-        match address {
         // 80-FFの読み込みは00-7Fと同等に扱われる
         match address & 0x7F {
             MVOLL_ADDRESS => self.volume[0] as u8,
