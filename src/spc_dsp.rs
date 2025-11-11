@@ -99,7 +99,7 @@ enum SPCEnvelopeState {
 #[derive(Copy, Clone, Debug)]
 struct SPCDecoder {
     decode_buffer: [i16; 16],
-    decode_history: [i32; 4],
+    decode_history: [i32; 2],
     sample_index_fixed: u16,
     decode_start_address: usize,
     decode_loop_address: usize,
