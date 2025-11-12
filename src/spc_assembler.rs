@@ -1559,8 +1559,8 @@ pub fn parse_opcode(ram: &[u8]) -> (SPCOpcode, u16) {
             ram,
             SPCOpcode::SBC {
                 oprand: SPCOprand::DirectPageToDirectPage {
-                    direct_page_dst: ram[1], // !NOTICE! Oprand maybe LE.
-                    direct_page_src: ram[2]  // !NOTICE! Oprand maybe LE.
+                    direct_page_src: ram[1], // !NOTICE!
+                    direct_page_dst: ram[2], // !NOTICE!
                 }
             },
             3
