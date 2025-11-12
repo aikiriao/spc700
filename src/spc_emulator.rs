@@ -95,12 +95,7 @@ impl SPCEmulator {
         emu.write_ram_u8(CONTROL_ADDRESS, ram[CONTROL_ADDRESS]);
 
         // DSPレジスタのセットアップ
-        // DIRは先に設定する（初期状態でKONがある場合にアドレスを正しくするため）
-        emu.dsp
-            .write_dsp_register(ram, DIR_ADDRESS, dsp_register[DIR_ADDRESS as usize]);
-        for i in 0..128 {
-            emu.dsp.write_dsp_register(ram, i, dsp_register[i as usize]);
-        }
+        emu.dsp.initialize_dsp_register(ram, dsp_register);
 
         emu
     }
@@ -229,7 +224,9 @@ impl SPCEmulator {
                     // 何もしないがアドレスをラッチすべき？
                 }
                 DSPDATA_ADDRESS => {
-                    return self.dsp.read_dsp_register(&self.ram, self.ram[DSPADDR_ADDRESS]);
+                    return self
+                        .dsp
+                        .read_dsp_register(&self.ram, self.ram[DSPADDR_ADDRESS]);
                 }
                 T0OUT_ADDRESS | T1OUT_ADDRESS | T2OUT_ADDRESS => {
                     // 注意：読み出しによってタイマーの値はクリアされる

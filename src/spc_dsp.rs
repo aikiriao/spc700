@@ -13,7 +13,7 @@ const EFB_ADDRESS: u8 = 0x0D;
 const PMON_ADDRESS: u8 = 0x2D;
 const NON_ADDRESS: u8 = 0x3D;
 const EON_ADDRESS: u8 = 0x4D;
-pub const DIR_ADDRESS: u8 = 0x5D;
+const DIR_ADDRESS: u8 = 0x5D;
 const ESA_ADDRESS: u8 = 0x6D;
 const EDL_ADDRESS: u8 = 0x7D;
 const FIR0_ADDRESS: u8 = 0x0F;
@@ -141,8 +141,8 @@ pub struct SPCDSP {
     echo_start_page: u8,
     echo_delay: u8,
     fir_coef: [i8; 8],
-    voice: [SPCVoiceRegister; 8],
     global_counter: u16,
+    voice: [SPCVoiceRegister; 8],
 }
 
 impl SPCDecoder {
@@ -256,12 +256,13 @@ impl SPCDecoder {
             // 1ブロックデコード
             self.decode_brr_block(&ram[self.decode_read_pos..]);
             // デコードアドレスの更新
-            self.decode_read_pos = if self.end {
+            if self.end {
                 // ループ開始アドレスに戻る
-                self.decode_loop_address
+                self.decode_read_pos = self.decode_loop_address;
+                self.sample_index_fixed = 0;
             } else {
                 // 次のブロックに進む
-                self.decode_read_pos + 9
+                self.decode_read_pos += 9;
             };
         }
 
@@ -334,9 +335,26 @@ impl SPCDSP {
         }
     }
 
+    /// 128バイトメモリから初期化
+    pub fn initialize_dsp_register(&mut self, ram: &[u8], dsp_register: &[u8; 128]) {
+        // DIRは先に設定（初期状態でKONがある場合にアドレスを正しくするため）
+        self.write_dsp_register(ram, DIR_ADDRESS, dsp_register[DIR_ADDRESS as usize]);
+
+        // すべてのレジスタを設定
+        for i in 0..128 {
+            self.write_dsp_register(ram, i, dsp_register[i as usize]);
+        }
+
+        // ENDXは最後に直接設定（通常の設定処理ではすべてクリアされるため）
+        let endx = dsp_register[ENDX_ADDRESS as usize];
+        for ch in 0..8 {
+            self.voice[ch].decoder.end = ((endx >> ch) & 0x1) != 0;
+        }
+    }
+
     /// DSPレジスタの書き込み処理
     pub fn write_dsp_register(&mut self, ram: &[u8], address: u8, value: u8) {
-        // println!("DSPW: {:02X} <- {:02X}", address, value);
+        println!("DSPW: {:02X} <- {:02X}", address, value);
         match address {
             MVOLL_ADDRESS => {
                 self.volume[0] = value as i8;
@@ -412,7 +430,8 @@ impl SPCDSP {
             DIR_ADDRESS => {
                 // 全ボイスが参照するアドレスを再計算
                 for ch in 0..8 {
-                    let dir_address = ((value as usize) << 8) + 4 * (self.voice[ch].sample_source as usize);
+                    let dir_address =
+                        ((value as usize) << 8) + 4 * (self.voice[ch].sample_source as usize);
                     self.voice[ch].decoder.decode_start_address =
                         make_u16_from_u8(&ram[dir_address..(dir_address + 2)]) as usize;
                     self.voice[ch].decoder.decode_loop_address =
@@ -449,7 +468,8 @@ impl SPCDSP {
                     }
                     V0SRCN_ADDRESS => {
                         // デコードアドレスを更新
-                        let dir_address = ((self.brr_dir_page as usize) << 8) + 4 * (value as usize);
+                        let dir_address =
+                            ((self.brr_dir_page as usize) << 8) + 4 * (value as usize);
                         self.voice[ch].decoder.decode_start_address =
                             make_u16_from_u8(&ram[dir_address..(dir_address + 2)]) as usize;
                         self.voice[ch].decoder.decode_loop_address =
