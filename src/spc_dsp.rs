@@ -149,7 +149,7 @@ impl SPCDecoder {
     fn new() -> Self {
         Self {
             decode_buffer: [0; 16],
-            decode_history: [0; 4],
+            decode_history: [0; 2],
             decode_start_address: 0,
             decode_loop_address: 0,
             decode_read_pos: 0,
