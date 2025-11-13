@@ -345,7 +345,7 @@ impl SPCEmulator {
                     self.reg.y = (ret >> 8) as u8 & 0xFF;
                     self.reg.a = (ret >> 0) as u8 & 0xFF;
                     // フラグ更新
-                    self.set_psw_flag(PSW_FLAG_N, (ret >> 15) != 0);
+                    self.set_psw_flag(PSW_FLAG_N, ((ret >> 15) & 0x1) != 0);
                     self.set_psw_flag(PSW_FLAG_H, half_carry);
                     self.set_psw_flag(PSW_FLAG_Z, ret == 0);
                     if arith_overflow {
@@ -370,7 +370,7 @@ impl SPCEmulator {
                     wval = wval.wrapping_sub(1);
                     self.write_ram_u8(address + 0, ((wval >> 0) & 0xFF) as u8);
                     self.write_ram_u8(address + 1, ((wval >> 8) & 0xFF) as u8);
-                    self.set_psw_flag(PSW_FLAG_N, (wval >> 15) != 0);
+                    self.set_psw_flag(PSW_FLAG_N, ((wval >> 15) & 0x1) != 0);
                     self.set_psw_flag(PSW_FLAG_Z, wval == 0);
                     6
                 }
@@ -388,7 +388,7 @@ impl SPCEmulator {
                 }
                 self.reg.y = rem as u8;
 
-                self.set_psw_flag(PSW_FLAG_N, (quot >> 8) != 0);
+                self.set_psw_flag(PSW_FLAG_N, (quot >> 8) != 0);  // TODO!
                 self.set_psw_flag(PSW_FLAG_V, quot > 0xFF);
                 self.set_psw_flag(PSW_FLAG_H, (self.reg.y & 0xF) >= (self.reg.x & 0xF));
                 self.set_psw_flag(PSW_FLAG_Z, quot == 0);
@@ -402,7 +402,7 @@ impl SPCEmulator {
                     wval = wval.wrapping_add(1);
                     self.write_ram_u8(address + 0, ((wval >> 0) & 0xFF) as u8);
                     self.write_ram_u8(address + 1, ((wval >> 8) & 0xFF) as u8);
-                    self.set_psw_flag(PSW_FLAG_N, (wval >> 15) != 0);
+                    self.set_psw_flag(PSW_FLAG_N, ((wval >> 15) & 0x1) != 0);
                     self.set_psw_flag(PSW_FLAG_Z, wval == 0);
                     6
                 }
@@ -412,7 +412,7 @@ impl SPCEmulator {
                 let mul = (self.reg.y as u16) * (self.reg.a as u16);
                 self.reg.y = ((mul >> 8) & 0xFF) as u8;
                 self.reg.a = ((mul >> 0) & 0xFF) as u8;
-                self.set_psw_flag(PSW_FLAG_N, (mul >> 15) != 0);
+                self.set_psw_flag(PSW_FLAG_N, ((mul >> 15) & 0x1) != 0);
                 self.set_psw_flag(PSW_FLAG_Z, self.reg.y == 0);
                 9
             }
@@ -429,7 +429,7 @@ impl SPCEmulator {
                     self.reg.y = (ret >> 8) as u8 & 0xFF;
                     self.reg.a = (ret >> 0) as u8 & 0xFF;
                     // フラグ更新
-                    self.set_psw_flag(PSW_FLAG_N, (ret >> 15) != 0);
+                    self.set_psw_flag(PSW_FLAG_N, ((ret >> 15) & 0x1) != 0);
                     self.set_psw_flag(PSW_FLAG_H, half_carry);
                     self.set_psw_flag(PSW_FLAG_Z, ret == 0);
                     if !arith_overflow {
@@ -587,7 +587,7 @@ impl SPCEmulator {
                     let ya = ((self.reg.y as i32) << 8) | self.reg.a as i32;
                     let ret = ya - wval;
                     // フラグ更新
-                    self.set_psw_flag(PSW_FLAG_N, (ret & PSW_FLAG_N as i32) != 0);
+                    self.set_psw_flag(PSW_FLAG_N, ((ret >> 15) & 0x1) != 0);
                     self.set_psw_flag(PSW_FLAG_Z, ret == 0);
                     self.set_psw_flag(PSW_FLAG_C, ret >= 0);
                     4
