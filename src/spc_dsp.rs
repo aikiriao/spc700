@@ -231,8 +231,8 @@ impl SPCDecoder {
         let filter = (rfreg >> 2) & 0x3;
 
         // フラグ更新
-        self.loop_flag = ((rfreg >> 1) & 0x1) != 0;
-        self.end = ((rfreg >> 0) & 0x1) != 0;
+        self.loop_flag = (rfreg & 0x2) != 0;
+        self.end = (rfreg & 0x1) != 0;
 
         // 16サンプル復号
         for i in 0..8 {
