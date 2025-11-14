@@ -477,7 +477,7 @@ impl SPCDSP {
                         self.voice[ch].sample_source = value;
                     }
                     V0ADSR1_ADDRESS => {
-                        self.voice[ch].adsr_enable = (value >> 7) != 0;
+                        self.voice[ch].adsr_enable = (value & 0x80) != 0;
                         self.voice[ch].attack_rate = 2 * (value & 0xF) + 1;
                         self.voice[ch].decay_rate = 2 * ((value >> 4) & 0x7) + 16;
                     }
@@ -486,7 +486,7 @@ impl SPCDSP {
                         self.voice[ch].sustain_level = (value >> 5) & 0x7;
                     }
                     V0GAIN_ADDRESS => {
-                        if (value >> 7) == 0 {
+                        if (value & 0x80) == 0 {
                             self.voice[ch].gain_mode =
                                 SPCVoiceGainMode::Fixed { gain: value & 0x7F };
                         } else {
