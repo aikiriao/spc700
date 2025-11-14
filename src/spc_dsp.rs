@@ -98,7 +98,7 @@ enum SPCEnvelopeState {
 
 #[derive(Copy, Clone, Debug)]
 struct SPCDecoder {
-    decode_buffer: [i16; 16],
+    decode_buffer: [i16; 20],
     decode_history: [i32; 2],
     sample_index_fixed: u16,
     decode_start_address: usize,
@@ -148,7 +148,7 @@ pub struct SPCDSP {
 impl SPCDecoder {
     fn new() -> Self {
         Self {
-            decode_buffer: [0; 16],
+            decode_buffer: [0; 20],
             decode_history: [0; 2],
             decode_start_address: 0,
             decode_loop_address: 0,
@@ -160,13 +160,13 @@ impl SPCDecoder {
     }
 
     /// 1サンプルをテーブルを使用して補間
-    fn interpolate_sample(decode_history: &[i32], interp_index: usize) -> i16 {
+    fn interpolate_sample(decode_history: &[i16], interp_index: usize) -> i16 {
         // 前のサンプルを使用し補間
         let mut output: i32 = 0;
-        output += (GAUSS_INTERPOLATION_TABLE[0x0FF - interp_index] * decode_history[0]) >> 10;
-        output += (GAUSS_INTERPOLATION_TABLE[0x1FF - interp_index] * decode_history[1]) >> 10;
-        output += (GAUSS_INTERPOLATION_TABLE[0x100 + interp_index] * decode_history[2]) >> 10;
-        output += (GAUSS_INTERPOLATION_TABLE[0x000 + interp_index] * decode_history[3]) >> 10;
+        output += (GAUSS_INTERPOLATION_TABLE[0x0FF - interp_index] * decode_history[0] as i32) >> 10;
+        output += (GAUSS_INTERPOLATION_TABLE[0x1FF - interp_index] * decode_history[1] as i32) >> 10;
+        output += (GAUSS_INTERPOLATION_TABLE[0x100 + interp_index] * decode_history[2] as i32) >> 10;
+        output += (GAUSS_INTERPOLATION_TABLE[0x000 + interp_index] * decode_history[3] as i32) >> 10;
         output >>= 1;
 
         output as i16
@@ -234,12 +234,17 @@ impl SPCDecoder {
         self.loop_flag = (rfreg & 0x2) != 0;
         self.end = (rfreg & 0x1) != 0;
 
+        // 末尾4サンプルを先頭に移動（補間のため）
+        for i in 0..4 {
+            self.decode_buffer[i] = self.decode_buffer[16 + i];
+        }
+
         // 16サンプル復号
         for i in 0..8 {
             let byte = ram[i + 1];
-            self.decode_buffer[2 * i + 0] =
+            self.decode_buffer[2 * i + 4] =
                 self.decode_brr_sample(filter, granularity, (byte >> 4) & 0xF);
-            self.decode_buffer[2 * i + 1] =
+            self.decode_buffer[2 * i + 5] =
                 self.decode_brr_sample(filter, granularity, (byte >> 0) & 0xF);
         }
     }
@@ -266,8 +271,12 @@ impl SPCDecoder {
             };
         }
 
-        // バッファからデータを取り出し
-        self.decode_buffer[(self.sample_index_fixed >> 12) as usize]
+        // 補間して出力
+        let index = (self.sample_index_fixed >> 12) as usize;
+        Self::interpolate_sample(
+            &self.decode_buffer[index..(index + 4)],
+            ((self.sample_index_fixed >> 4) & 0xFF) as usize,
+        )
     }
 }
 
