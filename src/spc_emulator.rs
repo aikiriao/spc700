@@ -1644,8 +1644,8 @@ impl SPCEmulator {
             let ret = a16 + b16 + c;
             (
                 (ret & 0xFF) as u8,
-                ret >= 0x100,
                 (!(a16 ^ b16)) & (a16 ^ ret) & 0x80 != 0,
+                ret >= 0x100,
                 half >= 0x10,
             )
         }
@@ -1662,8 +1662,8 @@ impl SPCEmulator {
             let half = (a16 & 0xF).wrapping_sub(b16 & 0xF).wrapping_sub(nc);
             (
                 (ret & 0xFF) as u8,
-                !(ret >= 0x100),
                 (a16 ^ b16) & (a16 ^ ret) & 0x80 != 0,
+                !(ret >= 0x100),
                 !(half >= 0x100),
             )
         }
@@ -1677,21 +1677,21 @@ impl SPCEmulator {
         op: fn(u8, u8, bool) -> (u8, bool, bool, bool),
     ) -> u8 {
         let ret;
-        let arith_overflow;
-        let sign_overflow;
+        let overflow;
+        let carry;
         let half_carry;
         let cycle;
 
         match oprand {
             SPCOprand::Immediate { immediate } => {
-                (ret, arith_overflow, sign_overflow, half_carry) =
+                (ret, overflow, carry, half_carry) =
                     op(self.reg.a, *immediate, self.test_psw_flag(PSW_FLAG_C));
                 self.reg.a = ret;
                 cycle = 2;
             }
             SPCOprand::IndirectPage => {
                 let memval = self.read_ram_u8(self.reg.x as usize);
-                (ret, arith_overflow, sign_overflow, half_carry) =
+                (ret, overflow, carry, half_carry) =
                     op(self.reg.a, memval, self.test_psw_flag(PSW_FLAG_C));
                 self.reg.a = ret;
                 cycle = 3;
@@ -1699,7 +1699,7 @@ impl SPCEmulator {
             SPCOprand::DirectPage { direct_page } => {
                 let address = self.get_direct_page_address(*direct_page);
                 let memval = self.read_ram_u8(address);
-                (ret, arith_overflow, sign_overflow, half_carry) =
+                (ret, overflow, carry, half_carry) =
                     op(self.reg.a, memval, self.test_psw_flag(PSW_FLAG_C));
                 self.reg.a = ret;
                 cycle = 3;
@@ -1707,14 +1707,14 @@ impl SPCEmulator {
             SPCOprand::DirectPageX { direct_page } => {
                 let address = self.get_direct_page_address(*direct_page) + self.reg.x as usize;
                 let memval = self.read_ram_u8(address);
-                (ret, arith_overflow, sign_overflow, half_carry) =
+                (ret, overflow, carry, half_carry) =
                     op(self.reg.a, memval, self.test_psw_flag(PSW_FLAG_C));
                 self.reg.a = ret;
                 cycle = 4;
             }
             SPCOprand::Absolute { address } => {
                 let memval = self.read_ram_u8(*address as usize);
-                (ret, arith_overflow, sign_overflow, half_carry) =
+                (ret, overflow, carry, half_carry) =
                     op(self.reg.a, memval, self.test_psw_flag(PSW_FLAG_C));
                 self.reg.a = ret;
                 cycle = 4;
@@ -1722,7 +1722,7 @@ impl SPCEmulator {
             SPCOprand::AbsoluteX { address } => {
                 let addr = *address + self.reg.x as u16;
                 let memval = self.read_ram_u8(addr as usize);
-                (ret, arith_overflow, sign_overflow, half_carry) =
+                (ret, overflow, carry, half_carry) =
                     op(self.reg.a, memval, self.test_psw_flag(PSW_FLAG_C));
                 self.reg.a = ret;
                 cycle = 5;
@@ -1730,7 +1730,7 @@ impl SPCEmulator {
             SPCOprand::AbsoluteY { address } => {
                 let addr = *address + self.reg.y as u16;
                 let memval = self.read_ram_u8(addr as usize);
-                (ret, arith_overflow, sign_overflow, half_carry) =
+                (ret, overflow, carry, half_carry) =
                     op(self.reg.a, memval, self.test_psw_flag(PSW_FLAG_C));
                 self.reg.a = ret;
                 cycle = 5;
@@ -1738,7 +1738,7 @@ impl SPCEmulator {
             SPCOprand::DirectPageXIndirect { direct_page } => {
                 let address = self.get_direct_page_x_indexed_indirect_address(*direct_page);
                 let memval = self.read_ram_u8(address);
-                (ret, arith_overflow, sign_overflow, half_carry) =
+                (ret, overflow, carry, half_carry) =
                     op(self.reg.a, memval, self.test_psw_flag(PSW_FLAG_C));
                 self.reg.a = ret;
                 cycle = 6;
@@ -1746,7 +1746,7 @@ impl SPCEmulator {
             SPCOprand::DirectPageIndirectY { direct_page } => {
                 let address = self.get_direct_page_indirect_y_indexed_address(*direct_page);
                 let memval = self.read_ram_u8(address);
-                (ret, arith_overflow, sign_overflow, half_carry) =
+                (ret, overflow, carry, half_carry) =
                     op(self.reg.a, memval, self.test_psw_flag(PSW_FLAG_C));
                 self.reg.a = ret;
                 cycle = 6;
@@ -1756,7 +1756,7 @@ impl SPCEmulator {
                 let address2 = self.get_direct_page_address(self.reg.y);
                 let memval1 = self.read_ram_u8(address1);
                 let memval2 = self.read_ram_u8(address2);
-                (ret, arith_overflow, sign_overflow, half_carry) =
+                (ret, overflow, carry, half_carry) =
                     op(memval1, memval2, self.test_psw_flag(PSW_FLAG_C));
                 self.write_ram_u8(address1, ret);
                 cycle = 5;
@@ -1769,7 +1769,7 @@ impl SPCEmulator {
                 let address_src = self.get_direct_page_address(*direct_page_src);
                 let memval_dst = self.read_ram_u8(address_dst);
                 let memval_src = self.read_ram_u8(address_src);
-                (ret, arith_overflow, sign_overflow, half_carry) =
+                (ret, overflow, carry, half_carry) =
                     op(memval_dst, memval_src, self.test_psw_flag(PSW_FLAG_C));
                 self.write_ram_u8(address_dst, ret);
                 cycle = 6;
@@ -1780,7 +1780,7 @@ impl SPCEmulator {
             } => {
                 let address = self.get_direct_page_address(*direct_page);
                 let memval = self.read_ram_u8(address);
-                (ret, arith_overflow, sign_overflow, half_carry) =
+                (ret, overflow, carry, half_carry) =
                     op(memval, *immediate, self.test_psw_flag(PSW_FLAG_C));
                 self.write_ram_u8(address, ret);
                 cycle = 5;
@@ -1788,7 +1788,7 @@ impl SPCEmulator {
             SPCOprand::IndirectToIndirect => {
                 let memval1 = self.read_ram_u8(self.reg.x as usize);
                 let memval2 = self.read_ram_u8(self.reg.y as usize);
-                (ret, arith_overflow, sign_overflow, half_carry) =
+                (ret, overflow, carry, half_carry) =
                     op(memval1, memval2, self.test_psw_flag(PSW_FLAG_C));
                 self.reg.x = ret;
                 cycle = 5;
@@ -1798,18 +1798,10 @@ impl SPCEmulator {
 
         // フラグ更新
         self.set_psw_flag(PSW_FLAG_N, (self.reg.a & PSW_FLAG_N) != 0);
+        self.set_psw_flag(PSW_FLAG_V, overflow);
         self.set_psw_flag(PSW_FLAG_H, half_carry);
         self.set_psw_flag(PSW_FLAG_Z, ret == 0);
-        if arith_overflow {
-            self.set_psw_flag(PSW_FLAG_V, false);
-            self.set_psw_flag(PSW_FLAG_C, true);
-        } else if sign_overflow {
-            self.set_psw_flag(PSW_FLAG_V, true);
-            self.set_psw_flag(PSW_FLAG_C, false);
-        } else {
-            self.set_psw_flag(PSW_FLAG_V, false);
-            self.set_psw_flag(PSW_FLAG_C, false);
-        }
+        self.set_psw_flag(PSW_FLAG_C, carry);
 
         cycle
     }
