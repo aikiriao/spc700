@@ -557,15 +557,6 @@ impl SPCDSP {
                 }
             }
             DIR_ADDRESS => {
-                // 全ボイスが参照するアドレスを再計算
-                for ch in 0..8 {
-                    let dir_address =
-                        ((value as usize) << 8) + 4 * (self.voice[ch].sample_source as usize);
-                    self.voice[ch].decoder.decode_start_address =
-                        make_u16_from_u8(&ram[dir_address..(dir_address + 2)]) as usize;
-                    self.voice[ch].decoder.decode_loop_address =
-                        make_u16_from_u8(&ram[(dir_address + 2)..(dir_address + 4)]) as usize;
-                }
                 self.brr_dir_page = value;
             }
             ESA_ADDRESS => {
