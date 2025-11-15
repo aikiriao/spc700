@@ -218,16 +218,16 @@ impl SPCDecoder {
             2 => {
                 // output + (61 / 32) * p1 - (15 / 16) * p2
                 output += p1 << 1;
-                output += (-((p1 << 1) + p1)) >> 5;
+                output += (-3 * p1) >> 5;
                 output -= p2;
                 output += p2 >> 4;
             }
             3 => {
                 // output + (115 / 64) * p1 - (13 / 16) * p2
                 output += p1 << 1;
-                output += (-(p1 + (p1 << 2) + (p1 << 3))) >> 6;
+                output += (-13 * p1) >> 6;
                 output -= p2;
-                output += ((p2 << 1) + p2) >> 4;
+                output += (3 * p2) >> 4;
             }
             _ => panic!("Invalid BRR filter!"),
         }
