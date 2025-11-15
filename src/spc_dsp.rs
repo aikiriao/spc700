@@ -151,12 +151,18 @@ pub struct SPCDSP {
     volume: [i8; 2],
     echo_volume: [i8; 2],
     flag: u8,
+    mute: bool,
+    noise_clock: u8,
     echo_feedback: i8,
+    echo_buffer_write_enable: bool,
     echo: [bool; 8],
     brr_dir_page: u8,
-    echo_start_page: u8,
-    echo_delay: u8,
+    echo_buffer_address: usize,
+    echo_buffer_size: usize,
+    echo_buffer_pos: usize,
     fir_coef: [i8; 8],
+    fir_buffer: [[i16; 8]; 2],
+    fir_buffer_pos: usize,
     global_counter: u16,
     voice: [SPCVoiceRegister; 8],
 }
@@ -393,7 +399,6 @@ impl SPCVoiceRegister {
                     SPCVoiceGainMode::BentIncrease => {
                         self.envelope_value += if self.envelope_value < 0x600 { 32 } else { 8 };
                     }
-                    _ => panic!("Invalid envelope gain mode for fixed gain!"),
                 }
             }
 
@@ -434,12 +439,18 @@ impl SPCDSP {
             volume: [0; 2],
             echo_volume: [0; 2],
             flag: 0,
+            mute: false,
+            echo_buffer_write_enable: false,
+            noise_clock: 0,
             echo_feedback: 0,
             echo: [false; 8],
             brr_dir_page: 0,
-            echo_start_page: 0,
-            echo_delay: 0,
+            echo_buffer_address: 0,
+            echo_buffer_size: 0,
+            echo_buffer_pos: 0,
             fir_coef: [0; 8],
+            fir_buffer: [[0; 8]; 2],
+            fir_buffer_pos: 0,
             voice: [SPCVoiceRegister::new(); 8],
             global_counter: 0,
         }
@@ -513,6 +524,11 @@ impl SPCDSP {
                 }
             }
             FLG_ADDRESS => {
+                // FIXME: RESETは無視
+                self.mute = (value & 0x40) != 0;
+                self.echo_buffer_write_enable = (value & 0x20) == 0; // ~ECEN
+                self.noise_clock = value & 0x1F;
+                // 読まれる可能性があるので、値としては保持しておく
                 self.flag = value;
             }
             ENDX_ADDRESS => {
@@ -553,10 +569,14 @@ impl SPCDSP {
                 self.brr_dir_page = value;
             }
             ESA_ADDRESS => {
-                self.echo_start_page = value;
+                self.echo_buffer_address = (value as usize) << 8;
             }
             EDL_ADDRESS => {
-                self.echo_delay = value & 0x0F;
+                self.echo_buffer_size = if (value & 0x0F) == 0 {
+                    4
+                } else {
+                    ((value & 0x0F) as usize) << 11
+                };
             }
             FIR0_ADDRESS | FIR1_ADDRESS | FIR2_ADDRESS | FIR3_ADDRESS | FIR4_ADDRESS
             | FIR5_ADDRESS | FIR6_ADDRESS | FIR7_ADDRESS => {
@@ -717,8 +737,8 @@ impl SPCDSP {
                 ret
             }
             DIR_ADDRESS => self.brr_dir_page,
-            ESA_ADDRESS => self.echo_start_page,
-            EDL_ADDRESS => self.echo_delay,
+            ESA_ADDRESS => ((self.echo_buffer_address >> 8) & 0xFF) as u8,
+            EDL_ADDRESS => ((self.echo_buffer_size >> 11) & 0xFF) as u8,
             FIR0_ADDRESS | FIR1_ADDRESS | FIR2_ADDRESS | FIR3_ADDRESS | FIR4_ADDRESS
             | FIR5_ADDRESS | FIR6_ADDRESS | FIR7_ADDRESS => {
                 let index = address >> 4;
@@ -772,24 +792,83 @@ impl SPCDSP {
         }
     }
 
+    /// FIRフィルタ出力計算
+    fn compute_fir(&mut self, ram: &[u8]) -> [i16; 2] {
+        // エコーバッファのアドレス
+        let echo_buffer_addr = self.echo_buffer_address + self.echo_buffer_pos;
+
+        // FIRバッファ更新
+        for ch in 0..2 {
+            let buf = (((ram[echo_buffer_addr + 2 * ch + 1] as i8) as i16) << 8)
+                | (ram[echo_buffer_addr + 2 * ch + 0] as i16);
+            self.fir_buffer[ch][self.fir_buffer_pos] = buf >> 1; // 下位1bitは捨てられる
+        }
+
+        // FIRフィルタ計算
+        let mut out = [0; 2];
+        for ch in 0..2 {
+            for i in 0..8 {
+                let buf =
+                    self.fir_buffer[ch][(self.fir_buffer_pos.wrapping_sub(7 - i)) & 0x7] as i32;
+                out[ch] += (buf * (self.fir_coef[i] as i32)) >> 6;
+            }
+        }
+        self.fir_buffer_pos = (self.fir_buffer_pos + 1) & 0x7;
+
+        [out[0] as i16, out[1] as i16]
+    }
+
+    /// エコーバッファの更新
+    fn update_echo_buffer(&mut self, ram: &mut [u8], echo_in: &[i32; 2]) {
+        // リングバッファ書き込み
+        if self.echo_buffer_write_enable {
+            let echo_buffer_addr = self.echo_buffer_address + self.echo_buffer_pos;
+            ram[echo_buffer_addr + 0] = ((echo_in[0] >> 0) & 0xFF) as u8;
+            ram[echo_buffer_addr + 1] = ((echo_in[0] >> 8) & 0xFF) as u8;
+            ram[echo_buffer_addr + 2] = ((echo_in[1] >> 0) & 0xFF) as u8;
+            ram[echo_buffer_addr + 3] = ((echo_in[1] >> 8) & 0xFF) as u8;
+        }
+        self.echo_buffer_pos = (self.echo_buffer_pos + 4) % self.echo_buffer_size;
+    }
+
     /// ステレオサンプル計算処理
-    pub fn compute_sample(&mut self, ram: &[u8]) -> [i16; 2] {
+    pub fn compute_sample(&mut self, ram: &mut [u8]) -> [i16; 2] {
         let mut out = [0i32; 2];
+        let mut echo_in = [0i32; 2];
         // 全チャンネルの出力をミックス
         for ch in 0..8 {
             let vout = self.voice[ch].compute_sample(ram, self.global_counter);
             out[0] += vout[0] as i32;
             out[1] += vout[1] as i32;
+            if self.echo[ch] {
+                echo_in[0] += vout[0] as i32;
+                echo_in[1] += vout[1] as i32;
+            }
         }
-        // マスターボリューム適用
+        // エコー成分計算
+        let fir_out = self.compute_fir(ram);
+        // マスターボリューム適用・エコー成分加算
         for ch in 0..2 {
             out[ch] = (out[ch] * (self.volume[ch] as i32)) >> 7;
+            out[ch] += ((fir_out[ch] as i32) * (self.echo_volume[ch] as i32)) >> 7;
+        }
+        // フィードバック成分加算・エコーバッファ更新
+        for ch in 0..2 {
+            echo_in[ch] += ((fir_out[ch] as i32) * (self.echo_feedback as i32)) >> 7;
+        }
+        self.update_echo_buffer(ram, &echo_in);
+        // ミュートならば無音
+        if self.mute {
+            for ch in 0..2 {
+                out[ch] = 0;
+            }
         }
         // グローバルカウンタの更新
         if self.global_counter == 0 {
             self.global_counter = 0x77FF;
         }
         self.global_counter -= 1;
+
         [out[0] as i16, out[1] as i16]
     }
 }
