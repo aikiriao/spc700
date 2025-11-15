@@ -402,7 +402,8 @@ impl SPCEmulator {
                 let mul = (self.reg.y as u16) * (self.reg.a as u16);
                 self.reg.y = ((mul >> 8) & 0xFF) as u8;
                 self.reg.a = ((mul >> 0) & 0xFF) as u8;
-                self.set_psw_flag(PSW_FLAG_N, (mul & 0x8000) != 0);
+                // NZフラグの更新はYのみに依存
+                self.set_psw_flag(PSW_FLAG_N, (self.reg.y & 0x80) != 0);
                 self.set_psw_flag(PSW_FLAG_Z, self.reg.y == 0);
                 9
             }
