@@ -175,6 +175,7 @@ impl SPCDecoder {
     /// 1サンプルデコード
     fn decode_brr_sample(&mut self, filter: u8, granularity: u8, nibble: u8) -> i16 {
         assert!(nibble <= 0xF);
+        assert!(granularity <= 12);
 
         // 符号付き4bit値の読み取り
         let sample = if nibble >= 8 {
@@ -184,7 +185,7 @@ impl SPCDecoder {
         };
 
         // デコード処理
-        let mut output = sample << (granularity as i32);
+        let mut output = (sample << (granularity as i32)) >> 1;
         let p1 = self.decode_history[1];
         let p2 = self.decode_history[0];
         match filter {
@@ -197,7 +198,7 @@ impl SPCDecoder {
             2 => {
                 // output + (61 / 32) * p1 - (15 / 16) * p2
                 output += p1 << 1;
-                output += (-(p1 << 1) + p1) >> 5;
+                output += (-((p1 << 1) + p1)) >> 5;
                 output -= p2;
                 output += p2 >> 4;
             }
