@@ -126,6 +126,7 @@ struct SPCDecoder {
 struct SPCVoiceRegister {
     volume: [i8; 2],
     pitch: u16,
+    brr_dir_address_base: usize, 
     sample_source: u8,
     adsr_enable: bool,
     attack_rate: u8,
@@ -312,6 +313,7 @@ impl SPCVoiceRegister {
         Self {
             volume: [0; 2],
             pitch: 0,
+            brr_dir_address_base: 0,
             sample_source: 0,
             adsr_enable: false,
             attack_rate: 0,
@@ -333,6 +335,30 @@ impl SPCVoiceRegister {
     }
 
     fn compute_sample(&mut self, ram: &[u8], global_counter: u16) -> [i16; 2] {
+        // キーオンが入ったとき
+        if self.keyon {
+            self.keyon = false;
+            self.envelope_state = SPCEnvelopeState::Attack;
+            self.envelope_value = 0;
+            self.envelope_rate = self.attack_rate;
+            self.decoder.end = false;
+            let dir_address = self.brr_dir_address_base + 4 * (self.sample_source as usize);
+            self.decoder.decode_start_address =
+                make_u16_from_u8(&ram[dir_address..(dir_address + 2)]) as usize;
+            self.decoder.decode_loop_address =
+                make_u16_from_u8(&ram[(dir_address + 2)..(dir_address + 4)]) as usize;
+            self.decoder.decode_read_pos = self.decoder.decode_start_address;
+            self.decoder.sample_index_fixed = 0;
+            self.decoder.decode_buffer.fill(0);
+        }
+
+        // キーオフが入ったとき
+        if self.keyoff {
+            self.keyoff = false;
+            self.envelope_state = SPCEnvelopeState::Release;
+            self.envelope_rate = 31; // 毎サンプル更新
+        }
+
         // デコード
         let mut out = self.decoder.process(ram, self.pitch);
 
@@ -340,7 +366,6 @@ impl SPCVoiceRegister {
         if self.decoder.end {
             if !self.decoder.loop_flag {
                 self.envelope_state = SPCEnvelopeState::Release;
-                self.envelope_rate = 31;
                 self.envelope_value = 0;
             }
         }
@@ -491,36 +516,12 @@ impl SPCDSP {
             }
             KON_ADDRESS => {
                 for ch in 0..8 {
-                    let keyon = ((value >> ch) & 0x1) != 0;
-                    self.voice[ch].keyon = keyon;
-                    // キーオンが入ったとき
-                    if keyon {
-                        let dir_address = ((self.brr_dir_page as usize) << 8)
-                            + 4 * (self.voice[ch].sample_source as usize);
-                        self.voice[ch].envelope_state = SPCEnvelopeState::Attack;
-                        self.voice[ch].envelope_value = 0;
-                        self.voice[ch].envelope_rate = self.voice[ch].attack_rate;
-                        self.voice[ch].decoder.end = false;
-                        self.voice[ch].decoder.decode_start_address =
-                            make_u16_from_u8(&ram[dir_address..(dir_address + 2)]) as usize;
-                        self.voice[ch].decoder.decode_loop_address =
-                            make_u16_from_u8(&ram[(dir_address + 2)..(dir_address + 4)]) as usize;
-                        self.voice[ch].decoder.decode_read_pos =
-                            self.voice[ch].decoder.decode_start_address;
-                        self.voice[ch].decoder.sample_index_fixed = 0;
-                        self.voice[ch].decoder.decode_buffer.fill(0);
-                    }
+                    self.voice[ch].keyon = ((value >> ch) & 0x1) != 0;
                 }
             }
             KOFF_ADDRESS => {
                 for ch in 0..8 {
-                    let keyoff = ((value >> ch) & 0x1) != 0;
-                    self.voice[ch].keyoff = keyoff;
-                    // キーオフが入ったとき
-                    if keyoff {
-                        self.voice[ch].envelope_state = SPCEnvelopeState::Release;
-                        self.voice[ch].envelope_rate = 31; // 毎サンプル更新
-                    }
+                    self.voice[ch].keyoff = ((value >> ch) & 0x1) != 0;
                 }
             }
             FLG_ADDRESS => {
@@ -558,6 +559,9 @@ impl SPCDSP {
             }
             DIR_ADDRESS => {
                 self.brr_dir_page = value;
+                for ch in 0..8 {
+                    self.voice[ch].brr_dir_address_base = (value as usize) << 8;
+                }
             }
             ESA_ADDRESS => {
                 self.echo_buffer_address = (value as usize) << 8;
@@ -592,8 +596,7 @@ impl SPCDSP {
                     }
                     V0SRCN_ADDRESS => {
                         // デコードアドレスを更新
-                        let dir_address =
-                            ((self.brr_dir_page as usize) << 8) + 4 * (value as usize);
+                        let dir_address = self.voice[ch].brr_dir_address_base + 4 * (value as usize);
                         self.voice[ch].decoder.decode_start_address =
                             make_u16_from_u8(&ram[dir_address..(dir_address + 2)]) as usize;
                         self.voice[ch].decoder.decode_loop_address =
