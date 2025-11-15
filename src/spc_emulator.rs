@@ -58,26 +58,6 @@ fn get_address_bit(address_bit: u16) -> (u8, usize) {
     (bit_pos, address)
 }
 
-/// 加算時のハーフキャリーを判定
-fn check_half_carry_add_u8(a: u8, b: u8) -> bool {
-    (((a & 0xF) + (b & 0xF)) & 0x10) == 0x10
-}
-
-/// 減算時のハーフキャリーを判定
-fn check_half_carry_sub_u8(a: u8, b: u8) -> bool {
-    ((a & 0xF) as i16 - (b & 0xF) as i16) < 0
-}
-
-/// 加算時のハーフキャリーを判定
-fn check_half_carry_add_u16(a: u16, b: u16) -> bool {
-    (((a & 0xF) + (b & 0xF)) & 0x10) == 0x10
-}
-
-/// 減算時のハーフキャリーを判定
-fn check_half_carry_sub_u16(a: u16, b: u16) -> bool {
-    ((a & 0xF) as i32 - (b & 0xF) as i32) < 0
-}
-
 impl SPCEmulator {
     pub fn new(reg: &SPCRegister, ram: &[u8], dsp_register: &[u8; 128]) -> SPCEmulator {
         let mut emu = Self {
