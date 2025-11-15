@@ -546,7 +546,7 @@ impl SPCEmulator {
                     let address = self.get_direct_page_address(*direct_page);
                     let wval = self.read_ram_u16(address) as u16;
                     let ya = ((self.reg.y as u16) << 8) | self.reg.a as u16;
-                    let (ret , nc) = ya.overflowing_sub(wval);
+                    let (ret, nc) = ya.overflowing_sub(wval);
                     // フラグ更新
                     self.set_psw_flag(PSW_FLAG_N, (ret & 0x8000) != 0);
                     self.set_psw_flag(PSW_FLAG_Z, ret == 0);
