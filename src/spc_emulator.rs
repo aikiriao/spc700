@@ -124,7 +124,7 @@ impl SPCEmulator {
         }
         // 32kHz周期で出力サンプル計算
         if self.tick_count % 2 == 0 {
-            let _ = self.dsp.compute_sample(&self.ram);
+            let _ = self.dsp.compute_sample(&mut self.ram);
         }
     }
 
