@@ -24,10 +24,10 @@ fn naive_execution(register: &SPCRegister, ram: &[u8], dsp_register: &[u8; 128])
     let mut next_tick_cycle = CLOCK_TICK_CYCLE_64KHZ;
     loop {
         let cycle = emu.execute_step();
-        total_cycle = total_cycle.overflowing_add(cycle as u64).0;
+        total_cycle = total_cycle.wrapping_add(cycle as u64);
         if total_cycle >= next_tick_cycle {
             emu.clock_tick_64k_hz();
-            next_tick_cycle = next_tick_cycle.overflowing_add(CLOCK_TICK_CYCLE_64KHZ).0;
+            next_tick_cycle = next_tick_cycle.wrapping_add(CLOCK_TICK_CYCLE_64KHZ);
         }
     }
 }
