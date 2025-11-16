@@ -313,11 +313,9 @@ pub fn parse_opcode(ram: &[u8]) -> (SPCOpcode, u16) {
         0x9C => create_opcode_with_length_check!(
             ram,
             SPCOpcode::DEC {
-                oprand: SPCOprand::Absolute {
-                    address: make_u16_from_u8(&ram[1..3]),
-                },
+                oprand: SPCOprand::Accumulator
             },
-            3
+            1
         ),
         0xDC => create_opcode_with_length_check!(
             ram,
