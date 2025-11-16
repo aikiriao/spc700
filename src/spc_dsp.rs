@@ -138,7 +138,7 @@ struct SPCVoiceRegister {
     envelope_state: SPCEnvelopeState,
     envelope_gain: i32,
     envelope_rate: u8,
-    output_sample: i8,
+    output_sample: i16,
     keyon: bool,
     keyoff: bool,
     pitch_mod: bool,
@@ -360,7 +360,8 @@ impl SPCVoiceRegister {
         }
     }
 
-    fn compute_sample(&mut self, ram: &[u8], global_counter: u16) -> [i16; 2] {
+    /// 1ステレオサンプル計算
+    fn compute_sample(&mut self, ram: &[u8], global_counter: u16, prev_voice_out: i16) -> [i16; 2] {
         // キーオンが入ったとき
         if self.keyon {
             self.keyon = false;
@@ -386,8 +387,15 @@ impl SPCVoiceRegister {
             self.envelope_rate = 31; // 毎サンプル更新
         }
 
+        // ピッチ（+モジュレーション）
+        let mut pitch = self.pitch as i32;
+        if self.pitch_mod && !self.noise {
+            let factor = (prev_voice_out >> 4) as i32 + 0x400;
+            pitch = (factor * pitch) >> 10;
+        };
+
         // デコード
-        let mut out = self.decoder.process(ram, self.pitch);
+        let mut out = self.decoder.process(ram, pitch as u16);
 
         // ENDフラグがセットかつループフラグが立っていなければ即時ミュート
         if self.decoder.end {
@@ -398,7 +406,7 @@ impl SPCVoiceRegister {
         }
 
         // デコード後の出力サンプル更新
-        self.output_sample = ((out >> 8) & 0xFF) as i8;
+        self.output_sample = out;
 
         // TODO: NON
 
@@ -655,7 +663,7 @@ impl SPCDSP {
                     }
                     V0OUTX_ADDRESS => {
                         // 書き込めるけど意味はない（読み取り用レジスタ）
-                        self.voice[ch].output_sample = value as i8;
+                        self.voice[ch].output_sample = (value as i16) << 8;
                     }
                     _ => {
                         // 他のアドレスへの書き込みは効果なし
@@ -789,7 +797,7 @@ impl SPCDSP {
                         }
                     },
                     V0ENVX_ADDRESS => ((self.voice[ch].envelope_gain >> 4) & 0xFF) as u8,
-                    V0OUTX_ADDRESS => self.voice[ch].output_sample as u8,
+                    V0OUTX_ADDRESS => ((self.voice[ch].output_sample >> 8) & 0xFF) as u8,
                     _ => {
                         panic!("Unsupported DSP address!");
                     }
@@ -845,14 +853,16 @@ impl SPCDSP {
         let mut out = [0i32; 2];
         let mut echo_in = [0i32; 2];
         // 全チャンネルの出力をミックス
+        let mut prev_voice_out = 0;
         for ch in 0..8 {
-            let vout = self.voice[ch].compute_sample(ram, self.global_counter);
+            let vout = self.voice[ch].compute_sample(ram, self.global_counter, prev_voice_out);
             out[0] += vout[0] as i32;
             out[1] += vout[1] as i32;
             if self.echo[ch] {
                 echo_in[0] += vout[0] as i32;
                 echo_in[1] += vout[1] as i32;
             }
+            prev_voice_out = self.voice[ch].output_sample;
         }
         // エコー成分計算
         let fir_out = self.compute_fir(ram);
