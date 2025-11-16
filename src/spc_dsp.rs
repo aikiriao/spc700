@@ -126,7 +126,7 @@ struct SPCDecoder {
 struct SPCVoiceRegister {
     volume: [i8; 2],
     pitch: u16,
-    brr_dir_address_base: usize, 
+    brr_dir_address_base: usize,
     sample_source: u8,
     adsr_enable: bool,
     attack_rate: u8,
@@ -334,6 +334,26 @@ impl SPCVoiceRegister {
         }
     }
 
+    /// ゲイン設定の適用
+    fn apply_gain_settings(&mut self) {
+        if !self.adsr_enable {
+            if (self.gain_value & 0x80) == 0 {
+                self.gain_mode = SPCVoiceGainMode::Fixed {
+                    gain: self.gain_value & 0x7F,
+                };
+            } else {
+                self.envelope_rate = self.gain_value & 0x1F;
+                self.gain_mode = match (self.gain_value >> 5) & 0x3 {
+                    0 => SPCVoiceGainMode::LinearDecrease,
+                    1 => SPCVoiceGainMode::ExponentialDecrease,
+                    2 => SPCVoiceGainMode::LinearIncrease,
+                    3 => SPCVoiceGainMode::BentIncrease,
+                    _ => unreachable!("Unsupported Gain Type!"),
+                };
+            }
+        }
+    }
+
     fn compute_sample(&mut self, ram: &[u8], global_counter: u16) -> [i16; 2] {
         // キーオンが入ったとき
         if self.keyon {
@@ -342,6 +362,7 @@ impl SPCVoiceRegister {
             self.envelope_gain = 0;
             self.envelope_rate = self.attack_rate;
             self.decoder.end = false;
+            self.apply_gain_settings();
             let dir_address = self.brr_dir_address_base + 4 * (self.sample_source as usize);
             self.decoder.decode_start_address =
                 make_u16_from_u8(&ram[dir_address..(dir_address + 2)]) as usize;
@@ -596,7 +617,8 @@ impl SPCDSP {
                     }
                     V0SRCN_ADDRESS => {
                         // デコードアドレスを更新
-                        let dir_address = self.voice[ch].brr_dir_address_base + 4 * (value as usize);
+                        let dir_address =
+                            self.voice[ch].brr_dir_address_base + 4 * (value as usize);
                         self.voice[ch].decoder.decode_start_address =
                             make_u16_from_u8(&ram[dir_address..(dir_address + 2)]) as usize;
                         self.voice[ch].decoder.decode_loop_address =
@@ -618,21 +640,8 @@ impl SPCDSP {
                         }
                     }
                     V0GAIN_ADDRESS => {
-                        if (value & 0x80) == 0 {
-                            self.voice[ch].gain_mode =
-                                SPCVoiceGainMode::Fixed { gain: value & 0x7F };
-                        } else {
-                            self.voice[ch].envelope_rate = value & 0x1F;
-                            self.voice[ch].gain_mode = match (value >> 5) & 0x3 {
-                                0 => SPCVoiceGainMode::LinearDecrease,
-                                1 => SPCVoiceGainMode::ExponentialDecrease,
-                                2 => SPCVoiceGainMode::LinearIncrease,
-                                3 => SPCVoiceGainMode::BentIncrease,
-                                _ => panic!("Unsupported Gain Type!"),
-                            };
-                        }
-                        // Sustainのために値を保持しておく
                         self.voice[ch].gain_value = value;
+                        self.voice[ch].apply_gain_settings();
                     }
                     V0ENVX_ADDRESS => {
                         // 書き込みは無視される（読み取り用レジスタ）
