@@ -155,13 +155,13 @@ impl SPCEmulator {
 
     /// CPUIOリードポートのクリア
     fn clear_cpuio_read_ports(&mut self, value: u8) {
-        if (value & (1 << 4)) != 0 {
+        if (value & 0x10) != 0 {
             self.write_ram_u8(CPUIO0_ADDRESS, 0);
             self.write_ram_u8(CPUIO1_ADDRESS, 0);
             self.cpu_port_in[0] = 0;
             self.cpu_port_in[1] = 0;
         }
-        if (value & (1 << 5)) != 0 {
+        if (value & 0x20) != 0 {
             self.write_ram_u8(CPUIO2_ADDRESS, 0);
             self.write_ram_u8(CPUIO3_ADDRESS, 0);
             self.cpu_port_in[2] = 0;
@@ -180,7 +180,7 @@ impl SPCEmulator {
                 CONTROL_ADDRESS => {
                     self.write_timer_register(value);
                     self.clear_cpuio_read_ports(value);
-                    if (value & (1 << 7)) != 0 {
+                    if (value & 0x80) != 0 {
                         self.ipl_rom = true;
                     }
                 }
