@@ -136,7 +136,7 @@ struct SPCVoiceRegister {
     gain_mode: SPCVoiceGainMode,
     gain_value: u8,
     envelope_state: SPCEnvelopeState,
-    envelope_value: i32,
+    envelope_gain: i32,
     envelope_rate: u8,
     output_sample: i8,
     keyon: bool,
@@ -322,7 +322,7 @@ impl SPCVoiceRegister {
             sustain_level: 0,
             gain_mode: SPCVoiceGainMode::Fixed { gain: 0 },
             gain_value: 0,
-            envelope_value: 0,
+            envelope_gain: 0,
             output_sample: 0,
             keyon: false,
             keyoff: false,
@@ -339,7 +339,7 @@ impl SPCVoiceRegister {
         if self.keyon {
             self.keyon = false;
             self.envelope_state = SPCEnvelopeState::Attack;
-            self.envelope_value = 0;
+            self.envelope_gain = 0;
             self.envelope_rate = self.attack_rate;
             self.decoder.end = false;
             let dir_address = self.brr_dir_address_base + 4 * (self.sample_source as usize);
@@ -366,7 +366,7 @@ impl SPCVoiceRegister {
         if self.decoder.end {
             if !self.decoder.loop_flag {
                 self.envelope_state = SPCEnvelopeState::Release;
-                self.envelope_value = 0;
+                self.envelope_gain = 0;
             }
         }
 
@@ -386,43 +386,43 @@ impl SPCVoiceRegister {
                 match self.envelope_state {
                     SPCEnvelopeState::Attack => {
                         if self.attack_rate == 31 {
-                            self.envelope_value += 1024;
+                            self.envelope_gain += 1024;
                         } else {
                             // rate = aaaa1のLinear increaseと同じ
-                            self.envelope_value += 32;
+                            self.envelope_gain += 32;
                         }
                     }
                     SPCEnvelopeState::Decay => {
                         // rate = 1ddd0のExp. decreaseと同じ
-                        self.envelope_value -= 1;
-                        self.envelope_value -= self.envelope_value >> 8;
+                        self.envelope_gain -= 1;
+                        self.envelope_gain -= self.envelope_gain >> 8;
                     }
                     SPCEnvelopeState::Sustain => {
                         // rate = rrrrrのExp. decreaseと同じ
-                        self.envelope_value -= 1;
-                        self.envelope_value -= self.envelope_value >> 8;
+                        self.envelope_gain -= 1;
+                        self.envelope_gain -= self.envelope_gain >> 8;
                     }
                     SPCEnvelopeState::Release => {
-                        self.envelope_value -= 8;
+                        self.envelope_gain -= 8;
                     }
                 }
             } else {
                 match self.gain_mode {
                     SPCVoiceGainMode::Fixed { gain } => {
-                        self.envelope_value = (gain as i32) << 4;
+                        self.envelope_gain = (gain as i32) << 4;
                     }
                     SPCVoiceGainMode::LinearDecrease => {
-                        self.envelope_value -= 32;
+                        self.envelope_gain -= 32;
                     }
                     SPCVoiceGainMode::ExponentialDecrease => {
-                        self.envelope_value -= 1;
-                        self.envelope_value -= self.envelope_value >> 8;
+                        self.envelope_gain -= 1;
+                        self.envelope_gain -= self.envelope_gain >> 8;
                     }
                     SPCVoiceGainMode::LinearIncrease => {
-                        self.envelope_value += 32;
+                        self.envelope_gain += 32;
                     }
                     SPCVoiceGainMode::BentIncrease => {
-                        self.envelope_value += if self.envelope_value < 0x600 { 32 } else { 8 };
+                        self.envelope_gain += if self.envelope_gain < 0x600 { 32 } else { 8 };
                     }
                 }
             }
@@ -431,13 +431,13 @@ impl SPCVoiceRegister {
             // ゲインは範囲制限前の値を使用
             match self.envelope_state {
                 SPCEnvelopeState::Attack => {
-                    if self.envelope_value > 0x7FF {
+                    if self.envelope_gain > 0x7FF {
                         self.envelope_state = SPCEnvelopeState::Decay;
                         self.envelope_rate = self.decay_rate;
                     }
                 }
                 SPCEnvelopeState::Decay => {
-                    if (self.envelope_value >> 8) & 0x7 == self.sustain_level as i32 {
+                    if (self.envelope_gain >> 8) & 0x7 == self.sustain_level as i32 {
                         self.envelope_state = SPCEnvelopeState::Sustain;
                         self.envelope_rate = self.sustain_rate;
                     }
@@ -446,9 +446,9 @@ impl SPCVoiceRegister {
             }
 
             // ゲインの範囲制限
-            self.envelope_value = self.envelope_value.clamp(0, 0x7FF);
+            self.envelope_gain = self.envelope_gain.clamp(0, 0x7FF);
         }
-        out = (((out as i32) * self.envelope_value) >> 11) as i16;
+        out = (((out as i32) * self.envelope_gain) >> 11) as i16;
 
         // 左右ボリューム適用
         let lout = ((out as i32) * (self.volume[0] as i32)) >> 7;
@@ -773,7 +773,7 @@ impl SPCDSP {
                             0x80 | (3 << 5) | (self.voice[ch].envelope_rate & 0x1F)
                         }
                     },
-                    V0ENVX_ADDRESS => ((self.voice[ch].envelope_value >> 4) & 0xFF) as u8,
+                    V0ENVX_ADDRESS => ((self.voice[ch].envelope_gain >> 4) & 0xFF) as u8,
                     V0OUTX_ADDRESS => self.voice[ch].output_sample as u8,
                     _ => {
                         panic!("Unsupported DSP address!");
