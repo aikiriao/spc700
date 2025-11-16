@@ -45,6 +45,8 @@ pub struct SPCEmulator {
     reg: SPCRegister,
     dsp: SPCDSP,
     ram: [u8; 65536],
+    cpu_port_in: [u8; 4],
+    cpu_port_out: [u8; 4],
     tick_count: u64,
     timer_enable: [bool; 3],
     timer_internal_count: [u8; 3],
@@ -62,8 +64,10 @@ impl SPCEmulator {
     pub fn new(reg: &SPCRegister, ram: &[u8], dsp_register: &[u8; 128]) -> SPCEmulator {
         let mut emu = Self {
             reg: reg.clone(),
-            ram: [0; 65536],
             dsp: SPCDSP::new(),
+            ram: [0; 65536],
+            cpu_port_in: [0; 4],
+            cpu_port_out: [0; 4],
             tick_count: 0,
             timer_enable: [false; 3],
             timer_internal_count: [0; 3],
@@ -73,6 +77,11 @@ impl SPCEmulator {
 
         // ramの内容からエミュレータをセットアップ
         emu.write_ram_u8(CONTROL_ADDRESS, ram[CONTROL_ADDRESS]);
+
+        // CPU PORTの入力は初期状態を維持
+        for i in 0..4 {
+            emu.cpu_port_in[i] = ram[CPUIO0_ADDRESS + i];
+        }
 
         // DSPレジスタのセットアップ
         emu.dsp.initialize_dsp_register(ram, dsp_register);
@@ -149,10 +158,14 @@ impl SPCEmulator {
         if (value & (1 << 4)) != 0 {
             self.write_ram_u8(CPUIO0_ADDRESS, 0);
             self.write_ram_u8(CPUIO1_ADDRESS, 0);
+            self.cpu_port_in[0] = 0;
+            self.cpu_port_in[1] = 0;
         }
         if (value & (1 << 5)) != 0 {
             self.write_ram_u8(CPUIO2_ADDRESS, 0);
             self.write_ram_u8(CPUIO3_ADDRESS, 0);
+            self.cpu_port_in[2] = 0;
+            self.cpu_port_in[3] = 0;
         }
     }
 
@@ -177,6 +190,9 @@ impl SPCEmulator {
                 DSPDATA_ADDRESS => {
                     self.dsp
                         .write_dsp_register(&self.ram, self.ram[DSPADDR_ADDRESS], value);
+                }
+                CPUIO0_ADDRESS | CPUIO1_ADDRESS | CPUIO2_ADDRESS | CPUIO3_ADDRESS => {
+                    self.cpu_port_out[address - CPUIO0_ADDRESS] = value;
                 }
                 T0OUT_ADDRESS | T1OUT_ADDRESS | T2OUT_ADDRESS => {
                     panic!("CANNOT write to TxOUT register!!");
@@ -207,6 +223,9 @@ impl SPCEmulator {
                     return self
                         .dsp
                         .read_dsp_register(&self.ram, self.ram[DSPADDR_ADDRESS]);
+                }
+                CPUIO0_ADDRESS | CPUIO1_ADDRESS | CPUIO2_ADDRESS | CPUIO3_ADDRESS => {
+                    return self.cpu_port_in[address - CPUIO0_ADDRESS];
                 }
                 T0OUT_ADDRESS | T1OUT_ADDRESS | T2OUT_ADDRESS => {
                     // 注意：読み出しによってタイマーの値はクリアされる
