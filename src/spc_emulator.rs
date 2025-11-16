@@ -377,10 +377,10 @@ impl SPCEmulator {
                 }
                 self.reg.y = rem as u8;
 
-                self.set_psw_flag(PSW_FLAG_N, (quot >> 8) != 0);  // TODO!
-                self.set_psw_flag(PSW_FLAG_V, quot > 0xFF);
+                self.set_psw_flag(PSW_FLAG_N, (self.reg.a & 0x80) != 0);
+                self.set_psw_flag(PSW_FLAG_V, (quot & 0x100) != 0);
                 self.set_psw_flag(PSW_FLAG_H, (self.reg.y & 0xF) >= (self.reg.x & 0xF));
-                self.set_psw_flag(PSW_FLAG_Z, quot == 0);
+                self.set_psw_flag(PSW_FLAG_Z, self.reg.a == 0);
                 12
             }
             SPCOpcode::INC { oprand } => self.execute_inc(oprand),
