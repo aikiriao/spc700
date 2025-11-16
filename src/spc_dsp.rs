@@ -835,7 +835,7 @@ impl SPCDSP {
     }
 
     /// エコーバッファの更新
-    fn update_echo_buffer(&mut self, ram: &mut [u8], echo_in: &[i32; 2]) {
+    fn put_echo_buffer(&mut self, ram: &mut [u8], echo_in: &[i32; 2]) {
         // リングバッファ書き込み
         if self.echo_buffer_write_enable {
             let echo_buffer_addr = self.echo_buffer_address + self.echo_buffer_pos;
@@ -874,7 +874,7 @@ impl SPCDSP {
         for ch in 0..2 {
             echo_in[ch] += ((fir_out[ch] as i32) * (self.echo_feedback as i32)) >> 7;
         }
-        self.update_echo_buffer(ram, &echo_in);
+        self.put_echo_buffer(ram, &echo_in);
         // ミュートならば無音
         if self.mute {
             for ch in 0..2 {
