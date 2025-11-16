@@ -139,10 +139,11 @@ impl SPCEmulator {
 
     /// タイマーに関するレジスタの書き込み処理
     fn write_timer_register(&mut self, value: u8) {
-        for id in 0..=2 {
+        for id in 0..3 {
             let id_bit = 1 << id;
             if (value & id_bit) != 0 {
                 self.timer_enable[id] = true;
+                // クリア状態からセットするときは内部カウントをリセット
                 if (self.ram[CONTROL_ADDRESS] & id_bit) == 0 {
                     self.timer_internal_count[id] = 0;
                     self.ram[T0OUT_ADDRESS + id] = 0;
