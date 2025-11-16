@@ -298,7 +298,6 @@ impl SPCDecoder {
             if self.end {
                 // ループ開始アドレスに戻る
                 self.decode_read_pos = self.decode_loop_address;
-                self.sample_index_fixed = 0;
             } else {
                 // 次のブロックに進む
                 self.decode_read_pos += 9;
