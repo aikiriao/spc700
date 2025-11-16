@@ -539,22 +539,22 @@ impl SPCEmulator {
                 SPCOprand::Absolute { address } => {
                     let addr = *address as usize;
                     let memval = self.read_ram_u8(addr);
-                    let or = self.reg.a | memval;
-                    let and = self.reg.a & memval;
-                    self.write_ram_u8(addr, or);
-                    self.set_psw_flag(PSW_FLAG_N, (or & PSW_FLAG_N) != 0);
-                    self.set_psw_flag(PSW_FLAG_Z, and == 0);
+                    let cmp = self.reg.a.wrapping_sub(memval);
+                    self.write_ram_u8(addr, self.reg.a | memval);
+                    self.set_psw_flag(PSW_FLAG_N, (cmp & 0x80) != 0);
+                    self.set_psw_flag(PSW_FLAG_Z, cmp == 0);
                     6
                 }
                 _ => panic!("Invalid oprand!"),
             },
             SPCOpcode::TCLR1 { oprand } => match oprand {
                 SPCOprand::Absolute { address } => {
-                    let memval = self.read_ram_u8(*address as usize);
-                    let ret = memval & !self.reg.a;
-                    self.write_ram_u8(*address as usize, ret);
-                    self.set_psw_flag(PSW_FLAG_N, (ret & 0x80) != 0);
-                    self.set_psw_flag(PSW_FLAG_Z, ret == 0);
+                    let addr = *address as usize;
+                    let memval = self.read_ram_u8(addr);
+                    let cmp = self.reg.a.wrapping_sub(memval);
+                    self.write_ram_u8(addr, !self.reg.a & memval);
+                    self.set_psw_flag(PSW_FLAG_N, (cmp & 0x80) != 0);
+                    self.set_psw_flag(PSW_FLAG_Z, cmp == 0);
                     6
                 }
                 _ => panic!("Invalid oprand!"),
