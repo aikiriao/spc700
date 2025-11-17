@@ -183,24 +183,24 @@ impl SPCDecoder {
     }
 
     /// 1サンプルをテーブルを使用して補間
-    fn interpolate_sample(decode_history: &[i16], interp_index: usize) -> i16 {
+    fn interpolate_sample(decode_buffer: &[i16], interp_index: usize) -> i16 {
         // 前のサンプルを使用し補間
         let mut output: i32 = 0;
         output +=
-            (GAUSS_INTERPOLATION_TABLE[0x0FF - interp_index] * decode_history[0] as i32) >> 10;
+            (GAUSS_INTERPOLATION_TABLE[0x0FF - interp_index] * decode_buffer[0] as i32) >> 10;
         output +=
-            (GAUSS_INTERPOLATION_TABLE[0x1FF - interp_index] * decode_history[1] as i32) >> 10;
+            (GAUSS_INTERPOLATION_TABLE[0x1FF - interp_index] * decode_buffer[1] as i32) >> 10;
         output +=
-            (GAUSS_INTERPOLATION_TABLE[0x100 + interp_index] * decode_history[2] as i32) >> 10;
+            (GAUSS_INTERPOLATION_TABLE[0x100 + interp_index] * decode_buffer[2] as i32) >> 10;
         output +=
-            (GAUSS_INTERPOLATION_TABLE[0x000 + interp_index] * decode_history[3] as i32) >> 10;
+            (GAUSS_INTERPOLATION_TABLE[0x000 + interp_index] * decode_buffer[3] as i32) >> 10;
         output >>= 1;
 
         output as i16
     }
 
     /// 1サンプルデコード
-    fn decode_brr_sample(&mut self, filter: u8, granularity: u8, nibble: u8) -> i16 {
+    fn decode_brr_sample(history: &mut [i32], filter: u8, granularity: u8, nibble: u8) -> i16 {
         assert!(nibble <= 0xF);
 
         // 符号付き4bit値の読み取り
@@ -219,8 +219,8 @@ impl SPCDecoder {
 
         // デコード処理
         let mut output = (sample << (scale as i32)) >> 1;
-        let p1 = self.decode_history[1];
-        let p2 = self.decode_history[0];
+        let p1 = history[1];
+        let p2 = history[0];
         match filter {
             0 => {}
             1 => {
@@ -249,41 +249,65 @@ impl SPCDecoder {
         output = output.clamp(-16378, 16376);
 
         // デコード履歴更新
-        self.decode_history[0] = self.decode_history[1];
-        self.decode_history[1] = output;
+        history[0] = history[1];
+        history[1] = output;
 
         output as i16
     }
 
-    /// 1ブロックデコード
-    fn decode_brr_block(&mut self, ram: &[u8]) {
-        assert!(ram.len() >= 9);
-
-        // RFレジスタの復号
-        let rfreg = ram[0];
+    /// BRRブロックヘッダ（RFレジスタ）のデコード
+    fn decode_brr_block_header(rfreg: u8) -> (u8, u8, bool, bool) {
         let granularity = rfreg >> 4;
         let filter = (rfreg >> 2) & 0x3;
+        let loop_flag = (rfreg & 0x2) != 0;
+        let end_flag = (rfreg & 0x1) != 0;
+        (granularity, filter, loop_flag, end_flag)
+    }
 
-        // フラグ更新
-        self.loop_flag = (rfreg & 0x2) != 0;
-        self.end = (rfreg & 0x1) != 0;
+    /// 1ブロックデコード
+    fn decode_brr_block_signal(
+        history: &mut [i32],
+        granularity: u8,
+        filter: u8,
+        ram: &[u8],
+        out: &mut [i16],
+    ) {
+        assert!(ram.len() >= 8);
+        // 16サンプル復号
+        for i in 0..8 {
+            let byte = ram[i];
+            out[2 * i + 0] =
+                Self::decode_brr_sample(history, filter, granularity, (byte >> 4) & 0xF);
+            out[2 * i + 1] =
+                Self::decode_brr_sample(history, filter, granularity, (byte >> 0) & 0xF);
+        }
+    }
+
+    /// 1ブロックデコード
+    fn decode_brr_block(&mut self, ram: &[u8]) {
+        let granularity;
+        let filter;
+        assert!(ram.len() >= 9);
+
+        // ブロックヘッダデコード
+        (granularity, filter, self.loop_flag, self.end) = Self::decode_brr_block_header(ram[0]);
 
         // 末尾4サンプルを先頭に移動（補間のため）
         for i in 0..4 {
             self.decode_buffer[i] = self.decode_buffer[16 + i];
         }
 
-        // 16サンプル復号
-        for i in 0..8 {
-            let byte = ram[i + 1];
-            self.decode_buffer[2 * i + 4] =
-                self.decode_brr_sample(filter, granularity, (byte >> 4) & 0xF);
-            self.decode_buffer[2 * i + 5] =
-                self.decode_brr_sample(filter, granularity, (byte >> 0) & 0xF);
-        }
+        // 1ブロックデコード
+        Self::decode_brr_block_signal(
+            &mut self.decode_history,
+            granularity,
+            filter,
+            &ram[1..],
+            &mut self.decode_buffer[4..],
+        );
     }
 
-    /// 1サンプルデコード
+    /// 1サンプル出力
     fn process(&mut self, ram: &[u8], pitch: u16) -> i16 {
         let next_block;
 
@@ -294,14 +318,13 @@ impl SPCDecoder {
         if next_block {
             // 1ブロックデコード
             self.decode_brr_block(&ram[self.decode_read_pos..]);
-            // デコードアドレスの更新
             if self.end {
-                // ループ開始アドレスに戻る
+                // 末尾に達していたらループ開始アドレスに戻る
                 self.decode_read_pos = self.decode_loop_address;
             } else {
                 // 次のブロックに進む
                 self.decode_read_pos += 9;
-            };
+            }
         }
 
         // 補間して出力
