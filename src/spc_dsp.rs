@@ -495,13 +495,13 @@ impl SPCVoiceRegister {
             // ゲインは範囲制限前の値を使用
             match self.envelope_state {
                 SPCEnvelopeState::Attack => {
-                    if self.envelope_gain > 0x7FF {
+                    if self.envelope_gain >= 0x7E0 {
                         self.envelope_state = SPCEnvelopeState::Decay;
                         self.envelope_rate = self.decay_rate;
                     }
                 }
                 SPCEnvelopeState::Decay => {
-                    if (self.envelope_gain >> 8) & 0x7 == self.sustain_level as i32 {
+                    if ((self.envelope_gain >> 8) & 0x7) <= (self.sustain_level as i32) {
                         self.envelope_state = SPCEnvelopeState::Sustain;
                         self.envelope_rate = self.sustain_rate;
                     }
