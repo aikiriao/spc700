@@ -113,7 +113,7 @@ enum SPCEnvelopeState {
 #[derive(Copy, Clone, Debug)]
 struct SPCDecoder {
     decode_buffer: [i16; 20],
-    decode_history: [i32; 2],
+    decode_history: [i16; 2],
     sample_index_fixed: u16,
     decode_start_address: usize,
     decode_loop_address: usize,
@@ -196,7 +196,7 @@ impl SPCDecoder {
     }
 
     /// 1サンプルデコード
-    fn decode_brr_sample(history: &mut [i32], filter: u8, granularity: u8, nibble: u8) -> i16 {
+    fn decode_brr_sample(history: &mut [i16], filter: u8, granularity: u8, nibble: u8) -> i16 {
         assert!(nibble <= 0xF);
 
         // 符号付き4bit値の読み取り
@@ -215,8 +215,8 @@ impl SPCDecoder {
 
         // デコード処理
         let mut output = (sample << (scale as i32)) >> 1;
-        let p1 = history[1];
-        let p2 = history[0];
+        let p1 = history[1] as i32;
+        let p2 = history[0] as i32;
         match filter {
             0 => {}
             1 => {
@@ -241,8 +241,10 @@ impl SPCDecoder {
             _ => panic!("Invalid BRR filter!"),
         }
 
-        // 出力を15bit幅にクリップ（[-3FFA, 3FF8]）
-        output = output.clamp(-16378, 16376);
+        // 16bit幅に制限（重要）
+        let mut output = output.clamp(-0x8000, 0x7FFF) as i16;
+        // 出力を15bit幅にクリップ（重要。オーバーフローによる音の歪を期待している音源がある）
+        output = (output << 1) >> 1;
 
         // デコード履歴更新
         history[0] = history[1];
@@ -262,7 +264,7 @@ impl SPCDecoder {
 
     /// 1ブロックデコード
     fn decode_brr_block_signal(
-        history: &mut [i32],
+        history: &mut [i16],
         granularity: u8,
         filter: u8,
         ram: &[u8],
