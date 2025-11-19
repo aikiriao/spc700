@@ -374,15 +374,9 @@ impl SPCVoiceRegister {
                         self.envelope_gain = (gain as i32) << 4;
                         self.envelope_rate = 0;
                     }
-                    SPCVoiceGainMode::LinearDecrease { rate } => {
-                        self.envelope_rate = rate;
-                    }
-                    SPCVoiceGainMode::ExponentialDecrease { rate } => {
-                        self.envelope_rate = rate;
-                    }
-                    SPCVoiceGainMode::LinearIncrease { rate } => {
-                        self.envelope_rate = rate;
-                    }
+                    SPCVoiceGainMode::LinearDecrease { rate } |
+                    SPCVoiceGainMode::ExponentialDecrease { rate } | 
+                    SPCVoiceGainMode::LinearIncrease { rate } |
                     SPCVoiceGainMode::BentIncrease { rate } => {
                         self.envelope_rate = rate;
                     }
