@@ -102,7 +102,7 @@ enum SPCVoiceGainMode {
     BentIncrease { rate: u8 },
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, PartialEq)]
 enum SPCEnvelopeState {
     Attack,
     Decay,
@@ -376,10 +376,10 @@ impl SPCVoiceRegister {
                         self.envelope_gain = (gain as i32) << 4;
                         self.envelope_rate = 0;
                     }
-                    SPCVoiceGainMode::LinearDecrease { rate } |
-                    SPCVoiceGainMode::ExponentialDecrease { rate } | 
-                    SPCVoiceGainMode::LinearIncrease { rate } |
-                    SPCVoiceGainMode::BentIncrease { rate } => {
+                    SPCVoiceGainMode::LinearDecrease { rate }
+                    | SPCVoiceGainMode::ExponentialDecrease { rate }
+                    | SPCVoiceGainMode::LinearIncrease { rate }
+                    | SPCVoiceGainMode::BentIncrease { rate } => {
                         self.envelope_rate = rate;
                     }
                 }
@@ -433,47 +433,50 @@ impl SPCVoiceRegister {
                 == 0)
         {
             // エンベロープゲイン更新
-            if self.adsr_enable {
-                match self.envelope_state {
-                    SPCEnvelopeState::Attack => {
-                        if self.attack_rate == 31 {
-                            self.envelope_gain += 1024;
-                        } else {
-                            // rate = aaaa1のLinear increaseと同じ
+            if self.envelope_state == SPCEnvelopeState::Release {
+                // Release状態時はADSR有効無効にかかわらずゲインを下げる
+                self.envelope_gain -= 8;
+            } else {
+                if self.adsr_enable {
+                    match self.envelope_state {
+                        SPCEnvelopeState::Attack => {
+                            if self.attack_rate == 31 {
+                                self.envelope_gain += 1024;
+                            } else {
+                                // rate = aaaa1のLinear increaseと同じ
+                                self.envelope_gain += 32;
+                            }
+                        }
+                        SPCEnvelopeState::Decay => {
+                            // rate = 1ddd0のExp. decreaseと同じ
+                            self.envelope_gain -= 1;
+                            self.envelope_gain -= self.envelope_gain >> 8;
+                        }
+                        SPCEnvelopeState::Sustain => {
+                            // rate = rrrrrのExp. decreaseと同じ
+                            self.envelope_gain -= 1;
+                            self.envelope_gain -= self.envelope_gain >> 8;
+                        }
+                        _ => unreachable!("Release state MUST already processd"),
+                    }
+                } else {
+                    match self.gain_mode {
+                        SPCVoiceGainMode::Fixed { gain } => {
+                            self.envelope_gain = (gain as i32) << 4;
+                        }
+                        SPCVoiceGainMode::LinearDecrease { .. } => {
+                            self.envelope_gain -= 32;
+                        }
+                        SPCVoiceGainMode::ExponentialDecrease { .. } => {
+                            self.envelope_gain -= 1;
+                            self.envelope_gain -= self.envelope_gain >> 8;
+                        }
+                        SPCVoiceGainMode::LinearIncrease { .. } => {
                             self.envelope_gain += 32;
                         }
-                    }
-                    SPCEnvelopeState::Decay => {
-                        // rate = 1ddd0のExp. decreaseと同じ
-                        self.envelope_gain -= 1;
-                        self.envelope_gain -= self.envelope_gain >> 8;
-                    }
-                    SPCEnvelopeState::Sustain => {
-                        // rate = rrrrrのExp. decreaseと同じ
-                        self.envelope_gain -= 1;
-                        self.envelope_gain -= self.envelope_gain >> 8;
-                    }
-                    SPCEnvelopeState::Release => {
-                        self.envelope_gain -= 8;
-                    }
-                }
-            } else {
-                match self.gain_mode {
-                    SPCVoiceGainMode::Fixed { gain } => {
-                        self.envelope_gain = (gain as i32) << 4;
-                    }
-                    SPCVoiceGainMode::LinearDecrease { .. } => {
-                        self.envelope_gain -= 32;
-                    }
-                    SPCVoiceGainMode::ExponentialDecrease { .. } => {
-                        self.envelope_gain -= 1;
-                        self.envelope_gain -= self.envelope_gain >> 8;
-                    }
-                    SPCVoiceGainMode::LinearIncrease { .. } => {
-                        self.envelope_gain += 32;
-                    }
-                    SPCVoiceGainMode::BentIncrease { .. } => {
-                        self.envelope_gain += if self.envelope_gain < 0x600 { 32 } else { 8 };
+                        SPCVoiceGainMode::BentIncrease { .. } => {
+                            self.envelope_gain += if self.envelope_gain < 0x600 { 32 } else { 8 };
+                        }
                     }
                 }
             }
@@ -690,7 +693,9 @@ impl SPCDSP {
                             };
                         }
                         // ADSRが無効であれば即時反映
-                        if !self.voice[ch].adsr_enable {
+                        if self.voice[ch].envelope_state != SPCEnvelopeState::Release
+                            && !self.voice[ch].adsr_enable
+                        {
                             match self.voice[ch].gain_mode {
                                 SPCVoiceGainMode::Fixed { gain } => {
                                     self.voice[ch].envelope_gain = (gain as i32) << 4;
