@@ -116,7 +116,7 @@ impl SPCEmulator {
     }
 
     /// クロックティック
-    pub fn clock_tick_64k_hz(&mut self) {
+    pub fn clock_tick_64k_hz(&mut self) -> Option<[i16; 2]> {
         self.tick_count = self.tick_count.wrapping_add(1);
         // 8kHzタイマー
         if self.tick_count % 8 == 0 {
@@ -133,8 +133,10 @@ impl SPCEmulator {
         }
         // 32kHz周期で出力サンプル計算
         if self.tick_count % 2 == 0 {
-            let _ = self.dsp.compute_sample(&mut self.ram);
+            return Some(self.dsp.compute_sample(&mut self.ram));
         }
+
+        None
     }
 
     /// タイマーに関するレジスタの書き込み処理
