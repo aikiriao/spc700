@@ -84,7 +84,7 @@ impl SPCEmulator {
         }
 
         // DSPレジスタのセットアップ
-        emu.dsp.initialize_dsp_register(ram, dsp_register);
+        emu.dsp.initialize_dsp_register(&mut emu.ram, dsp_register);
 
         emu
     }
