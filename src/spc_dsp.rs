@@ -595,7 +595,7 @@ impl SPCDSP {
     }
 
     /// 128バイトメモリから初期化
-    pub fn initialize_dsp_register(&mut self, ram: &[u8], dsp_register: &[u8; 128]) {
+    pub fn initialize_dsp_register(&mut self, ram: &mut [u8], dsp_register: &[u8; 128]) {
         // DIRは先に設定（初期状態でKONがある場合にアドレスを正しくするため）
         self.write_dsp_register(ram, DIR_ADDRESS, dsp_register[DIR_ADDRESS as usize]);
 
@@ -608,6 +608,13 @@ impl SPCDSP {
         let endx = dsp_register[ENDX_ADDRESS as usize];
         for ch in 0..8 {
             self.voice[ch].decoder.end = ((endx >> ch) & 0x1) != 0;
+        }
+
+        // エコーバッファの内容をクリア（初期のRAMに信号が残っている場合がある）
+        if self.echo_buffer_address != 0 && self.echo_buffer_size != 0 {
+            for i in 0..self.echo_buffer_size {
+                ram[self.echo_buffer_address + i] = 0;
+            }
         }
     }
 
