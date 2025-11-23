@@ -1,5 +1,4 @@
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
-use cpal::{Device, PauseStreamError, PlayStreamError, Stream, StreamConfig};
 use fixed_resample::ReadStatus;
 use spc::spc_assembler::*;
 use spc::spc_emulator::*;

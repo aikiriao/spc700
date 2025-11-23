@@ -1,4 +1,5 @@
 use crate::types::make_u16_from_u8;
+use log::trace;
 
 /// DSPレジスタアドレス
 const MVOLL_ADDRESS: u8 = 0x0C;
@@ -93,78 +94,136 @@ const GAUSS_INTERPOLATION_TABLE: [i32; 512] = [
     0x518, 0x518, 0x518, 0x519, 0x519,
 ];
 
+/// ボイスゲインとそのパラメータ
 #[derive(Copy, Clone, Debug)]
 enum SPCVoiceGainMode {
+    /// 固定ゲイン
     Fixed { gain: u8 },
+    /// 線形増加
     LinearDecrease { rate: u8 },
+    /// 指数的減衰
     ExponentialDecrease { rate: u8 },
+    /// 線形減衰
     LinearIncrease { rate: u8 },
+    /// ベンド増加
     BentIncrease { rate: u8 },
 }
 
+/// エンベロープの状態
 #[derive(Copy, Clone, Debug, PartialEq)]
 enum SPCEnvelopeState {
+    /// アタック
     Attack,
+    /// ディケイ
     Decay,
+    /// サステイン
     Sustain,
+    /// リリース
     Release,
 }
 
+/// デコーダ
 #[derive(Copy, Clone, Debug)]
 struct SPCDecoder {
+    /// デコードバッファ（1ブロックの16サンプル+補間のための4サンプル）
     decode_buffer: [i16; 20],
+    /// 直前のデコード値
     decode_history: [i16; 2],
+    /// サンプル参照位置（固定小数。4bit整数+12bit小数）
     sample_index_fixed: u16,
+    /// デコード開始アドレス
     decode_start_address: usize,
+    /// デコードループアドレス
     decode_loop_address: usize,
+    /// 現在のデコードアドレス
     decode_read_pos: usize,
+    /// 現在のブロックのループフラグ
     pub loop_flag: bool,
+    /// 現在のブロックのENDフラグ
     pub end: bool,
 }
 
+/// ボイス
 #[derive(Copy, Clone, Debug)]
 struct SPCVoiceRegister {
+    /// LRチャンネルのボリューム
     volume: [i8; 2],
+    /// 再生ピッチ（サンプル参照位置の増加幅）
     pitch: u16,
+    /// デコードアドレスが入っているアドレス
     brr_dir_address_base: usize,
+    /// 再生対象の音源サンプル
     sample_source: u8,
+    /// ADSR有効か否か
     adsr_enable: bool,
+    /// アタック状態の更新サンプル間隔
     attack_rate: u8,
+    /// ディケイ状態の更新サンプル間隔
     decay_rate: u8,
+    /// サステイン状態の更新サンプル間隔
     sustain_rate: u8,
+    /// サステイン状態に移行するゲイン値
     sustain_level: u8,
+    /// ゲイン設定
     gain_mode: SPCVoiceGainMode,
+    /// ゲイン設定値
     gain_value: u8,
+    /// エンベロープ状態
     envelope_state: SPCEnvelopeState,
+    /// エンベロープゲイン
     envelope_gain: i32,
+    /// 現在のエンベロープ更新間隔
     envelope_rate: u8,
+    /// LRゲイン適用前の、最後に出力したサンプル値
     output_sample: i16,
+    /// キーオンされているか
     keyon: bool,
+    /// キーオフされているか
     keyoff: bool,
+    /// 前ボイス出力のピッチモジュレーションをするか
     pitch_mod: bool,
+    /// ノイズ有効か
     noise: bool,
+    /// デコーダ
     decoder: SPCDecoder,
 }
 
 /// S-DSP
 #[derive(Copy, Clone, Debug)]
 pub struct SPCDSP {
+    /// マスターボリューム
     volume: [i8; 2],
+    /// エコーボリューム
     echo_volume: [i8; 2],
+    /// フラグ
     flag: u8,
+    /// ミュートするか
     mute: bool,
+    /// ノイズ周波数
     noise_clock: u8,
+    /// エコーフィードバック係数
     echo_feedback: i8,
+    /// エコーバッファに書き込むか
     echo_buffer_write_enable: bool,
+    /// 各チャンネルのエコー有効フラグ
     echo: [bool; 8],
+    /// BRRのディレクトリのページ
     brr_dir_page: u8,
+    /// エコーバッファの開始アドレス
     echo_buffer_address: usize,
+    /// エコーバッファサイズ
     echo_buffer_size: usize,
+    /// エコーバッファ参照位置
     echo_buffer_pos: usize,
+    /// FIRフィルタ係数
     fir_coef: [i8; 8],
+    /// LRチャンネルのFIRフィルタバッファ
     fir_buffer: [[i16; 8]; 2],
+    /// FIRフィルタバッファ参照位置
     fir_buffer_pos: usize,
+    /// ゲイン更新用のカウンタ
     global_counter: u16,
+    /// 各チャンネルのボイス
     voice: [SPCVoiceRegister; 8],
 }
 
@@ -554,7 +613,7 @@ impl SPCDSP {
 
     /// DSPレジスタの書き込み処理
     pub fn write_dsp_register(&mut self, ram: &[u8], address: u8, value: u8) {
-        println!("DSPW: {:02X} <- {:02X}", address, value);
+        trace!("DSPW: {:02X} <- {:02X}", address, value);
         match address & 0x7F {
             MVOLL_ADDRESS => {
                 self.volume[0] = value as i8;
@@ -732,6 +791,7 @@ impl SPCDSP {
 
     /// DSPレジスタの読み込み処理
     pub fn read_dsp_register(&self, _ram: &[u8], address: u8) -> u8 {
+        trace!("DSPR: {:02X}", address);
         // 80-FFの読み込みは00-7Fと同等に扱われる
         match address & 0x7F {
             MVOLL_ADDRESS => self.volume[0] as u8,
@@ -891,8 +951,8 @@ impl SPCDSP {
     pub fn compute_sample(&mut self, ram: &mut [u8]) -> [i16; 2] {
         let mut out = [0i32; 2];
         let mut echo_in = [0i32; 2];
-        // 全チャンネルの出力をミックス
         let mut prev_voice_out = 0;
+        // 全チャンネルの出力をミックス
         for ch in 0..8 {
             let vout = self.voice[ch].compute_sample(ram, self.global_counter, prev_voice_out);
             out[0] += vout[0] as i32;
@@ -910,10 +970,11 @@ impl SPCDSP {
             out[ch] = (out[ch] * (self.volume[ch] as i32)) >> 7;
             out[ch] += ((fir_out[ch] as i32) * (self.echo_volume[ch] as i32)) >> 7;
         }
-        // フィードバック成分加算・エコーバッファ更新
+        // フィードバック成分加算
         for ch in 0..2 {
             echo_in[ch] += ((fir_out[ch] as i32) * (self.echo_feedback as i32)) >> 7;
         }
+        // エコーバッファ更新
         self.put_echo_buffer(ram, &echo_in);
         // ミュートならば無音
         if self.mute {

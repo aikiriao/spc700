@@ -1,6 +1,7 @@
 use crate::spc_assembler::*;
 use crate::spc_dsp::*;
 use crate::types::*;
+use log::trace;
 
 /// ネガティブフラグ
 const PSW_FLAG_N: u8 = 1 << 7;
@@ -33,8 +34,6 @@ const CPUIO2_ADDRESS: usize = 0x00F6;
 const CPUIO3_ADDRESS: usize = 0x00F7;
 /// タイマーターゲットのベースアドレス
 const T0TARGET_ADDRESS: usize = 0x00FA;
-const T1TARGET_ADDRESS: usize = 0x00FB;
-const T2TARGET_ADDRESS: usize = 0x00FC;
 /// タイマーカウントのベースアドレス
 const T0OUT_ADDRESS: usize = 0x00FD;
 const T1OUT_ADDRESS: usize = 0x00FE;
@@ -42,14 +41,23 @@ const T2OUT_ADDRESS: usize = 0x00FF;
 
 /// エミュレータ
 pub struct SPCEmulator {
+    /// レジスタ
     reg: SPCRegister,
+    /// DSP
     dsp: SPCDSP,
+    /// RAM(ARAM)
     ram: [u8; 65536],
+    /// CPU入力ポート（未使用！）
     cpu_port_in: [u8; 4],
+    /// CPU出力ポート（未使用！）
     cpu_port_out: [u8; 4],
+    /// タイマーティックカウント
     tick_count: u64,
+    /// タイマー有効フラグ
     timer_enable: [bool; 3],
+    /// タイマー内部カウント値
     timer_internal_count: [u8; 3],
+    /// IPL(Initial program loader)有効か
     ipl_rom: bool,
 }
 
@@ -61,6 +69,7 @@ fn get_address_bit(address_bit: u16) -> (u8, usize) {
 }
 
 impl SPCEmulator {
+    /// コンストラクタ
     pub fn new(reg: &SPCRegister, ram: &[u8], dsp_register: &[u8; 128]) -> SPCEmulator {
         let mut emu = Self {
             reg: reg.clone(),
@@ -92,10 +101,10 @@ impl SPCEmulator {
     /// ステップ実行
     pub fn execute_step(&mut self) -> u8 {
         let (opcode, len) = parse_opcode(&self.ram[(self.reg.pc as usize)..]);
-        println!(
+        trace!(
             "{:#06X}: {:02X?} {:X?} {:X?}",
             self.reg.pc,
-            self.ram[(self.reg.pc as usize)..((self.reg.pc + len) as usize)].to_vec(),
+            &self.ram[(self.reg.pc as usize)..((self.reg.pc + len) as usize)],
             opcode,
             self.reg
         );
@@ -204,12 +213,12 @@ impl SPCEmulator {
             }
         }
         self.ram[address] = value;
-        // println!("W: 0x{:04X} <- {:02X}", address, value);
+        trace!("W: 0x{:04X} <- {:02X}", address, value);
     }
 
     /// RAMからの読み込み
     fn read_ram_u8(&mut self, address: usize) -> u8 {
-        println!("R: 0x{:04X} -> {:02X}", address, self.ram[address]);
+        trace!("R: 0x{:04X} -> {:02X}", address, self.ram[address]);
         // CPUレジスタからの読み込み
         if (address >= TEST_ADDRESS) && (address <= T2OUT_ADDRESS) {
             match address {
@@ -244,11 +253,11 @@ impl SPCEmulator {
 
     /// RAMからの読み込み
     fn read_ram_u16(&self, address: usize) -> u16 {
-        // println!(
-        // "R16: 0x{:04X} -> {:04X}",
-        // address,
-        // ((self.ram[address + 1] as u16) << 8) | self.ram[address] as u16
-        // );
+        trace!(
+            "R16: 0x{:04X} -> {:04X}",
+            address,
+            ((self.ram[address + 1] as u16) << 8) | self.ram[address] as u16
+        );
         ((self.ram[address + 1] as u16) << 8) | self.ram[address] as u16
     }
 
