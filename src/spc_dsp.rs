@@ -508,13 +508,13 @@ impl SPCVoiceRegister {
                         }
                         SPCEnvelopeState::Decay => {
                             // rate = 1ddd0のExp. decreaseと同じ
-                            self.envelope_gain -= 1;
-                            self.envelope_gain -= self.envelope_gain >> 8;
+                            let diff = ((self.envelope_gain - 1) >> 8) + 1;
+                            self.envelope_gain -= diff;
                         }
                         SPCEnvelopeState::Sustain => {
                             // rate = rrrrrのExp. decreaseと同じ
-                            self.envelope_gain -= 1;
-                            self.envelope_gain -= self.envelope_gain >> 8;
+                            let diff = ((self.envelope_gain - 1) >> 8) + 1;
+                            self.envelope_gain -= diff;
                         }
                         _ => unreachable!("Release state MUST already processd"),
                     }
@@ -527,8 +527,8 @@ impl SPCVoiceRegister {
                             self.envelope_gain -= 32;
                         }
                         SPCVoiceGainMode::ExponentialDecrease { .. } => {
-                            self.envelope_gain -= 1;
-                            self.envelope_gain -= self.envelope_gain >> 8;
+                            let diff = ((self.envelope_gain - 1) >> 8) + 1;
+                            self.envelope_gain -= diff;
                         }
                         SPCVoiceGainMode::LinearIncrease { .. } => {
                             self.envelope_gain += 32;
