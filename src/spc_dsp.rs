@@ -735,6 +735,18 @@ impl SPCDSP {
                         self.voice[ch].adsr_enable = (value & 0x80) != 0;
                         self.voice[ch].attack_rate = 2 * (value & 0xF) + 1;
                         self.voice[ch].decay_rate = 2 * ((value >> 4) & 0x7) + 16;
+                        // 動作中のADSRのレート更新
+                        if self.voice[ch].adsr_enable {
+                            match self.voice[ch].envelope_state {
+                                SPCEnvelopeState::Attack => {
+                                    self.voice[ch].envelope_rate = self.voice[ch].attack_rate;
+                                }
+                                SPCEnvelopeState::Decay => {
+                                    self.voice[ch].envelope_rate = self.voice[ch].decay_rate;
+                                }
+                                _ => {}
+                            }
+                        }
                     }
                     V0ADSR2_ADDRESS => {
                         self.voice[ch].sustain_rate = value & 0x1F;
@@ -743,6 +755,15 @@ impl SPCDSP {
                         } else {
                             // ADSRが無効のときは V0GAIN_ADDRESS の上位3bit
                             self.voice[ch].sustain_level = (self.voice[ch].gain_value >> 5) & 0x7;
+                        }
+                        // 動作中のADSRのレート更新
+                        if self.voice[ch].adsr_enable {
+                            match self.voice[ch].envelope_state {
+                                SPCEnvelopeState::Sustain => {
+                                    self.voice[ch].envelope_rate = self.voice[ch].sustain_rate;
+                                }
+                                _ => {}
+                            }
                         }
                     }
                     V0GAIN_ADDRESS => {
