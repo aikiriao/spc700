@@ -1815,7 +1815,7 @@ impl SPCEmulator {
         }
 
         // フラグ更新
-        self.set_psw_flag(PSW_FLAG_N, (self.reg.a & PSW_FLAG_N) != 0);
+        self.set_psw_flag(PSW_FLAG_N, (ret & 0x80) != 0);
         self.set_psw_flag(PSW_FLAG_V, overflow);
         self.set_psw_flag(PSW_FLAG_H, half_carry);
         self.set_psw_flag(PSW_FLAG_Z, ret == 0);
