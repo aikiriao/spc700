@@ -379,19 +379,27 @@ impl SPCEmulator {
             },
             SPCOpcode::DIV => {
                 let ya = ((self.reg.y as u16) << 8) | (self.reg.a as u16);
-                let quot = ya / (self.reg.x as u16);
-                let rem = ya % (self.reg.x as u16);
+                let overflow = self.reg.y >= self.reg.x;
+                let halfoverflow = (self.reg.y & 0xF) >= (self.reg.x & 0xF);
+                let quot;
+                let rem;
 
-                if quot <= 0xFF {
-                    self.reg.a = quot as u8;
+                if self.reg.y < (self.reg.x << 1) {
+                    // 商が511以下であれば9bitの結果を書き込む
+                    quot = ya / (self.reg.x as u16);
+                    rem = ya % (self.reg.x as u16);
                 } else {
-                    self.reg.a = (quot & 0xFF) as u8;
+                    // 商が511より大きい場合は特殊（snes9xを参考）
+                    let x16 = self.reg.x as u16;
+                    quot = 255 - (ya - (x16 << 9)) / (256 - x16);
+                    rem = x16 + (ya - (x16 << 9)) % (256 - x16);
                 }
+                self.reg.a = quot as u8;
                 self.reg.y = rem as u8;
 
                 self.set_psw_flag(PSW_FLAG_N, (self.reg.a & 0x80) != 0);
-                self.set_psw_flag(PSW_FLAG_V, (quot & 0x100) != 0);
-                self.set_psw_flag(PSW_FLAG_H, (self.reg.y & 0xF) >= (self.reg.x & 0xF));
+                self.set_psw_flag(PSW_FLAG_V, overflow);
+                self.set_psw_flag(PSW_FLAG_H, halfoverflow);
                 self.set_psw_flag(PSW_FLAG_Z, self.reg.a == 0);
                 12
             }
