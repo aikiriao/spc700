@@ -1660,13 +1660,12 @@ impl SPCEmulator {
             let a16 = a as u16;
             let b16 = b as u16;
             let c = if carry { 1 } else { 0 };
-            let half = (a16 & 0xF) + (b16 & 0xF) + c;
             let ret = a16 + b16 + c;
             (
                 (ret & 0xFF) as u8,
                 (!(a16 ^ b16)) & (a16 ^ ret) & 0x80 != 0,
                 ret >= 0x100,
-                half >= 0x10,
+                (a16 ^ b16 ^ ret) & 0x10 != 0,
             )
         }
         self.execute_adc_sbc(oprand, add)
@@ -1679,12 +1678,11 @@ impl SPCEmulator {
             let b16 = b as u16;
             let nc = if carry { 0 } else { 1 };
             let ret = a16.wrapping_sub(b16).wrapping_sub(nc);
-            let half = (a16 & 0xF).wrapping_sub(b16 & 0xF).wrapping_sub(nc);
             (
                 (ret & 0xFF) as u8,
                 (a16 ^ b16) & (a16 ^ ret) & 0x80 != 0,
-                !(ret >= 0x100),
-                !(half >= 0x100),
+                ret < 0x100,
+                (a16 ^ b16 ^ ret) & 0x10 == 0,
             )
         }
         self.execute_adc_sbc(oprand, sub)
