@@ -42,7 +42,7 @@ fn naive_play(
     dsp_register: &[u8; 128],
 ) -> Result<(), Box<dyn std::error::Error>> {
     const NUM_CHANNELS: usize = 2;
-    const CLOCK_TICK_CYCLE_64KHZ: u64 = 384;
+    const CLOCK_TICK_CYCLE_64KHZ: u64 = 384; /* 64KHz周期のクロックサイクル SPCのマスタークロックを64Kで割って得られる = 24576000 / 64000 */
     const NORMALIZED_CONST: f32 = 1.0 / 32768.0;
 
     // cpalの初期化
