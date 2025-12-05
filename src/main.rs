@@ -80,7 +80,10 @@ fn naive_play(
                     if total_cycle >= next_tick_cycle {
                         next_tick_cycle = next_tick_cycle.wrapping_add(CLOCK_TICK_CYCLE_64KHZ);
                         if let Some(out) = emu.clock_tick_64k_hz() {
-                            let fout = [(out[0] as f32) * NORMALIZED_CONST, (out[1] as f32) * NORMALIZED_CONST];
+                            let fout = [
+                                (out[0] as f32) * NORMALIZED_CONST,
+                                (out[1] as f32) * NORMALIZED_CONST,
+                            ];
                             prod.push_interleaved(&fout);
                             nsamples = prod.available_frames();
                         }
