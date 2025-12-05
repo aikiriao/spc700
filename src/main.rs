@@ -21,16 +21,15 @@ fn naive_disassemble(ram: &[u8]) {
 
 /// 実行してみる
 fn naive_execution(register: &SPCRegister, ram: &[u8], dsp_register: &[u8; 128]) {
-    const CLOCK_TICK_CYCLE_64KHZ: u64 = 384;
+    const CLOCK_TICK_CYCLE_64KHZ: u32 = 16; /* 64KHz周期のクロックサイクル SPCのクロック(1.024MHz)を64KHzで割って得られる = 1024000 / 64000 */
     let mut emu = SPCEmulator::new(&register, ram, dsp_register);
-    let mut total_cycle = 0u64;
-    let mut next_tick_cycle = CLOCK_TICK_CYCLE_64KHZ;
+    let mut cycle_count = 0;
     loop {
         let cycle = emu.execute_step();
-        total_cycle = total_cycle.wrapping_add(cycle as u64);
-        if total_cycle >= next_tick_cycle {
+        cycle_count += cycle as u32;
+        if cycle_count >= CLOCK_TICK_CYCLE_64KHZ {
+            cycle_count -= CLOCK_TICK_CYCLE_64KHZ;
             emu.clock_tick_64k_hz();
-            next_tick_cycle = next_tick_cycle.wrapping_add(CLOCK_TICK_CYCLE_64KHZ);
         }
     }
 }
@@ -42,7 +41,7 @@ fn naive_play(
     dsp_register: &[u8; 128],
 ) -> Result<(), Box<dyn std::error::Error>> {
     const NUM_CHANNELS: usize = 2;
-    const CLOCK_TICK_CYCLE_64KHZ: u64 = 384; /* 64KHz周期のクロックサイクル SPCのマスタークロックを64Kで割って得られる = 24576000 / 64000 */
+    const CLOCK_TICK_CYCLE_64KHZ: u32 = 16; /* 64KHz周期のクロックサイクル SPCのクロック(1.024MHz)を64KHzで割って得られる = 1024000 / 64000 */
     const NORMALIZED_CONST: f32 = 1.0 / 32768.0;
 
     // cpalの初期化
@@ -63,8 +62,7 @@ fn naive_play(
 
     // SPCエミュレータ初期化
     let mut emu = SPCEmulator::new(&register, ram, dsp_register);
-    let mut total_cycle = 0u64;
-    let mut next_tick_cycle = CLOCK_TICK_CYCLE_64KHZ;
+    let mut cycle_count = 0;
 
     // 再生ストリーム作成
     let mut tmp_buffer = vec![0.0; 2048 * NUM_CHANNELS];
@@ -76,9 +74,9 @@ fn naive_play(
                 let mut nsamples = prod.available_frames();
                 while nsamples > 1024 {
                     let cycle = emu.execute_step();
-                    total_cycle = total_cycle.wrapping_add(cycle as u64);
-                    if total_cycle >= next_tick_cycle {
-                        next_tick_cycle = next_tick_cycle.wrapping_add(CLOCK_TICK_CYCLE_64KHZ);
+                    cycle_count += cycle as u32;
+                    if cycle_count >= CLOCK_TICK_CYCLE_64KHZ {
+                        cycle_count -= CLOCK_TICK_CYCLE_64KHZ;
                         if let Some(out) = emu.clock_tick_64k_hz() {
                             let fout = [
                                 (out[0] as f32) * NORMALIZED_CONST,
