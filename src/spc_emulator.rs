@@ -1219,7 +1219,7 @@ impl SPCEmulator {
         self.execute_binary_logical_operation(oprand, and)
     }
 
-    /// AND命令の実行
+    /// EOR命令の実行
     fn execute_eor(&mut self, oprand: &SPCOprand) -> u8 {
         fn eor(a: u8, b: u8) -> u8 {
             a ^ b
