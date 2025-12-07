@@ -1591,7 +1591,7 @@ impl SPCEmulator {
                 let memval1 = self.read_ram_u8(address1);
                 let memval2 = self.read_ram_u8(address2);
                 (ret, nc) = cmpsub!(memval1, memval2);
-                cycle = 6;
+                cycle = 5;
             }
             SPCOprand::DirectPageToDirectPage {
                 direct_page_dst,
