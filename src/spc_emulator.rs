@@ -331,7 +331,8 @@ impl SPCEmulator {
                     let address = self.get_direct_page_address(*direct_page);
                     self.write_ram_u8(address + 0, self.reg.a);
                     self.write_ram_u8(address + 1, self.reg.y);
-                    4
+                    // 様々な資料で4としている。注意。fullsnesやSNESAPUでは5
+                    5
                 }
                 _ => panic!("Invalid oprand!"),
             },
