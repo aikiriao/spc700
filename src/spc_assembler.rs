@@ -1450,7 +1450,7 @@ pub fn parse_opcode(ram: &[u8]) -> (SPCOpcode, u16) {
         0x99 => create_opcode_with_length_check!(
             ram,
             SPCOpcode::ADC {
-                oprand: SPCOprand::IndirectToIndirect
+                oprand: SPCOprand::IndirectPageToIndirectPage
             },
             1
         ),
@@ -1612,7 +1612,7 @@ pub fn parse_opcode(ram: &[u8]) -> (SPCOpcode, u16) {
         0xB9 => create_opcode_with_length_check!(
             ram,
             SPCOpcode::SBC {
-                oprand: SPCOprand::IndirectToIndirect
+                oprand: SPCOprand::IndirectPageToIndirectPage
             },
             1
         ),
