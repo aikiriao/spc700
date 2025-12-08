@@ -14,7 +14,7 @@ fn naive_disassemble(ram: &[u8]) {
 
     while pc < ram.len() {
         let (opcode, len) = parse_opcode(&ram[pc..]);
-        println!("{:#06X}: {:?}", pc, opcode);
+        println!("{:#06X}: {:X?}", pc, opcode);
         pc += len as usize;
     }
 }
