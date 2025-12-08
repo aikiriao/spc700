@@ -380,20 +380,21 @@ impl SPCEmulator {
             },
             SPCOpcode::DIV => {
                 let ya = ((self.reg.y as u16) << 8) | (self.reg.a as u16);
+                let x16 = self.reg.x as u16;
                 let overflow = self.reg.y >= self.reg.x;
                 let halfoverflow = (self.reg.y & 0xF) >= (self.reg.x & 0xF);
                 let quot;
                 let rem;
 
-                if self.reg.y < (self.reg.x << 1) {
+                if (self.reg.y as u16) < (x16 << 1) {
                     // 商が511以下であれば9bitの結果を書き込む
-                    quot = ya / (self.reg.x as u16);
-                    rem = ya % (self.reg.x as u16);
+                    quot = ya / x16;
+                    rem = ya % x16;
                 } else {
                     // 商が511より大きい場合は特殊（snes9xを参考）
-                    let x16 = self.reg.x as u16;
-                    quot = 255 - (ya - (x16 << 9)) / (256 - x16);
-                    rem = x16 + (ya - (x16 << 9)) % (256 - x16);
+                    let sub = ya.wrapping_sub(x16 << 9);
+                    quot = 255 - sub / (256 - x16);
+                    rem = x16 + sub % (256 - x16);
                 }
                 self.reg.a = quot as u8;
                 self.reg.y = rem as u8;
