@@ -1,8 +1,8 @@
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use fixed_resample::ReadStatus;
-use spc::spc_assembler::*;
-use spc::spc_emulator::*;
-use spc::spc_file_parser::*;
+use spc::assembler::*;
+use spc::emulator::*;
+use spc::spc_file::*;
 use spc::types::*;
 use std::env;
 use std::fmt::Error;

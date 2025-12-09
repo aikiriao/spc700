@@ -1,5 +1,5 @@
-use crate::spc_assembler::*;
-use crate::spc_dsp::*;
+use crate::assembler::*;
+use crate::dsp::*;
 use crate::types::*;
 use log::trace;
 
