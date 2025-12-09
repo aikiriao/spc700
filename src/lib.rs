@@ -4,4 +4,4 @@ pub mod types;
 pub mod spc_file;
 pub mod assembler;
 pub mod spc;
-mod dsp;
+mod sdsp;
