@@ -5,3 +5,4 @@ pub mod spc_file;
 pub mod assembler;
 pub mod spc;
 mod sdsp;
+mod eg;

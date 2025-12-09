@@ -1,19 +1,6 @@
+use crate::eg::*;
 use crate::types::*;
 use log::trace;
-
-/// グローバルカウンタイベントが発生するまでのサンプル数
-const COUNTER_RATES: [u16; 32] = [
-    0, /* Inf */
-    2048, 1536, 1280, 1024, 768, 640, 512, 384, 320, 256, 192, 160, 128, 96, 80, 64, 48, 40, 32,
-    24, 20, 16, 12, 10, 8, 6, 5, 4, 3, 2, 1,
-];
-
-/// グローバルカウンタのオフセット
-const COUNTER_OFFSETS: [u16; 32] = [
-    0, /* N/A */
-    0, 1040, 536, 0, 1040, 536, 0, 1040, 536, 0, 1040, 536, 0, 1040, 536, 0, 1040, 536, 0, 1040,
-    536, 0, 1040, 536, 0, 1040, 536, 0, 1040, 0, 0,
-];
 
 /// ガウス補間テーブル
 const GAUSS_INTERPOLATION_TABLE: [i32; 512] = [
@@ -59,34 +46,6 @@ const GAUSS_INTERPOLATION_TABLE: [i32; 512] = [
     0x518, 0x518, 0x518, 0x519, 0x519,
 ];
 
-/// ボイスゲインとそのパラメータ
-#[derive(Copy, Clone, Debug)]
-enum VoiceGainMode {
-    /// 固定ゲイン
-    Fixed { gain: u8 },
-    /// 線形増加
-    LinearDecrease { rate: u8 },
-    /// 指数的減衰
-    ExponentialDecrease { rate: u8 },
-    /// 線形減衰
-    LinearIncrease { rate: u8 },
-    /// ベンド増加
-    BentIncrease { rate: u8 },
-}
-
-/// エンベロープの状態
-#[derive(Copy, Clone, Debug, PartialEq)]
-enum EnvelopeState {
-    /// アタック
-    Attack,
-    /// ディケイ
-    Decay,
-    /// サステイン
-    Sustain,
-    /// リリース
-    Release,
-}
-
 /// デコーダ
 #[derive(Copy, Clone, Debug)]
 struct Decoder {
@@ -119,26 +78,8 @@ struct VoiceRegister {
     brr_dir_address_base: usize,
     /// 再生対象の音源サンプル
     sample_source: u8,
-    /// ADSR有効か否か
-    adsr_enable: bool,
-    /// アタック状態の更新サンプル間隔
-    attack_rate: u8,
-    /// ディケイ状態の更新サンプル間隔
-    decay_rate: u8,
-    /// サステイン状態の更新サンプル間隔
-    sustain_rate: u8,
-    /// サステイン状態に移行するゲイン値
-    sustain_level: u8,
-    /// ゲイン設定
-    gain_mode: VoiceGainMode,
-    /// ゲイン設定値
-    gain_value: u8,
-    /// エンベロープ状態
-    envelope_state: EnvelopeState,
-    /// エンベロープゲイン
-    envelope_gain: i32,
-    /// 現在のエンベロープ更新間隔
-    envelope_rate: u8,
+    /// エンベロープジェネレータ
+    eg: EnvelopeGenerator,
     /// LRゲイン適用前の、最後に出力したサンプル値
     output_sample: i16,
     /// キーオンされているか
@@ -365,21 +306,12 @@ impl VoiceRegister {
             pitch: 0,
             brr_dir_address_base: 0,
             sample_source: 0,
-            adsr_enable: false,
-            attack_rate: 0,
-            decay_rate: 0,
-            sustain_rate: 0,
-            sustain_level: 0,
-            gain_mode: VoiceGainMode::Fixed { gain: 0 },
-            gain_value: 0,
-            envelope_gain: 0,
+            eg: EnvelopeGenerator::new(),
             output_sample: 0,
             keyon: false,
             keyoff: false,
             pitch_mod: false,
             noise: false,
-            envelope_state: EnvelopeState::Release,
-            envelope_rate: 0,
             decoder: Decoder::new(),
         }
     }
@@ -390,24 +322,7 @@ impl VoiceRegister {
         if self.keyon {
             self.keyon = false;
             // エンベロープ設定
-            self.envelope_state = EnvelopeState::Attack;
-            if self.adsr_enable {
-                self.envelope_gain = 0;
-                self.envelope_rate = self.attack_rate;
-            } else {
-                match self.gain_mode {
-                    VoiceGainMode::Fixed { gain } => {
-                        self.envelope_gain = (gain as i32) << 4;
-                        self.envelope_rate = 0;
-                    }
-                    VoiceGainMode::LinearDecrease { rate }
-                    | VoiceGainMode::ExponentialDecrease { rate }
-                    | VoiceGainMode::LinearIncrease { rate }
-                    | VoiceGainMode::BentIncrease { rate } => {
-                        self.envelope_rate = rate;
-                    }
-                }
-            }
+            self.eg.keyon();
             // デコーダのアドレス設定
             self.decoder.end = false;
             let dir_address = self.brr_dir_address_base + 4 * (self.sample_source as usize);
@@ -423,7 +338,7 @@ impl VoiceRegister {
 
         // キーオフが入ったとき
         if self.keyoff {
-            // フラグクリア（レジスタ設定時にReleaseには移行済み）
+            // フラグクリア
             self.keyoff = false;
         }
 
@@ -440,8 +355,7 @@ impl VoiceRegister {
         // ENDフラグがセットかつループフラグが立っていなければ即時ミュート
         if self.decoder.end {
             if !self.decoder.loop_flag {
-                self.envelope_state = EnvelopeState::Release;
-                self.envelope_gain = 0;
+                self.eg.mute();
             }
         }
 
@@ -450,83 +364,11 @@ impl VoiceRegister {
 
         // TODO: NON
 
-        // アクション発生判定
-        if (self.envelope_rate > 0)
-            && ((global_counter + COUNTER_OFFSETS[self.envelope_rate as usize])
-                % COUNTER_RATES[self.envelope_rate as usize]
-                == 0)
-        {
-            // エンベロープゲイン更新
-            if self.envelope_state == EnvelopeState::Release {
-                // Release状態時はADSR有効無効にかかわらずゲインを下げる
-                self.envelope_gain -= 8;
-            } else {
-                if self.adsr_enable {
-                    match self.envelope_state {
-                        EnvelopeState::Attack => {
-                            if self.attack_rate == 31 {
-                                self.envelope_gain += 1024;
-                            } else {
-                                // rate = aaaa1のLinear increaseと同じ
-                                self.envelope_gain += 32;
-                            }
-                        }
-                        EnvelopeState::Decay => {
-                            // rate = 1ddd0のExp. decreaseと同じ
-                            let diff = ((self.envelope_gain - 1) >> 8) + 1;
-                            self.envelope_gain -= diff;
-                        }
-                        EnvelopeState::Sustain => {
-                            // rate = rrrrrのExp. decreaseと同じ
-                            let diff = ((self.envelope_gain - 1) >> 8) + 1;
-                            self.envelope_gain -= diff;
-                        }
-                        _ => unreachable!("Release state MUST already processd"),
-                    }
-                } else {
-                    match self.gain_mode {
-                        VoiceGainMode::Fixed { gain } => {
-                            self.envelope_gain = (gain as i32) << 4;
-                        }
-                        VoiceGainMode::LinearDecrease { .. } => {
-                            self.envelope_gain -= 32;
-                        }
-                        VoiceGainMode::ExponentialDecrease { .. } => {
-                            let diff = ((self.envelope_gain - 1) >> 8) + 1;
-                            self.envelope_gain -= diff;
-                        }
-                        VoiceGainMode::LinearIncrease { .. } => {
-                            self.envelope_gain += 32;
-                        }
-                        VoiceGainMode::BentIncrease { .. } => {
-                            self.envelope_gain += if self.envelope_gain < 0x600 { 32 } else { 8 };
-                        }
-                    }
-                }
-            }
+        // エンベロープ内部状態更新
+        self.eg.update(global_counter);
 
-            // エンベロープ状態更新（これはエンベロープの有効無効に関係なく実行）
-            // ゲインは範囲制限前の値を使用
-            match self.envelope_state {
-                EnvelopeState::Attack => {
-                    if self.envelope_gain >= 0x7E0 {
-                        self.envelope_state = EnvelopeState::Decay;
-                        self.envelope_rate = self.decay_rate;
-                    }
-                }
-                EnvelopeState::Decay => {
-                    if ((self.envelope_gain >> 8) & 0x7) <= (self.sustain_level as i32) {
-                        self.envelope_state = EnvelopeState::Sustain;
-                        self.envelope_rate = self.sustain_rate;
-                    }
-                }
-                EnvelopeState::Sustain | EnvelopeState::Release => {}
-            }
-
-            // ゲインの範囲制限
-            self.envelope_gain = self.envelope_gain.clamp(0, 0x7FF);
-        }
-        out = (((out as i32) * self.envelope_gain) >> 11) as i16;
+        // エンベロープ適用
+        out = (((out as i32) * self.eg.gain) >> 11) as i16;
 
         // 左右ボリューム適用
         let lout = ((out as i32) * (self.volume[0] as i32)) >> 7;
@@ -649,11 +491,9 @@ impl SPCDSP for SDSP {
                 for ch in 0..8 {
                     let keyoff = ((value >> ch) & 0x1) != 0;
                     self.voice[ch].keyoff = keyoff;
-                    // Releaseに移行
                     // サンプル処理する前にKOFFがクリアされることがあるため、即時に反映
                     if keyoff {
-                        self.voice[ch].envelope_state = EnvelopeState::Release;
-                        self.voice[ch].envelope_rate = 31; // 毎サンプル更新
+                        self.voice[ch].eg.keyoff();
                     }
                 }
             }
@@ -738,70 +578,13 @@ impl SPCDSP for SDSP {
                         self.voice[ch].sample_source = value;
                     }
                     V0ADSR1_ADDRESS => {
-                        self.voice[ch].adsr_enable = (value & 0x80) != 0;
-                        self.voice[ch].attack_rate = 2 * (value & 0xF) + 1;
-                        self.voice[ch].decay_rate = 2 * ((value >> 4) & 0x7) + 16;
-                        // 動作中のADSRのレート更新
-                        if self.voice[ch].adsr_enable {
-                            match self.voice[ch].envelope_state {
-                                EnvelopeState::Attack => {
-                                    self.voice[ch].envelope_rate = self.voice[ch].attack_rate;
-                                }
-                                EnvelopeState::Decay => {
-                                    self.voice[ch].envelope_rate = self.voice[ch].decay_rate;
-                                }
-                                _ => {}
-                            }
-                        }
+                        self.voice[ch].eg.set_adsr1(value);
                     }
                     V0ADSR2_ADDRESS => {
-                        self.voice[ch].sustain_rate = value & 0x1F;
-                        if self.voice[ch].adsr_enable {
-                            self.voice[ch].sustain_level = (value >> 5) & 0x7;
-                        } else {
-                            // ADSRが無効のときは V0GAIN_ADDRESS の上位3bit
-                            self.voice[ch].sustain_level = (self.voice[ch].gain_value >> 5) & 0x7;
-                        }
-                        // 動作中のADSRのレート更新
-                        if self.voice[ch].adsr_enable {
-                            match self.voice[ch].envelope_state {
-                                EnvelopeState::Sustain => {
-                                    self.voice[ch].envelope_rate = self.voice[ch].sustain_rate;
-                                }
-                                _ => {}
-                            }
-                        }
+                        self.voice[ch].eg.set_adsr2(value);
                     }
                     V0GAIN_ADDRESS => {
-                        if (value & 0x80) == 0 {
-                            self.voice[ch].gain_mode = VoiceGainMode::Fixed { gain: value & 0x7F };
-                        } else {
-                            self.voice[ch].gain_mode = match (value >> 5) & 0x3 {
-                                0 => VoiceGainMode::LinearDecrease { rate: value & 0x1F },
-                                1 => VoiceGainMode::ExponentialDecrease { rate: value & 0x1F },
-                                2 => VoiceGainMode::LinearIncrease { rate: value & 0x1F },
-                                3 => VoiceGainMode::BentIncrease { rate: value & 0x1F },
-                                _ => unreachable!("Unsupported Gain Type!"),
-                            };
-                        }
-                        // ADSRが無効であれば即時反映
-                        if self.voice[ch].envelope_state != EnvelopeState::Release
-                            && !self.voice[ch].adsr_enable
-                        {
-                            match self.voice[ch].gain_mode {
-                                VoiceGainMode::Fixed { gain } => {
-                                    self.voice[ch].envelope_gain = (gain as i32) << 4;
-                                }
-                                VoiceGainMode::LinearDecrease { rate }
-                                | VoiceGainMode::ExponentialDecrease { rate }
-                                | VoiceGainMode::LinearIncrease { rate }
-                                | VoiceGainMode::BentIncrease { rate } => {
-                                    self.voice[ch].envelope_rate = rate;
-                                }
-                            }
-                        }
-                        // sustain_levelの設定で参照するため設定値を保持
-                        self.voice[ch].gain_value = value;
+                        self.voice[ch].eg.set_gain(value);
                     }
                     V0ENVX_ADDRESS => {
                         // 書き込みは無視される（読み取り用レジスタ）
@@ -916,19 +699,10 @@ impl SPCDSP for SDSP {
                     V0PITCHL_ADDRESS => (self.voice[ch].pitch & 0xFF) as u8,
                     V0PITCHH_ADDRESS => ((self.voice[ch].pitch >> 8) & 0xFF) as u8,
                     V0SRCN_ADDRESS => self.voice[ch].sample_source,
-                    V0ADSR1_ADDRESS => {
-                        let adsr_flag = if self.voice[ch].adsr_enable {
-                            0x80
-                        } else {
-                            0x00
-                        };
-                        adsr_flag | (self.voice[ch].decay_rate << 4) | self.voice[ch].attack_rate
-                    }
-                    V0ADSR2_ADDRESS => {
-                        (self.voice[ch].sustain_level << 5) | self.voice[ch].sustain_rate
-                    }
-                    V0GAIN_ADDRESS => self.voice[ch].gain_value,
-                    V0ENVX_ADDRESS => ((self.voice[ch].envelope_gain >> 4) & 0xFF) as u8,
+                    V0ADSR1_ADDRESS => self.voice[ch].eg.get_adsr1(),
+                    V0ADSR2_ADDRESS => self.voice[ch].eg.get_adsr2(),
+                    V0GAIN_ADDRESS => self.voice[ch].eg.get_gain(),
+                    V0ENVX_ADDRESS => ((self.voice[ch].eg.gain >> 4) & 0xFF) as u8,
                     V0OUTX_ADDRESS => ((self.voice[ch].output_sample >> 8) & 0xFF) as u8,
                     _ => {
                         panic!("Unsupported DSP address!");
