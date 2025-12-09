@@ -6,3 +6,4 @@ pub mod assembler;
 pub mod spc;
 mod sdsp;
 mod eg;
+mod decoder;
