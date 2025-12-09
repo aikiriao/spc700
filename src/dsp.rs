@@ -96,7 +96,7 @@ const GAUSS_INTERPOLATION_TABLE: [i32; 512] = [
 
 /// ボイスゲインとそのパラメータ
 #[derive(Copy, Clone, Debug)]
-enum SPCVoiceGainMode {
+enum VoiceGainMode {
     /// 固定ゲイン
     Fixed { gain: u8 },
     /// 線形増加
@@ -111,7 +111,7 @@ enum SPCVoiceGainMode {
 
 /// エンベロープの状態
 #[derive(Copy, Clone, Debug, PartialEq)]
-enum SPCEnvelopeState {
+enum EnvelopeState {
     /// アタック
     Attack,
     /// ディケイ
@@ -124,7 +124,7 @@ enum SPCEnvelopeState {
 
 /// デコーダ
 #[derive(Copy, Clone, Debug)]
-struct SPCDecoder {
+struct Decoder {
     /// デコードバッファ（1ブロックの16サンプル+補間のための4サンプル）
     decode_buffer: [i16; 20],
     /// 直前のデコード値
@@ -145,7 +145,7 @@ struct SPCDecoder {
 
 /// ボイス
 #[derive(Copy, Clone, Debug)]
-struct SPCVoiceRegister {
+struct VoiceRegister {
     /// LRチャンネルのボリューム
     volume: [i8; 2],
     /// 再生ピッチ（サンプル参照位置の増加幅）
@@ -165,11 +165,11 @@ struct SPCVoiceRegister {
     /// サステイン状態に移行するゲイン値
     sustain_level: u8,
     /// ゲイン設定
-    gain_mode: SPCVoiceGainMode,
+    gain_mode: VoiceGainMode,
     /// ゲイン設定値
     gain_value: u8,
     /// エンベロープ状態
-    envelope_state: SPCEnvelopeState,
+    envelope_state: EnvelopeState,
     /// エンベロープゲイン
     envelope_gain: i32,
     /// 現在のエンベロープ更新間隔
@@ -185,12 +185,12 @@ struct SPCVoiceRegister {
     /// ノイズ有効か
     noise: bool,
     /// デコーダ
-    decoder: SPCDecoder,
+    decoder: Decoder,
 }
 
 /// S-DSP
 #[derive(Copy, Clone, Debug)]
-pub struct SPCDSP {
+pub struct SDSP {
     /// マスターボリューム
     volume: [i8; 2],
     /// エコーボリューム
@@ -224,10 +224,10 @@ pub struct SPCDSP {
     /// ゲイン更新用のカウンタ
     global_counter: u16,
     /// 各チャンネルのボイス
-    voice: [SPCVoiceRegister; 8],
+    voice: [VoiceRegister; 8],
 }
 
-impl SPCDecoder {
+impl Decoder {
     fn new() -> Self {
         Self {
             decode_buffer: [0; 20],
@@ -393,7 +393,7 @@ impl SPCDecoder {
     }
 }
 
-impl SPCVoiceRegister {
+impl VoiceRegister {
     fn new() -> Self {
         Self {
             volume: [0; 2],
@@ -405,7 +405,7 @@ impl SPCVoiceRegister {
             decay_rate: 0,
             sustain_rate: 0,
             sustain_level: 0,
-            gain_mode: SPCVoiceGainMode::Fixed { gain: 0 },
+            gain_mode: VoiceGainMode::Fixed { gain: 0 },
             gain_value: 0,
             envelope_gain: 0,
             output_sample: 0,
@@ -413,32 +413,32 @@ impl SPCVoiceRegister {
             keyoff: false,
             pitch_mod: false,
             noise: false,
-            envelope_state: SPCEnvelopeState::Release,
+            envelope_state: EnvelopeState::Release,
             envelope_rate: 0,
-            decoder: SPCDecoder::new(),
+            decoder: Decoder::new(),
         }
     }
 
     /// 1ステレオサンプル計算
-    fn compute_sample(&mut self, ram: &[u8], global_counter: u16, prev_voice_out: i16) -> [i16; 2] {
+    fn tick(&mut self, ram: &[u8], global_counter: u16, prev_voice_out: i16) -> [i16; 2] {
         // キーオンが入ったとき
         if self.keyon {
             self.keyon = false;
             // エンベロープ設定
-            self.envelope_state = SPCEnvelopeState::Attack;
+            self.envelope_state = EnvelopeState::Attack;
             if self.adsr_enable {
                 self.envelope_gain = 0;
                 self.envelope_rate = self.attack_rate;
             } else {
                 match self.gain_mode {
-                    SPCVoiceGainMode::Fixed { gain } => {
+                    VoiceGainMode::Fixed { gain } => {
                         self.envelope_gain = (gain as i32) << 4;
                         self.envelope_rate = 0;
                     }
-                    SPCVoiceGainMode::LinearDecrease { rate }
-                    | SPCVoiceGainMode::ExponentialDecrease { rate }
-                    | SPCVoiceGainMode::LinearIncrease { rate }
-                    | SPCVoiceGainMode::BentIncrease { rate } => {
+                    VoiceGainMode::LinearDecrease { rate }
+                    | VoiceGainMode::ExponentialDecrease { rate }
+                    | VoiceGainMode::LinearIncrease { rate }
+                    | VoiceGainMode::BentIncrease { rate } => {
                         self.envelope_rate = rate;
                     }
                 }
@@ -475,7 +475,7 @@ impl SPCVoiceRegister {
         // ENDフラグがセットかつループフラグが立っていなければ即時ミュート
         if self.decoder.end {
             if !self.decoder.loop_flag {
-                self.envelope_state = SPCEnvelopeState::Release;
+                self.envelope_state = EnvelopeState::Release;
                 self.envelope_gain = 0;
             }
         }
@@ -492,13 +492,13 @@ impl SPCVoiceRegister {
                 == 0)
         {
             // エンベロープゲイン更新
-            if self.envelope_state == SPCEnvelopeState::Release {
+            if self.envelope_state == EnvelopeState::Release {
                 // Release状態時はADSR有効無効にかかわらずゲインを下げる
                 self.envelope_gain -= 8;
             } else {
                 if self.adsr_enable {
                     match self.envelope_state {
-                        SPCEnvelopeState::Attack => {
+                        EnvelopeState::Attack => {
                             if self.attack_rate == 31 {
                                 self.envelope_gain += 1024;
                             } else {
@@ -506,12 +506,12 @@ impl SPCVoiceRegister {
                                 self.envelope_gain += 32;
                             }
                         }
-                        SPCEnvelopeState::Decay => {
+                        EnvelopeState::Decay => {
                             // rate = 1ddd0のExp. decreaseと同じ
                             let diff = ((self.envelope_gain - 1) >> 8) + 1;
                             self.envelope_gain -= diff;
                         }
-                        SPCEnvelopeState::Sustain => {
+                        EnvelopeState::Sustain => {
                             // rate = rrrrrのExp. decreaseと同じ
                             let diff = ((self.envelope_gain - 1) >> 8) + 1;
                             self.envelope_gain -= diff;
@@ -520,20 +520,20 @@ impl SPCVoiceRegister {
                     }
                 } else {
                     match self.gain_mode {
-                        SPCVoiceGainMode::Fixed { gain } => {
+                        VoiceGainMode::Fixed { gain } => {
                             self.envelope_gain = (gain as i32) << 4;
                         }
-                        SPCVoiceGainMode::LinearDecrease { .. } => {
+                        VoiceGainMode::LinearDecrease { .. } => {
                             self.envelope_gain -= 32;
                         }
-                        SPCVoiceGainMode::ExponentialDecrease { .. } => {
+                        VoiceGainMode::ExponentialDecrease { .. } => {
                             let diff = ((self.envelope_gain - 1) >> 8) + 1;
                             self.envelope_gain -= diff;
                         }
-                        SPCVoiceGainMode::LinearIncrease { .. } => {
+                        VoiceGainMode::LinearIncrease { .. } => {
                             self.envelope_gain += 32;
                         }
-                        SPCVoiceGainMode::BentIncrease { .. } => {
+                        VoiceGainMode::BentIncrease { .. } => {
                             self.envelope_gain += if self.envelope_gain < 0x600 { 32 } else { 8 };
                         }
                     }
@@ -543,19 +543,19 @@ impl SPCVoiceRegister {
             // エンベロープ状態更新（これはエンベロープの有効無効に関係なく実行）
             // ゲインは範囲制限前の値を使用
             match self.envelope_state {
-                SPCEnvelopeState::Attack => {
+                EnvelopeState::Attack => {
                     if self.envelope_gain >= 0x7E0 {
-                        self.envelope_state = SPCEnvelopeState::Decay;
+                        self.envelope_state = EnvelopeState::Decay;
                         self.envelope_rate = self.decay_rate;
                     }
                 }
-                SPCEnvelopeState::Decay => {
+                EnvelopeState::Decay => {
                     if ((self.envelope_gain >> 8) & 0x7) <= (self.sustain_level as i32) {
-                        self.envelope_state = SPCEnvelopeState::Sustain;
+                        self.envelope_state = EnvelopeState::Sustain;
                         self.envelope_rate = self.sustain_rate;
                     }
                 }
-                SPCEnvelopeState::Sustain | SPCEnvelopeState::Release => {}
+                EnvelopeState::Sustain | EnvelopeState::Release => {}
             }
 
             // ゲインの範囲制限
@@ -571,8 +571,8 @@ impl SPCVoiceRegister {
     }
 }
 
-impl SPCDSP {
-    pub fn new() -> SPCDSP {
+impl SDSP {
+    pub fn new() -> SDSP {
         Self {
             volume: [0; 2],
             echo_volume: [0; 2],
@@ -589,19 +589,19 @@ impl SPCDSP {
             fir_coef: [0; 8],
             fir_buffer: [[0; 8]; 2],
             fir_buffer_pos: 0,
-            voice: [SPCVoiceRegister::new(); 8],
+            voice: [VoiceRegister::new(); 8],
             global_counter: 0,
         }
     }
 
     /// 128バイトメモリから初期化
-    pub fn initialize_dsp_register(&mut self, ram: &mut [u8], dsp_register: &[u8; 128]) {
+    pub fn initialize(&mut self, ram: &mut [u8], dsp_register: &[u8; 128]) {
         // DIRは先に設定（初期状態でKONがある場合にアドレスを正しくするため）
-        self.write_dsp_register(ram, DIR_ADDRESS, dsp_register[DIR_ADDRESS as usize]);
+        self.write_register(ram, DIR_ADDRESS, dsp_register[DIR_ADDRESS as usize]);
 
         // すべてのレジスタを設定
         for i in 0..128 {
-            self.write_dsp_register(ram, i, dsp_register[i as usize]);
+            self.write_register(ram, i, dsp_register[i as usize]);
         }
 
         // ENDXは最後に直接設定（通常の設定処理ではすべてクリアされるため）
@@ -619,7 +619,7 @@ impl SPCDSP {
     }
 
     /// DSPレジスタの書き込み処理
-    pub fn write_dsp_register(&mut self, ram: &[u8], address: u8, value: u8) {
+    pub fn write_register(&mut self, ram: &[u8], address: u8, value: u8) {
         trace!("DSPW: {:02X} <- {:02X}", address, value);
         match address & 0x7F {
             MVOLL_ADDRESS => {
@@ -646,7 +646,7 @@ impl SPCDSP {
                     // Releaseに移行
                     // サンプル処理する前にKOFFがクリアされることがあるため、即時に反映
                     if keyoff {
-                        self.voice[ch].envelope_state = SPCEnvelopeState::Release;
+                        self.voice[ch].envelope_state = EnvelopeState::Release;
                         self.voice[ch].envelope_rate = 31; // 毎サンプル更新
                     }
                 }
@@ -738,10 +738,10 @@ impl SPCDSP {
                         // 動作中のADSRのレート更新
                         if self.voice[ch].adsr_enable {
                             match self.voice[ch].envelope_state {
-                                SPCEnvelopeState::Attack => {
+                                EnvelopeState::Attack => {
                                     self.voice[ch].envelope_rate = self.voice[ch].attack_rate;
                                 }
-                                SPCEnvelopeState::Decay => {
+                                EnvelopeState::Decay => {
                                     self.voice[ch].envelope_rate = self.voice[ch].decay_rate;
                                 }
                                 _ => {}
@@ -759,7 +759,7 @@ impl SPCDSP {
                         // 動作中のADSRのレート更新
                         if self.voice[ch].adsr_enable {
                             match self.voice[ch].envelope_state {
-                                SPCEnvelopeState::Sustain => {
+                                EnvelopeState::Sustain => {
                                     self.voice[ch].envelope_rate = self.voice[ch].sustain_rate;
                                 }
                                 _ => {}
@@ -768,29 +768,28 @@ impl SPCDSP {
                     }
                     V0GAIN_ADDRESS => {
                         if (value & 0x80) == 0 {
-                            self.voice[ch].gain_mode =
-                                SPCVoiceGainMode::Fixed { gain: value & 0x7F };
+                            self.voice[ch].gain_mode = VoiceGainMode::Fixed { gain: value & 0x7F };
                         } else {
                             self.voice[ch].gain_mode = match (value >> 5) & 0x3 {
-                                0 => SPCVoiceGainMode::LinearDecrease { rate: value & 0x1F },
-                                1 => SPCVoiceGainMode::ExponentialDecrease { rate: value & 0x1F },
-                                2 => SPCVoiceGainMode::LinearIncrease { rate: value & 0x1F },
-                                3 => SPCVoiceGainMode::BentIncrease { rate: value & 0x1F },
+                                0 => VoiceGainMode::LinearDecrease { rate: value & 0x1F },
+                                1 => VoiceGainMode::ExponentialDecrease { rate: value & 0x1F },
+                                2 => VoiceGainMode::LinearIncrease { rate: value & 0x1F },
+                                3 => VoiceGainMode::BentIncrease { rate: value & 0x1F },
                                 _ => unreachable!("Unsupported Gain Type!"),
                             };
                         }
                         // ADSRが無効であれば即時反映
-                        if self.voice[ch].envelope_state != SPCEnvelopeState::Release
+                        if self.voice[ch].envelope_state != EnvelopeState::Release
                             && !self.voice[ch].adsr_enable
                         {
                             match self.voice[ch].gain_mode {
-                                SPCVoiceGainMode::Fixed { gain } => {
+                                VoiceGainMode::Fixed { gain } => {
                                     self.voice[ch].envelope_gain = (gain as i32) << 4;
                                 }
-                                SPCVoiceGainMode::LinearDecrease { rate }
-                                | SPCVoiceGainMode::ExponentialDecrease { rate }
-                                | SPCVoiceGainMode::LinearIncrease { rate }
-                                | SPCVoiceGainMode::BentIncrease { rate } => {
+                                VoiceGainMode::LinearDecrease { rate }
+                                | VoiceGainMode::ExponentialDecrease { rate }
+                                | VoiceGainMode::LinearIncrease { rate }
+                                | VoiceGainMode::BentIncrease { rate } => {
                                     self.voice[ch].envelope_rate = rate;
                                 }
                             }
@@ -818,7 +817,7 @@ impl SPCDSP {
     }
 
     /// DSPレジスタの読み込み処理
-    pub fn read_dsp_register(&self, _ram: &[u8], address: u8) -> u8 {
+    pub fn read_register(&self, _ram: &[u8], address: u8) -> u8 {
         trace!("DSPR: {:02X}", address);
         // 80-FFの読み込みは00-7Fと同等に扱われる
         match address & 0x7F {
@@ -976,13 +975,13 @@ impl SPCDSP {
     }
 
     /// ステレオサンプル計算処理
-    pub fn compute_sample(&mut self, ram: &mut [u8]) -> [i16; 2] {
+    pub fn tick(&mut self, ram: &mut [u8]) -> [i16; 2] {
         let mut out = [0i32; 2];
         let mut echo_in = [0i32; 2];
         let mut prev_voice_out = 0;
         // 全チャンネルの出力をミックス
         for ch in 0..8 {
-            let vout = self.voice[ch].compute_sample(ram, self.global_counter, prev_voice_out);
+            let vout = self.voice[ch].tick(ram, self.global_counter, prev_voice_out);
             out[0] += vout[0] as i32;
             out[1] += vout[1] as i32;
             if self.echo[ch] {

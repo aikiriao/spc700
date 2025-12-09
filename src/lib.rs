@@ -3,5 +3,5 @@
 pub mod types;
 pub mod spc_file;
 pub mod assembler;
-pub mod emulator;
+pub mod spc;
 mod dsp;

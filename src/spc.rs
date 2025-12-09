@@ -44,7 +44,7 @@ pub struct SPCEmulator {
     /// レジスタ
     reg: SPCRegister,
     /// DSP
-    dsp: SPCDSP,
+    dsp: SDSP,
     /// RAM(ARAM)
     ram: [u8; 65536],
     /// CPU入力ポート（未使用！）
@@ -73,7 +73,7 @@ impl SPCEmulator {
     pub fn new(reg: &SPCRegister, ram: &[u8], dsp_register: &[u8; 128]) -> SPCEmulator {
         let mut emu = Self {
             reg: reg.clone(),
-            dsp: SPCDSP::new(),
+            dsp: SDSP::new(),
             ram: [0; 65536],
             cpu_port_in: [0; 4],
             cpu_port_out: [0; 4],
@@ -93,7 +93,7 @@ impl SPCEmulator {
         }
 
         // DSPレジスタのセットアップ
-        emu.dsp.initialize_dsp_register(&mut emu.ram, dsp_register);
+        emu.dsp.initialize(&mut emu.ram, dsp_register);
 
         emu
     }
@@ -142,7 +142,7 @@ impl SPCEmulator {
         }
         // 32kHz周期で出力サンプル計算
         if self.tick_count % 2 == 0 {
-            return Some(self.dsp.compute_sample(&mut self.ram));
+            return Some(self.dsp.tick(&mut self.ram));
         }
 
         None
@@ -201,7 +201,7 @@ impl SPCEmulator {
                 }
                 DSPDATA_ADDRESS => {
                     self.dsp
-                        .write_dsp_register(&self.ram, self.ram[DSPADDR_ADDRESS], value);
+                        .write_register(&self.ram, self.ram[DSPADDR_ADDRESS], value);
                 }
                 CPUIO0_ADDRESS | CPUIO1_ADDRESS | CPUIO2_ADDRESS | CPUIO3_ADDRESS => {
                     self.cpu_port_out[address - CPUIO0_ADDRESS] = value;
@@ -232,9 +232,7 @@ impl SPCEmulator {
                     // 何もしないがアドレスをラッチすべき？
                 }
                 DSPDATA_ADDRESS => {
-                    return self
-                        .dsp
-                        .read_dsp_register(&self.ram, self.ram[DSPADDR_ADDRESS]);
+                    return self.dsp.read_register(&self.ram, self.ram[DSPADDR_ADDRESS]);
                 }
                 CPUIO0_ADDRESS | CPUIO1_ADDRESS | CPUIO2_ADDRESS | CPUIO3_ADDRESS => {
                     return self.cpu_port_in[address - CPUIO0_ADDRESS];
