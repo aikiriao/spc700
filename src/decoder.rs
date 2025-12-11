@@ -65,6 +65,103 @@ pub struct Decoder {
     pub end: bool,
 }
 
+/// 1サンプルをテーブルを使用して補間
+fn interpolate_sample(decode_buffer: &[i16], interp_index: usize) -> i16 {
+    // 前のサンプルを使用し補間
+    let mut output: i32 = 0;
+    output += (GAUSS_INTERPOLATION_TABLE[0x0FF - interp_index] * decode_buffer[0] as i32) >> 10;
+    output += (GAUSS_INTERPOLATION_TABLE[0x1FF - interp_index] * decode_buffer[1] as i32) >> 10;
+    output += (GAUSS_INTERPOLATION_TABLE[0x100 + interp_index] * decode_buffer[2] as i32) >> 10;
+    output += (GAUSS_INTERPOLATION_TABLE[0x000 + interp_index] * decode_buffer[3] as i32) >> 10;
+    output >>= 1;
+
+    output as i16
+}
+
+/// 1サンプルデコード
+fn decode_brr_sample(history: &mut [i16], filter: u8, granularity: u8, nibble: u8) -> i16 {
+    assert!(nibble <= 0xF);
+
+    // 符号付き4bit値の読み取り
+    let mut sample = if nibble >= 8 {
+        (nibble as i32) | !0xFi32
+    } else {
+        nibble as i32
+    };
+
+    let scale = if granularity <= 12 {
+        granularity
+    } else {
+        sample >>= 3;
+        12
+    };
+
+    // デコード処理
+    let mut output = (sample << (scale as i32)) >> 1;
+    let p1 = history[1] as i32;
+    let p2 = history[0] as i32;
+    match filter {
+        0 => {}
+        1 => {
+            // output + (15 / 16) * p1
+            output += p1;
+            output += (-p1) >> 4;
+        }
+        2 => {
+            // output + (61 / 32) * p1 - (15 / 16) * p2
+            output += p1 << 1;
+            output += (-3 * p1) >> 5;
+            output -= p2;
+            output += p2 >> 4;
+        }
+        3 => {
+            // output + (115 / 64) * p1 - (13 / 16) * p2
+            output += p1 << 1;
+            output += (-13 * p1) >> 6;
+            output -= p2;
+            output += (3 * p2) >> 4;
+        }
+        _ => panic!("Invalid BRR filter!"),
+    }
+
+    // 16bit幅に制限（重要）
+    let mut output = output.clamp(-0x8000, 0x7FFF) as i16;
+    // 出力を15bit幅にクリップ（重要。オーバーフローによる音の歪を期待している音源がある）
+    output = (output << 1) >> 1;
+
+    // デコード履歴更新
+    history[0] = history[1];
+    history[1] = output;
+
+    output as i16
+}
+
+/// BRRブロックヘッダ（RFレジスタ）のデコード
+fn decode_brr_block_header(rfreg: u8) -> (u8, u8, bool, bool) {
+    let granularity = rfreg >> 4;
+    let filter = (rfreg >> 2) & 0x3;
+    let loop_flag = (rfreg & 0x2) != 0;
+    let end_flag = (rfreg & 0x1) != 0;
+    (granularity, filter, loop_flag, end_flag)
+}
+
+/// 1ブロックデコード
+fn decode_brr_block_signal(
+    history: &mut [i16],
+    granularity: u8,
+    filter: u8,
+    ram: &[u8],
+    out: &mut [i16],
+) {
+    assert!(ram.len() >= 8);
+    // 16サンプル復号
+    for i in 0..8 {
+        let byte = ram[i];
+        out[2 * i + 0] = decode_brr_sample(history, filter, granularity, (byte >> 4) & 0xF);
+        out[2 * i + 1] = decode_brr_sample(history, filter, granularity, (byte >> 0) & 0xF);
+    }
+}
+
 impl Decoder {
     pub fn new() -> Self {
         Self {
@@ -77,129 +174,6 @@ impl Decoder {
             loop_flag: false,
             end: false,
         }
-    }
-
-    /// 1サンプルをテーブルを使用して補間
-    fn interpolate_sample(decode_buffer: &[i16], interp_index: usize) -> i16 {
-        // 前のサンプルを使用し補間
-        let mut output: i32 = 0;
-        output += (GAUSS_INTERPOLATION_TABLE[0x0FF - interp_index] * decode_buffer[0] as i32) >> 10;
-        output += (GAUSS_INTERPOLATION_TABLE[0x1FF - interp_index] * decode_buffer[1] as i32) >> 10;
-        output += (GAUSS_INTERPOLATION_TABLE[0x100 + interp_index] * decode_buffer[2] as i32) >> 10;
-        output += (GAUSS_INTERPOLATION_TABLE[0x000 + interp_index] * decode_buffer[3] as i32) >> 10;
-        output >>= 1;
-
-        output as i16
-    }
-
-    /// 1サンプルデコード
-    fn decode_brr_sample(history: &mut [i16], filter: u8, granularity: u8, nibble: u8) -> i16 {
-        assert!(nibble <= 0xF);
-
-        // 符号付き4bit値の読み取り
-        let mut sample = if nibble >= 8 {
-            (nibble as i32) | !0xFi32
-        } else {
-            nibble as i32
-        };
-
-        let scale = if granularity <= 12 {
-            granularity
-        } else {
-            sample >>= 3;
-            12
-        };
-
-        // デコード処理
-        let mut output = (sample << (scale as i32)) >> 1;
-        let p1 = history[1] as i32;
-        let p2 = history[0] as i32;
-        match filter {
-            0 => {}
-            1 => {
-                // output + (15 / 16) * p1
-                output += p1;
-                output += (-p1) >> 4;
-            }
-            2 => {
-                // output + (61 / 32) * p1 - (15 / 16) * p2
-                output += p1 << 1;
-                output += (-3 * p1) >> 5;
-                output -= p2;
-                output += p2 >> 4;
-            }
-            3 => {
-                // output + (115 / 64) * p1 - (13 / 16) * p2
-                output += p1 << 1;
-                output += (-13 * p1) >> 6;
-                output -= p2;
-                output += (3 * p2) >> 4;
-            }
-            _ => panic!("Invalid BRR filter!"),
-        }
-
-        // 16bit幅に制限（重要）
-        let mut output = output.clamp(-0x8000, 0x7FFF) as i16;
-        // 出力を15bit幅にクリップ（重要。オーバーフローによる音の歪を期待している音源がある）
-        output = (output << 1) >> 1;
-
-        // デコード履歴更新
-        history[0] = history[1];
-        history[1] = output;
-
-        output as i16
-    }
-
-    /// BRRブロックヘッダ（RFレジスタ）のデコード
-    fn decode_brr_block_header(rfreg: u8) -> (u8, u8, bool, bool) {
-        let granularity = rfreg >> 4;
-        let filter = (rfreg >> 2) & 0x3;
-        let loop_flag = (rfreg & 0x2) != 0;
-        let end_flag = (rfreg & 0x1) != 0;
-        (granularity, filter, loop_flag, end_flag)
-    }
-
-    /// 1ブロックデコード
-    fn decode_brr_block_signal(
-        history: &mut [i16],
-        granularity: u8,
-        filter: u8,
-        ram: &[u8],
-        out: &mut [i16],
-    ) {
-        assert!(ram.len() >= 8);
-        // 16サンプル復号
-        for i in 0..8 {
-            let byte = ram[i];
-            out[2 * i + 0] =
-                Self::decode_brr_sample(history, filter, granularity, (byte >> 4) & 0xF);
-            out[2 * i + 1] =
-                Self::decode_brr_sample(history, filter, granularity, (byte >> 0) & 0xF);
-        }
-    }
-
-    /// 1ブロックデコード
-    fn decode_brr_block(&mut self, ram: &[u8]) {
-        let granularity;
-        let filter;
-        assert!(ram.len() >= 9);
-
-        // ブロックヘッダデコード
-        (granularity, filter, self.loop_flag, self.end) = Self::decode_brr_block_header(ram[0]);
-
-        // 末尾4サンプルを先頭に移動（補間のため）
-        for i in 0..4 {
-            self.decode_buffer[i] = self.decode_buffer[16 + i];
-        }
-
-        // 1ブロックデコード
-        Self::decode_brr_block_signal(
-            &mut self.decode_history,
-            granularity,
-            filter,
-            &ram[1..],
-            &mut self.decode_buffer[4..],
-        );
     }
 
     /// デコードアドレスの更新
@@ -217,6 +191,30 @@ impl Decoder {
         self.sample_index_fixed = 0;
         self.decode_buffer.fill(0);
         self.decode_history.fill(0);
+    }
+
+    /// 1ブロックデコード
+    fn decode_brr_block(&mut self, ram: &[u8]) {
+        let granularity;
+        let filter;
+        assert!(ram.len() >= 9);
+
+        // ブロックヘッダデコード
+        (granularity, filter, self.loop_flag, self.end) = decode_brr_block_header(ram[0]);
+
+        // 末尾4サンプルを先頭に移動（補間のため）
+        for i in 0..4 {
+            self.decode_buffer[i] = self.decode_buffer[16 + i];
+        }
+
+        // 1ブロックデコード
+        decode_brr_block_signal(
+            &mut self.decode_history,
+            granularity,
+            filter,
+            &ram[1..],
+            &mut self.decode_buffer[4..],
+        );
     }
 
     /// 1サンプル出力
@@ -241,7 +239,7 @@ impl Decoder {
 
         // 補間して出力
         let index = (self.sample_index_fixed >> 12) as usize;
-        Self::interpolate_sample(
+        interpolate_sample(
             &self.decode_buffer[index..(index + 4)],
             ((self.sample_index_fixed >> 4) & 0xFF) as usize,
         )
