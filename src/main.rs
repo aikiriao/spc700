@@ -22,14 +22,16 @@ fn naive_disassemble(ram: &[u8]) {
 /// 実行してみる
 fn naive_execution(register: &SPCRegister, ram: &[u8], dsp_register: &[u8; 128]) {
     const CLOCK_TICK_CYCLE_64KHZ: u32 = 16; /* 64KHz周期のクロックサイクル SPCのクロック(1.024MHz)を64KHzで割って得られる = 1024000 / 64000 */
-    let mut emu = SPCEmulator::new(&register, ram, dsp_register);
+    let mut emu: spc::spc::SPC<spc::mididsp::MIDIDSP> = SPC::new(&register, ram, dsp_register);
     let mut cycle_count = 0;
     loop {
         let cycle = emu.execute_step();
         cycle_count += cycle as u32;
         if cycle_count >= CLOCK_TICK_CYCLE_64KHZ {
             cycle_count -= CLOCK_TICK_CYCLE_64KHZ;
-            emu.clock_tick_64k_hz();
+            if let Some(out) = emu.clock_tick_64k_hz() {
+                println!("{:X?}", out);
+            }
         }
     }
 }
@@ -61,7 +63,7 @@ fn naive_play(
     );
 
     // SPCエミュレータ初期化
-    let mut emu = SPCEmulator::new(&register, ram, dsp_register);
+    let mut emu: spc::spc::SPC<spc::sdsp::SDSP> = SPC::new(&register, ram, dsp_register);
     let mut cycle_count = 0;
 
     // 再生ストリーム作成

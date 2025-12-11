@@ -4,6 +4,7 @@ pub mod types;
 pub mod spc_file;
 pub mod assembler;
 pub mod spc;
-mod sdsp;
+pub mod sdsp;
+pub mod mididsp;
 mod eg;
 mod decoder;

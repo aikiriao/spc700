@@ -1,5 +1,4 @@
 use crate::assembler::*;
-use crate::sdsp::*;
 use crate::types::*;
 use log::trace;
 
@@ -39,12 +38,15 @@ const T0OUT_ADDRESS: usize = 0x00FD;
 const T1OUT_ADDRESS: usize = 0x00FE;
 const T2OUT_ADDRESS: usize = 0x00FF;
 
-/// エミュレータ
-pub struct SPCEmulator {
+/// SPCエミュレータ
+pub struct SPC<T>
+where 
+    T: SPCDSP,
+{
     /// レジスタ
     reg: SPCRegister,
     /// DSP
-    dsp: SDSP,
+    dsp: T,
     /// RAM(ARAM)
     ram: [u8; 65536],
     /// CPU入力ポート（未使用！）
@@ -68,12 +70,15 @@ fn get_address_bit(address_bit: u16) -> (u8, usize) {
     (bit_pos, address)
 }
 
-impl SPCEmulator {
+impl<T> SPC<T>
+where 
+    T: SPCDSP,
+{
     /// コンストラクタ
-    pub fn new(reg: &SPCRegister, ram: &[u8], dsp_register: &[u8; 128]) -> SPCEmulator {
+    pub fn new(reg: &SPCRegister, ram: &[u8], dsp_register: &[u8; 128]) -> SPC<T> {
         let mut emu = Self {
             reg: reg.clone(),
-            dsp: SDSP::new(),
+            dsp: T::new(),
             ram: [0; 65536],
             cpu_port_in: [0; 4],
             cpu_port_out: [0; 4],
@@ -125,7 +130,7 @@ impl SPCEmulator {
     }
 
     /// クロックティック
-    pub fn clock_tick_64k_hz(&mut self) -> Option<[i16; 2]> {
+    pub fn clock_tick_64k_hz(&mut self) -> Option<T::Output> {
         self.tick_count = self.tick_count.wrapping_add(1);
         // 8kHzタイマー
         if self.tick_count % 8 == 0 {
@@ -142,7 +147,7 @@ impl SPCEmulator {
         }
         // 32kHz周期で出力サンプル計算
         if self.tick_count % 2 == 0 {
-            return Some(self.dsp.tick(&mut self.ram));
+            return self.dsp.tick(&mut self.ram);
         }
 
         None

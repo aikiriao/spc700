@@ -226,14 +226,19 @@ pub enum SPCOpcode {
     STOP,
 }
 
-/// メモリ上にあるデータから16bitデータを読みだす
-pub fn make_u16_from_u8(data: &[u8]) -> u16 {
-    assert_eq!(data.len(), 2);
-    ((data[1] as u16) << 8) | data[0] as u16
+pub const MAX_MIDI_OUTPUT_LENGTH: usize = 30;
+
+#[derive(Debug, Clone)]
+pub struct MidiOutput {
+    pub data: [u8; MAX_MIDI_OUTPUT_LENGTH],
+    pub length: usize,
 }
 
 /// SPCのDSPトレイト
 pub trait SPCDSP {
+    type Output;
+    /// コンストラクタ
+    fn new() -> Self;
     /// レジスタの初期化
     fn initialize(&mut self, ram: &mut [u8], dsp_register: &[u8; 128]);
     /// レジスタに書き込み
@@ -241,7 +246,7 @@ pub trait SPCDSP {
     /// レジスタから読み出し
     fn read_register(&self, ram: &[u8], address: u8) -> u8;
     /// 定期処理
-    fn tick(&mut self, ram: &mut [u8]) -> [i16; 2];
+    fn tick(&mut self, ram: &mut [u8]) -> Option<Self::Output>;
 }
 
 /// DSPレジスタアドレス
@@ -278,3 +283,9 @@ pub const V0ADSR2_ADDRESS: u8 = 0x06;
 pub const V0GAIN_ADDRESS: u8 = 0x07;
 pub const V0ENVX_ADDRESS: u8 = 0x08;
 pub const V0OUTX_ADDRESS: u8 = 0x09;
+
+/// メモリ上にあるデータから16bitデータを読みだす
+pub fn make_u16_from_u8(data: &[u8]) -> u16 {
+    assert_eq!(data.len(), 2);
+    ((data[1] as u16) << 8) | data[0] as u16
+}
