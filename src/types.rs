@@ -1,5 +1,5 @@
-/// MIDI出力の最大サイズ
-pub const MAX_MIDI_OUTPUT_LENGTH: usize = 30;
+/// 1度に出力できる最大のMIDIメッセージ数
+pub const MAX_NUM_MIDI_OUTPUT_MESSAGES: usize = 10;
 
 /// SPCレジスタ
 #[derive(Debug, Clone)]
@@ -232,8 +232,8 @@ pub enum SPCOpcode {
 /// MIDI出力
 #[derive(Debug, Clone)]
 pub struct MIDIOutput {
-    pub data: [u8; MAX_MIDI_OUTPUT_LENGTH],
-    pub length: usize,
+    pub messages: [[u8; 3]; MAX_NUM_MIDI_OUTPUT_MESSAGES],
+    pub num_messages: usize,
 }
 
 /// SPCのDSPトレイト

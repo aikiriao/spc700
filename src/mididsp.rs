@@ -25,6 +25,8 @@ struct MIDIVoiceRegister {
     keyon: bool,
     /// キーオフされているか
     keyoff: bool,
+    /// ノートオンされているか
+    noteon: bool,
     /// 前ボイス出力のピッチモジュレーションをするか
     pitch_mod: bool,
     /// ノイズ有効か
@@ -72,11 +74,11 @@ fn pitch_to_note(pitch: u16) -> u8 {
 }
 
 impl MIDIOutput {
-    /// MIDIデータをPUSH
-    fn push_data(&mut self, data: u8) {
-        assert!(self.length < MAX_MIDI_OUTPUT_LENGTH);
-        self.data[self.length] = data;
-        self.length += 1;
+    /// MIDIメッセージを追加
+    fn push_message(&mut self, message: &[u8; 3]) {
+        assert!(self.num_messages < MAX_NUM_MIDI_OUTPUT_MESSAGES);
+        self.messages[self.num_messages].copy_from_slice(message);
+        self.num_messages += 1;
     }
 }
 
@@ -91,6 +93,7 @@ impl MIDIVoiceRegister {
             eg: EnvelopeGenerator::new(),
             keyon: false,
             keyoff: false,
+            noteon: false,
             pitch_mod: false,
             noise: false,
         }
@@ -101,21 +104,24 @@ impl MIDIVoiceRegister {
         // キーオンが入ったとき
         if self.keyon {
             self.keyon = false;
+            if self.noteon {
+                out.push_message(&[MSG_NOTE_OFF | self.channel, pitch_to_note(self.pitch), 0]);
+            }
             // エンベロープ設定
             self.eg.keyon();
             // ノートオン
-            out.push_data(MSG_NOTE_ON | self.channel);
-            out.push_data(pitch_to_note(self.pitch));
-            out.push_data(64);
+            out.push_message(&[MSG_NOTE_ON | self.channel, pitch_to_note(self.pitch), 100]);
+            self.noteon = true;
         }
 
         // キーオフが入ったとき
         if self.keyoff {
             self.keyoff = false;
             // ノートオフ
-            out.push_data(MSG_NOTE_OFF | self.channel);
-            out.push_data(pitch_to_note(self.pitch));
-            out.push_data(0);
+            if self.noteon {
+                out.push_message(&[MSG_NOTE_OFF | self.channel, pitch_to_note(self.pitch), 0]);
+            }
+            self.noteon = false;
         }
 
         // エンベロープ内部状態更新
@@ -384,7 +390,7 @@ impl SPCDSP for MIDIDSP {
 
     /// 32kHz周期処理
     fn tick(&mut self, _ram: &mut [u8]) -> Option<MIDIOutput> {
-        let mut out = MIDIOutput { data: [0u8; MAX_MIDI_OUTPUT_LENGTH], length: 0 };
+        let mut out = MIDIOutput { messages: [[0u8; 3]; MAX_NUM_MIDI_OUTPUT_MESSAGES], num_messages: 0 };
         // 全チャンネルの周期処理を実行
         for ch in 0..8 {
             self.voice[ch].tick(self.global_counter, &mut out);
@@ -399,7 +405,7 @@ impl SPCDSP for MIDIDSP {
         }
         self.global_counter -= 1;
 
-        if out.length == 0 {
+        if out.num_messages == 0 {
             None
         } else {
             Some(out)

@@ -7,6 +7,11 @@ use spc::types::*;
 use std::env;
 use std::fmt::Error;
 use std::num::NonZero;
+use midir::{MidiOutput, MidiOutputPort};
+use std::{thread, time};
+use std::io::{stdin, stdout, Write};
+
+const CLOCK_TICK_CYCLE_64KHZ: u32 = 16; /* 64KHz周期のクロックサイクル SPCのクロック(1.024MHz)を64KHzで割って得られる = 1024000 / 64000 */
 
 /// バイナリをディスアセンブル
 fn naive_disassemble(ram: &[u8]) {
@@ -21,7 +26,6 @@ fn naive_disassemble(ram: &[u8]) {
 
 /// 実行してみる
 fn naive_execution(register: &SPCRegister, ram: &[u8], dsp_register: &[u8; 128]) {
-    const CLOCK_TICK_CYCLE_64KHZ: u32 = 16; /* 64KHz周期のクロックサイクル SPCのクロック(1.024MHz)を64KHzで割って得られる = 1024000 / 64000 */
     let mut emu: spc::spc::SPC<spc::mididsp::MIDIDSP> = SPC::new(&register, ram, dsp_register);
     let mut cycle_count = 0;
     loop {
@@ -43,7 +47,6 @@ fn naive_play(
     dsp_register: &[u8; 128],
 ) -> Result<(), Box<dyn std::error::Error>> {
     const NUM_CHANNELS: usize = 2;
-    const CLOCK_TICK_CYCLE_64KHZ: u32 = 16; /* 64KHz周期のクロックサイクル SPCのクロック(1.024MHz)を64KHzで割って得られる = 1024000 / 64000 */
     const NORMALIZED_CONST: f32 = 1.0 / 32768.0;
 
     // cpalの初期化
@@ -117,6 +120,65 @@ fn naive_play(
     loop {}
 }
 
+/// MIDIを出力してみる
+fn naive_midi_play(register: &SPCRegister, ram: &[u8], dsp_register: &[u8; 128]) -> Result<(), Box<dyn std::error::Error>> {
+    let midi_out = MidiOutput::new("My Test Output")?;
+
+    // Get an output port (read from console if multiple are available)
+    let out_ports = midi_out.ports();
+    let out_port: &MidiOutputPort = match out_ports.len() {
+        0 => return Err("no output port found".into()),
+        1 => {
+            println!(
+                "Choosing the only available output port: {}",
+                midi_out.port_name(&out_ports[0]).unwrap()
+            );
+            &out_ports[0]
+        }
+        _ => {
+            println!("\nAvailable output ports:");
+            for (i, p) in out_ports.iter().enumerate() {
+                println!("{}: {}", i, midi_out.port_name(p).unwrap());
+            }
+            print!("Please select output port: ");
+            stdout().flush()?;
+            let mut input = String::new();
+            stdin().read_line(&mut input)?;
+            out_ports
+                .get(input.trim().parse::<usize>()?)
+                .ok_or("invalid output port selected")?
+        }
+    };
+
+    println!("\nOpening connection");
+    let mut conn_out = midi_out.connect(out_port, "midir-test")?;
+    println!("Connection open. Listen!");
+
+    // SPCの作成
+    let mut emu: spc::spc::SPC<spc::mididsp::MIDIDSP> = SPC::new(&register, ram, dsp_register);
+    let mut cycle_count = 0;
+
+    // 64kHz間隔 = 1000 / 64 micro = 15625 nano sec止まる
+    let sleep_duration = time::Duration::from_nanos(15625);
+
+    // ループ処理
+    loop {
+        // 64kHzタイマーティックするまで処理
+        while cycle_count < CLOCK_TICK_CYCLE_64KHZ {
+            cycle_count += emu.execute_step() as u32;
+        }
+        cycle_count -= CLOCK_TICK_CYCLE_64KHZ;
+        // MIDI出力
+        if let Some(out) = emu.clock_tick_64k_hz() {
+            for i in 0..out.num_messages {
+                println!("{:X?}", out.messages[i]);
+                conn_out.send(&out.messages[i]).unwrap();
+            }
+        }
+        thread::sleep(sleep_duration);
+    }
+}
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<String> = env::args().collect();
 
@@ -168,7 +230,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .unwrap()
                 .trim_end_matches('\0'),
         );
-        let _ = naive_play(
+        let _ = naive_midi_play(
             &spcfile.header.spc_register,
             &spcfile.ram,
             &spcfile.dsp_register,
