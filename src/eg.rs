@@ -131,6 +131,17 @@ impl EnvelopeGenerator {
                 }
                 _ => {}
             }
+        } else {
+            // ADSRが無効になった場合にレートを書き換え
+            match self.gain_mode {
+                GainMode::LinearDecrease { rate }
+                | GainMode::ExponentialDecrease { rate }
+                | GainMode::LinearIncrease { rate }
+                | GainMode::BentIncrease { rate } => {
+                    self.rate = rate;
+                }
+                _ => {}
+            }
         }
     }
 
