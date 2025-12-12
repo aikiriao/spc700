@@ -71,6 +71,15 @@ fn pitch_to_note(pitch: u16) -> u8 {
     hz_to_note(pitch_to_hz(pitch))
 }
 
+impl MIDIOutput {
+    /// MIDIデータをPUSH
+    fn push_data(&mut self, data: u8) {
+        assert!(self.length < MAX_MIDI_OUTPUT_LENGTH);
+        self.data[self.length] = data;
+        self.length += 1;
+    }
+}
+
 impl MIDIVoiceRegister {
     fn new(ch: u8) -> Self {
         Self {
@@ -88,29 +97,25 @@ impl MIDIVoiceRegister {
     }
 
     /// 32kHz定期処理
-    fn tick(&mut self, global_counter: u16, data: &mut [u8], len: &mut usize) {
+    fn tick(&mut self, global_counter: u16, out: &mut MIDIOutput) {
         // キーオンが入ったとき
         if self.keyon {
             self.keyon = false;
             // エンベロープ設定
             self.eg.keyon();
             // ノートオン
-            assert!((*len + 2) <  MAX_MIDI_OUTPUT_LENGTH);
-            data[*len + 0] = MSG_NOTE_ON | self.channel;
-            data[*len + 1] = pitch_to_note(self.pitch);
-            data[*len + 2] = 64;
-            *len += 3;
+            out.push_data(MSG_NOTE_ON | self.channel);
+            out.push_data(pitch_to_note(self.pitch));
+            out.push_data(64);
         }
 
         // キーオフが入ったとき
         if self.keyoff {
             self.keyoff = false;
             // ノートオフ
-            assert!((*len + 2) <  MAX_MIDI_OUTPUT_LENGTH);
-            data[*len + 0] = MSG_NOTE_OFF | self.channel;
-            data[*len + 1] = pitch_to_note(self.pitch);
-            data[*len + 2] = 64;
-            *len += 3;
+            out.push_data(MSG_NOTE_OFF | self.channel);
+            out.push_data(pitch_to_note(self.pitch));
+            out.push_data(0);
         }
 
         // エンベロープ内部状態更新
@@ -121,7 +126,7 @@ impl MIDIVoiceRegister {
 }
 
 impl SPCDSP for MIDIDSP {
-    type Output = MidiOutput;
+    type Output = MIDIOutput;
 
     /// コンストラクタ
     fn new() -> Self {
@@ -378,11 +383,11 @@ impl SPCDSP for MIDIDSP {
     }
 
     /// 32kHz周期処理
-    fn tick(&mut self, _ram: &mut [u8]) -> Option<MidiOutput> {
-        let mut ret = MidiOutput { data: [0u8; MAX_MIDI_OUTPUT_LENGTH], length: 0 };
+    fn tick(&mut self, _ram: &mut [u8]) -> Option<MIDIOutput> {
+        let mut out = MIDIOutput { data: [0u8; MAX_MIDI_OUTPUT_LENGTH], length: 0 };
         // 全チャンネルの周期処理を実行
         for ch in 0..8 {
-            self.voice[ch].tick(self.global_counter, &mut ret.data, &mut ret.length);
+            self.voice[ch].tick(self.global_counter, &mut out);
         }
         // ミュートならば無音
         if self.mute {
@@ -394,10 +399,10 @@ impl SPCDSP for MIDIDSP {
         }
         self.global_counter -= 1;
 
-        if ret.length == 0 {
+        if out.length == 0 {
             None
         } else {
-            Some(ret)
+            Some(out)
         }
     }
 }

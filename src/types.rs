@@ -1,3 +1,6 @@
+/// MIDI出力の最大サイズ
+pub const MAX_MIDI_OUTPUT_LENGTH: usize = 30;
+
 /// SPCレジスタ
 #[derive(Debug, Clone)]
 pub struct SPCRegister {
@@ -226,10 +229,9 @@ pub enum SPCOpcode {
     STOP,
 }
 
-pub const MAX_MIDI_OUTPUT_LENGTH: usize = 30;
-
+/// MIDI出力
 #[derive(Debug, Clone)]
-pub struct MidiOutput {
+pub struct MIDIOutput {
     pub data: [u8; MAX_MIDI_OUTPUT_LENGTH],
     pub length: usize,
 }
