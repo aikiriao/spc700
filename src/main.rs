@@ -1,15 +1,16 @@
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use fixed_resample::ReadStatus;
+use midir::{MidiOutput, MidiOutputPort};
 use spc::assembler::*;
 use spc::spc::*;
 use spc::spc_file::*;
 use spc::types::*;
 use std::env;
 use std::fmt::Error;
-use std::num::NonZero;
-use midir::{MidiOutput, MidiOutputPort};
-use std::{thread, time};
 use std::io::{stdin, stdout, Write};
+use std::num::NonZero;
+use std::time::{Duration, Instant};
+use std::thread;
 
 const CLOCK_TICK_CYCLE_64KHZ: u32 = 16; /* 64KHz周期のクロックサイクル SPCのクロック(1.024MHz)を64KHzで割って得られる = 1024000 / 64000 */
 
@@ -121,7 +122,11 @@ fn naive_play(
 }
 
 /// MIDIを出力してみる
-fn naive_midi_play(register: &SPCRegister, ram: &[u8], dsp_register: &[u8; 128]) -> Result<(), Box<dyn std::error::Error>> {
+fn naive_midi_play(
+    register: &SPCRegister,
+    ram: &[u8],
+    dsp_register: &[u8; 128],
+) -> Result<(), Box<dyn std::error::Error>> {
     let midi_out = MidiOutput::new("My Test Output")?;
 
     // Get an output port (read from console if multiple are available)
@@ -158,10 +163,9 @@ fn naive_midi_play(register: &SPCRegister, ram: &[u8], dsp_register: &[u8; 128])
     let mut emu: spc::spc::SPC<spc::mididsp::MIDIDSP> = SPC::new(&register, ram, dsp_register);
     let mut cycle_count = 0;
 
-    // 64kHz間隔 = 1000 / 64 micro = 15625 nano sec止まる
-    let sleep_duration = time::Duration::from_nanos(15625);
-
-    // ループ処理
+    // 64kHz間隔 = 1000 / 64 micro = 15625 nano sec
+    let interval = Duration::from_nanos(15625);
+    let mut next = Instant::now();
     loop {
         // 64kHzタイマーティックするまで処理
         while cycle_count < CLOCK_TICK_CYCLE_64KHZ {
@@ -175,7 +179,11 @@ fn naive_midi_play(register: &SPCRegister, ram: &[u8], dsp_register: &[u8; 128])
                 conn_out.send(&out.messages[i]).unwrap();
             }
         }
-        thread::sleep(sleep_duration);
+        // ビジーループ
+        next += interval;
+        while Instant::now() < next {
+            thread::yield_now();
+        }
     }
 }
 

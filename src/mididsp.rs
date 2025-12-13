@@ -55,22 +55,15 @@ pub struct MIDIDSP {
     voice: [MIDIVoiceRegister; 8],
 }
 
-/// ピッチを周波数に変換
-fn pitch_to_hz(pitch: u16) -> f32 {
-    const FACTOR: f32 = 32000.0 / 4096.0;
-    FACTOR * (pitch as f32)
-}
-
-/// 周波数をMIDIノート番号に変換
-fn hz_to_note(freq: f32) -> u8 {
-    const A4PITCH: f32 = 440.0;
-    let n = 12.0 * libm::log2f(freq / A4PITCH);
-    69u8 + (libm::roundf(n) as u8)
-}
-
 /// ピッチをMIDIノート番号に変換
-fn pitch_to_note(pitch: u16) -> u8 {
-    hz_to_note(pitch_to_hz(pitch))
+fn pitch_to_note(center_note: u8, pitch: u16) -> u8 {
+    // pitch(2^12を基準とする再生速度)から半音単位でのずれを計算
+    // 例）pitch = 2048 -> semitone = -12(-1 octave)
+    // 例）pitch = 4096 -> semitone =   0
+    // 例）pitch = 8192 -> semitone =  12(+1 octave)
+    let semitone = 12.0 * (libm::log2f(pitch as f32) - 12.0); 
+    // 基準ノート値に加算
+    (center_note as i16 + libm::roundf(semitone) as i16) as u8
 }
 
 impl MIDIOutput {
@@ -105,12 +98,12 @@ impl MIDIVoiceRegister {
         if self.keyon {
             self.keyon = false;
             if self.noteon {
-                out.push_message(&[MSG_NOTE_OFF | self.channel, pitch_to_note(self.pitch), 0]);
+                out.push_message(&[MSG_NOTE_OFF | self.channel, pitch_to_note(64, self.pitch), 0]);
             }
             // エンベロープ設定
             self.eg.keyon();
             // ノートオン
-            out.push_message(&[MSG_NOTE_ON | self.channel, pitch_to_note(self.pitch), 100]);
+            out.push_message(&[MSG_NOTE_ON | self.channel, pitch_to_note(64, self.pitch), 100]);
             self.noteon = true;
         }
 
@@ -119,7 +112,7 @@ impl MIDIVoiceRegister {
             self.keyoff = false;
             // ノートオフ
             if self.noteon {
-                out.push_message(&[MSG_NOTE_OFF | self.channel, pitch_to_note(self.pitch), 0]);
+                out.push_message(&[MSG_NOTE_OFF | self.channel, pitch_to_note(64, self.pitch), 0]);
             }
             self.noteon = false;
         }
