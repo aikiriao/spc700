@@ -1,5 +1,5 @@
 /// 1度に出力できる最大のMIDIメッセージ数
-pub const MAX_NUM_MIDI_OUTPUT_MESSAGES: usize = 10;
+pub const MAX_NUM_MIDI_OUTPUT_MESSAGES: usize = 16;
 
 /// DSPレジスタアドレス
 pub const DSP_ADDRESS_MVOLL: u8 = 0x0C;
