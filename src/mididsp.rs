@@ -1,13 +1,13 @@
 use crate::eg::*;
 use crate::types::*;
-use log::trace;
 use libm;
+use log::trace;
 
 const MSG_NOTE_ON: u8 = 0x90;
 const MSG_NOTE_OFF: u8 = 0x80;
 
 /// ボイス
-#[derive(Copy,Clone,Debug)]
+#[derive(Copy, Clone, Debug)]
 struct MIDIVoiceRegister {
     /// チャンネル番号(0-7)
     channel: u8,
@@ -161,7 +161,7 @@ impl SPCDSP for MIDIDSP {
     /// 128バイトメモリから初期化
     fn initialize(&mut self, ram: &mut [u8], dsp_register: &[u8; 128]) {
         // DIRは先に設定（初期状態でKONがある場合にアドレスを正しくするため）
-        self.write_register(ram, DIR_ADDRESS, dsp_register[DIR_ADDRESS as usize]);
+        self.write_register(ram, DSP_ADDRESS_DIR, dsp_register[DSP_ADDRESS_DIR as usize]);
 
         // すべてのレジスタを設定
         for i in 0..128 {
@@ -173,24 +173,24 @@ impl SPCDSP for MIDIDSP {
     fn write_register(&mut self, _ram: &[u8], address: u8, value: u8) {
         trace!("DSPW: {:02X} <- {:02X}", address, value);
         match address & 0x7F {
-            MVOLL_ADDRESS => {
+            DSP_ADDRESS_MVOLL => {
                 self.volume[0] = value as i8;
             }
-            MVOLR_ADDRESS => {
+            DSP_ADDRESS_MVOLR => {
                 self.volume[1] = value as i8;
             }
-            EVOLL_ADDRESS => {
+            DSP_ADDRESS_EVOLL => {
                 self.echo_volume[0] = value as i8;
             }
-            EVOLR_ADDRESS => {
+            DSP_ADDRESS_EVOLR => {
                 self.echo_volume[1] = value as i8;
             }
-            KON_ADDRESS => {
+            DSP_ADDRESS_KON => {
                 for ch in 0..8 {
                     self.voice[ch].keyon = ((value >> ch) & 0x1) != 0;
                 }
             }
-            KOFF_ADDRESS => {
+            DSP_ADDRESS_KOFF => {
                 for ch in 0..8 {
                     let keyoff = ((value >> ch) & 0x1) != 0;
                     self.voice[ch].keyoff = keyoff;
@@ -200,84 +200,84 @@ impl SPCDSP for MIDIDSP {
                     }
                 }
             }
-            FLG_ADDRESS => {
+            DSP_ADDRESS_FLG => {
                 // FIXME: RESETは無視
                 self.mute = (value & 0x40) != 0;
                 self.noise_clock = value & 0x1F;
                 // 読まれる可能性があるので、値としては保持しておく
                 self.flag = value;
             }
-            ENDX_ADDRESS => {
+            DSP_ADDRESS_ENDX => {
                 // 何もしない
             }
-            EFB_ADDRESS => {
+            DSP_ADDRESS_EFB => {
                 // 何もしない
             }
-            PMON_ADDRESS => {
+            DSP_ADDRESS_PMON => {
                 for ch in 1..8 {
                     /* NOTE! 0は無効 */
                     self.voice[ch].pitch_mod = ((value >> ch) & 0x1) != 0;
                 }
             }
-            NON_ADDRESS => {
+            DSP_ADDRESS_NON => {
                 for ch in 0..8 {
                     self.voice[ch].noise = ((value >> ch) & 0x1) != 0;
                 }
             }
-            EON_ADDRESS => {
+            DSP_ADDRESS_EON => {
                 for ch in 0..8 {
                     self.echo[ch] = ((value >> ch) & 0x1) != 0;
                 }
             }
-            DIR_ADDRESS => {
+            DSP_ADDRESS_DIR => {
                 self.brr_dir_page = value;
                 for ch in 0..8 {
                     self.voice[ch].brr_dir_address_base = (value as usize) << 8;
                 }
             }
-            ESA_ADDRESS => {
+            DSP_ADDRESS_ESA => {
                 // 何もしない
             }
-            EDL_ADDRESS => {
+            DSP_ADDRESS_EDL => {
                 // 何もしない
             }
-            FIR0_ADDRESS | FIR1_ADDRESS | FIR2_ADDRESS | FIR3_ADDRESS | FIR4_ADDRESS
-            | FIR5_ADDRESS | FIR6_ADDRESS | FIR7_ADDRESS => {
+            DSP_ADDRESS_FIR0 | DSP_ADDRESS_FIR1 | DSP_ADDRESS_FIR2 | DSP_ADDRESS_FIR3
+            | DSP_ADDRESS_FIR4 | DSP_ADDRESS_FIR5 | DSP_ADDRESS_FIR6 | DSP_ADDRESS_FIR7 => {
                 // 何もしない
             }
             address if ((address & 0xF) <= 0x9) => {
                 let ch = (address >> 4) as usize;
                 match address & 0xF {
-                    V0VOLL_ADDRESS => {
+                    DSP_ADDRESS_V0VOLL => {
                         self.voice[ch].volume[0] = value as i8;
                     }
-                    V0VOLR_ADDRESS => {
+                    DSP_ADDRESS_V0VOLR => {
                         self.voice[ch].volume[1] = value as i8;
                     }
-                    V0PITCHL_ADDRESS => {
+                    DSP_ADDRESS_V0PITCHL => {
                         self.voice[ch].pitch = (self.voice[ch].pitch & 0xFF00) | (value as u16);
                     }
-                    V0PITCHH_ADDRESS => {
+                    DSP_ADDRESS_V0PITCHH => {
                         self.voice[ch].pitch =
                             ((value as u16) << 8) | (self.voice[ch].pitch & 0x00FF);
                     }
-                    V0SRCN_ADDRESS => {
+                    DSP_ADDRESS_V0SRCN => {
                         self.voice[ch].sample_source = value;
                     }
-                    V0ADSR1_ADDRESS => {
+                    DSP_ADDRESS_V0ADSR1 => {
                         self.voice[ch].eg.set_adsr1(value);
                     }
-                    V0ADSR2_ADDRESS => {
+                    DSP_ADDRESS_V0ADSR2 => {
                         self.voice[ch].eg.set_adsr2(value);
                     }
-                    V0GAIN_ADDRESS => {
+                    DSP_ADDRESS_V0GAIN => {
                         self.voice[ch].eg.set_gain(value);
                     }
-                    V0ENVX_ADDRESS => {
+                    DSP_ADDRESS_V0ENVX => {
                         // 書き込みは無視される（読み取り用レジスタ）
                         // 実際は書き込んで操作できるが、そのような使い方は考慮外とする
                     }
-                    V0OUTX_ADDRESS => {
+                    DSP_ADDRESS_V0OUTX => {
                         // 何もしない
                     }
                     _ => {
@@ -296,11 +296,11 @@ impl SPCDSP for MIDIDSP {
         trace!("DSPR: {:02X}", address);
         // 80-FFの読み込みは00-7Fと同等に扱われる
         match address & 0x7F {
-            MVOLL_ADDRESS => self.volume[0] as u8,
-            MVOLR_ADDRESS => self.volume[1] as u8,
-            EVOLL_ADDRESS => self.echo_volume[0] as u8,
-            EVOLR_ADDRESS => self.echo_volume[1] as u8,
-            KON_ADDRESS => {
+            DSP_ADDRESS_MVOLL => self.volume[0] as u8,
+            DSP_ADDRESS_MVOLR => self.volume[1] as u8,
+            DSP_ADDRESS_EVOLL => self.echo_volume[0] as u8,
+            DSP_ADDRESS_EVOLR => self.echo_volume[1] as u8,
+            DSP_ADDRESS_KON => {
                 let mut ret = 0;
                 let mut bit = 1;
                 for ch in 0..8 {
@@ -311,7 +311,7 @@ impl SPCDSP for MIDIDSP {
                 }
                 ret
             }
-            KOFF_ADDRESS => {
+            DSP_ADDRESS_KOFF => {
                 let mut ret = 0;
                 let mut bit = 1;
                 for ch in 0..8 {
@@ -322,10 +322,10 @@ impl SPCDSP for MIDIDSP {
                 }
                 ret
             }
-            FLG_ADDRESS => self.flag,
-            ENDX_ADDRESS => 0, // 0を返す
-            EFB_ADDRESS => 0,  // 0を返す
-            PMON_ADDRESS => {
+            DSP_ADDRESS_FLG => self.flag,
+            DSP_ADDRESS_ENDX => 0, // 0を返す
+            DSP_ADDRESS_EFB => 0,  // 0を返す
+            DSP_ADDRESS_PMON => {
                 let mut ret = 0;
                 let mut bit = 1;
                 for ch in 1..8 {
@@ -337,7 +337,7 @@ impl SPCDSP for MIDIDSP {
                 }
                 ret
             }
-            NON_ADDRESS => {
+            DSP_ADDRESS_NON => {
                 let mut ret = 0;
                 let mut bit = 1;
                 for ch in 0..8 {
@@ -348,7 +348,7 @@ impl SPCDSP for MIDIDSP {
                 }
                 ret
             }
-            EON_ADDRESS => {
+            DSP_ADDRESS_EON => {
                 let mut ret = 0;
                 let mut bit = 1;
                 for ch in 0..8 {
@@ -359,24 +359,24 @@ impl SPCDSP for MIDIDSP {
                 }
                 ret
             }
-            DIR_ADDRESS => self.brr_dir_page,
-            ESA_ADDRESS => 0, // 0を返す
-            EDL_ADDRESS => 0, // 0を返す
-            FIR0_ADDRESS | FIR1_ADDRESS | FIR2_ADDRESS | FIR3_ADDRESS | FIR4_ADDRESS
-            | FIR5_ADDRESS | FIR6_ADDRESS | FIR7_ADDRESS => 0, // 0を返す
+            DSP_ADDRESS_DIR => self.brr_dir_page,
+            DSP_ADDRESS_ESA => 0, // 0を返す
+            DSP_ADDRESS_EDL => 0, // 0を返す
+            DSP_ADDRESS_FIR0 | DSP_ADDRESS_FIR1 | DSP_ADDRESS_FIR2 | DSP_ADDRESS_FIR3
+            | DSP_ADDRESS_FIR4 | DSP_ADDRESS_FIR5 | DSP_ADDRESS_FIR6 | DSP_ADDRESS_FIR7 => 0, // 0を返す
             address if ((address & 0xF) <= 0x9) => {
                 let ch = (address >> 4) as usize;
                 match address & 0xF {
-                    V0VOLL_ADDRESS => self.voice[ch].volume[0] as u8,
-                    V0VOLR_ADDRESS => self.voice[ch].volume[1] as u8,
-                    V0PITCHL_ADDRESS => (self.voice[ch].pitch & 0xFF) as u8,
-                    V0PITCHH_ADDRESS => ((self.voice[ch].pitch >> 8) & 0xFF) as u8,
-                    V0SRCN_ADDRESS => self.voice[ch].sample_source,
-                    V0ADSR1_ADDRESS => self.voice[ch].eg.get_adsr1(),
-                    V0ADSR2_ADDRESS => self.voice[ch].eg.get_adsr2(),
-                    V0GAIN_ADDRESS => self.voice[ch].eg.get_gain(),
-                    V0ENVX_ADDRESS => ((self.voice[ch].eg.gain >> 4) & 0xFF) as u8,
-                    V0OUTX_ADDRESS => 0, // 0を返す
+                    DSP_ADDRESS_V0VOLL => self.voice[ch].volume[0] as u8,
+                    DSP_ADDRESS_V0VOLR => self.voice[ch].volume[1] as u8,
+                    DSP_ADDRESS_V0PITCHL => (self.voice[ch].pitch & 0xFF) as u8,
+                    DSP_ADDRESS_V0PITCHH => ((self.voice[ch].pitch >> 8) & 0xFF) as u8,
+                    DSP_ADDRESS_V0SRCN => self.voice[ch].sample_source,
+                    DSP_ADDRESS_V0ADSR1 => self.voice[ch].eg.get_adsr1(),
+                    DSP_ADDRESS_V0ADSR2 => self.voice[ch].eg.get_adsr2(),
+                    DSP_ADDRESS_V0GAIN => self.voice[ch].eg.get_gain(),
+                    DSP_ADDRESS_V0ENVX => ((self.voice[ch].eg.gain >> 4) & 0xFF) as u8,
+                    DSP_ADDRESS_V0OUTX => 0, // 0を返す
                     _ => {
                         panic!("Unsupported DSP address!");
                     }
@@ -390,7 +390,10 @@ impl SPCDSP for MIDIDSP {
 
     /// 32kHz周期処理
     fn tick(&mut self, _ram: &mut [u8]) -> Option<MIDIOutput> {
-        let mut out = MIDIOutput { messages: [[0u8; 3]; MAX_NUM_MIDI_OUTPUT_MESSAGES], num_messages: 0 };
+        let mut out = MIDIOutput {
+            messages: [[0u8; 3]; MAX_NUM_MIDI_OUTPUT_MESSAGES],
+            num_messages: 0,
+        };
         // 全チャンネルの周期処理を実行
         for ch in 0..8 {
             self.voice[ch].tick(self.global_counter, &mut out);

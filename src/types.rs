@@ -1,6 +1,41 @@
 /// 1度に出力できる最大のMIDIメッセージ数
 pub const MAX_NUM_MIDI_OUTPUT_MESSAGES: usize = 10;
 
+/// DSPレジスタアドレス
+pub const DSP_ADDRESS_MVOLL: u8 = 0x0C;
+pub const DSP_ADDRESS_MVOLR: u8 = 0x1C;
+pub const DSP_ADDRESS_EVOLL: u8 = 0x2C;
+pub const DSP_ADDRESS_EVOLR: u8 = 0x3C;
+pub const DSP_ADDRESS_KON: u8 = 0x4C;
+pub const DSP_ADDRESS_KOFF: u8 = 0x5C;
+pub const DSP_ADDRESS_FLG: u8 = 0x6C;
+pub const DSP_ADDRESS_ENDX: u8 = 0x7C;
+pub const DSP_ADDRESS_EFB: u8 = 0x0D;
+pub const DSP_ADDRESS_PMON: u8 = 0x2D;
+pub const DSP_ADDRESS_NON: u8 = 0x3D;
+pub const DSP_ADDRESS_EON: u8 = 0x4D;
+pub const DSP_ADDRESS_DIR: u8 = 0x5D;
+pub const DSP_ADDRESS_ESA: u8 = 0x6D;
+pub const DSP_ADDRESS_EDL: u8 = 0x7D;
+pub const DSP_ADDRESS_FIR0: u8 = 0x0F;
+pub const DSP_ADDRESS_FIR1: u8 = 0x1F;
+pub const DSP_ADDRESS_FIR2: u8 = 0x2F;
+pub const DSP_ADDRESS_FIR3: u8 = 0x3F;
+pub const DSP_ADDRESS_FIR4: u8 = 0x4F;
+pub const DSP_ADDRESS_FIR5: u8 = 0x5F;
+pub const DSP_ADDRESS_FIR6: u8 = 0x6F;
+pub const DSP_ADDRESS_FIR7: u8 = 0x7F;
+pub const DSP_ADDRESS_V0VOLL: u8 = 0x00;
+pub const DSP_ADDRESS_V0VOLR: u8 = 0x01;
+pub const DSP_ADDRESS_V0PITCHL: u8 = 0x02;
+pub const DSP_ADDRESS_V0PITCHH: u8 = 0x03;
+pub const DSP_ADDRESS_V0SRCN: u8 = 0x04;
+pub const DSP_ADDRESS_V0ADSR1: u8 = 0x05;
+pub const DSP_ADDRESS_V0ADSR2: u8 = 0x06;
+pub const DSP_ADDRESS_V0GAIN: u8 = 0x07;
+pub const DSP_ADDRESS_V0ENVX: u8 = 0x08;
+pub const DSP_ADDRESS_V0OUTX: u8 = 0x09;
+
 /// SPCレジスタ
 #[derive(Debug, Clone)]
 pub struct SPCRegister {
@@ -250,41 +285,6 @@ pub trait SPCDSP {
     /// 定期処理
     fn tick(&mut self, ram: &mut [u8]) -> Option<Self::Output>;
 }
-
-/// DSPレジスタアドレス
-pub const MVOLL_ADDRESS: u8 = 0x0C;
-pub const MVOLR_ADDRESS: u8 = 0x1C;
-pub const EVOLL_ADDRESS: u8 = 0x2C;
-pub const EVOLR_ADDRESS: u8 = 0x3C;
-pub const KON_ADDRESS: u8 = 0x4C;
-pub const KOFF_ADDRESS: u8 = 0x5C;
-pub const FLG_ADDRESS: u8 = 0x6C;
-pub const ENDX_ADDRESS: u8 = 0x7C;
-pub const EFB_ADDRESS: u8 = 0x0D;
-pub const PMON_ADDRESS: u8 = 0x2D;
-pub const NON_ADDRESS: u8 = 0x3D;
-pub const EON_ADDRESS: u8 = 0x4D;
-pub const DIR_ADDRESS: u8 = 0x5D;
-pub const ESA_ADDRESS: u8 = 0x6D;
-pub const EDL_ADDRESS: u8 = 0x7D;
-pub const FIR0_ADDRESS: u8 = 0x0F;
-pub const FIR1_ADDRESS: u8 = 0x1F;
-pub const FIR2_ADDRESS: u8 = 0x2F;
-pub const FIR3_ADDRESS: u8 = 0x3F;
-pub const FIR4_ADDRESS: u8 = 0x4F;
-pub const FIR5_ADDRESS: u8 = 0x5F;
-pub const FIR6_ADDRESS: u8 = 0x6F;
-pub const FIR7_ADDRESS: u8 = 0x7F;
-pub const V0VOLL_ADDRESS: u8 = 0x00;
-pub const V0VOLR_ADDRESS: u8 = 0x01;
-pub const V0PITCHL_ADDRESS: u8 = 0x02;
-pub const V0PITCHH_ADDRESS: u8 = 0x03;
-pub const V0SRCN_ADDRESS: u8 = 0x04;
-pub const V0ADSR1_ADDRESS: u8 = 0x05;
-pub const V0ADSR2_ADDRESS: u8 = 0x06;
-pub const V0GAIN_ADDRESS: u8 = 0x07;
-pub const V0ENVX_ADDRESS: u8 = 0x08;
-pub const V0OUTX_ADDRESS: u8 = 0x09;
 
 /// メモリ上にあるデータから16bitデータを読みだす
 pub fn make_u16_from_u8(data: &[u8]) -> u16 {
