@@ -58,12 +58,13 @@ pub struct MIDIDSP {
 /// ピッチをMIDIノート番号に変換
 fn pitch_to_note(center_note: u8, pitch: u16) -> u8 {
     // pitch(2^12を基準とする再生速度)から半音単位でのずれを計算
-    // 例）pitch = 2048 -> semitone = -12(-1 octave)
-    // 例）pitch = 4096 -> semitone =   0
-    // 例）pitch = 8192 -> semitone =  12(+1 octave)
+    // 例1）pitch = 2048 -> semitone = -12(-1 octave)
+    // 例2）pitch = 4096 -> semitone =   0
+    // 例3）pitch = 8192 -> semitone =  12(+1 octave)
+    // 12 * log2(pitch / 4096) = 12 * (log2(pitch) - 12)
     let semitone = 12.0 * (libm::log2f(pitch as f32) - 12.0); 
     // 基準ノート値に加算
-    (center_note as i16 + libm::roundf(semitone) as i16) as u8
+    libm::roundf(center_note as f32 + semitone) as u8
 }
 
 impl MIDIOutput {
