@@ -1,5 +1,5 @@
 /// 1度に出力できる最大のMIDIメッセージ数
-pub const MAX_NUM_MIDI_OUTPUT_MESSAGES: usize = 16;
+pub const MAX_NUM_MIDI_OUTPUT_MESSAGES: usize = 40;
 
 /// DSPレジスタアドレス
 pub const DSP_ADDRESS_MVOLL: u8 = 0x0C;
@@ -60,44 +60,118 @@ pub enum SPCOprand {
     XIndexRegister,
     YIndexRegister,
     ProgramStatusWord,
-    RelativeAddress { address: i8 },
-    DirectPage { direct_page: u8 },
-    DirectPageX { direct_page: u8 },
-    Absolute { address: u16 },
-    DirectPageXIndirect { direct_page: u8 },
-    DirectPageIndirectY { direct_page: u8 },
+    RelativeAddress {
+        address: i8,
+    },
+    DirectPage {
+        direct_page: u8,
+    },
+    DirectPageX {
+        direct_page: u8,
+    },
+    Absolute {
+        address: u16,
+    },
+    DirectPageXIndirect {
+        direct_page: u8,
+    },
+    DirectPageIndirectY {
+        direct_page: u8,
+    },
     IndirectPageToIndirectPage,
-    DirectPageToDirectPage { direct_page_src: u8, direct_page_dst: u8 },
-    ImmediateToDirectPage { direct_page: u8, immediate: u8 },
-    ImmediateToX { immediate: u8 },
-    AbsoluteBit { address_bit: u16 },
-    AbsoluteInverseBit { address_bit: u16 },
-    DirectPagePCRelative { direct_page: u8, pc_relative: i8 },
-    DirectPageXPCRelative { direct_page: u8, pc_relative: i8 },
-    PCRelative { pc_relative: i8 },
-    PageAddress { address: u8 },
-    DirectPageToX { direct_page: u8 },
-    DirectPageYToX { direct_page: u8 },
-    AbsoluteToX { address: u16 },
-    ImmediateToY { immediate: u8 },
-    DirectPageToY { direct_page: u8 },
-    DirectPageXtoY { direct_page: u8 },
-    AbsoluteToY { address: u16 },
+    DirectPageToDirectPage {
+        direct_page_src: u8,
+        direct_page_dst: u8,
+    },
+    ImmediateToDirectPage {
+        direct_page: u8,
+        immediate: u8,
+    },
+    ImmediateToX {
+        immediate: u8,
+    },
+    AbsoluteBit {
+        address_bit: u16,
+    },
+    AbsoluteInverseBit {
+        address_bit: u16,
+    },
+    DirectPagePCRelative {
+        direct_page: u8,
+        pc_relative: i8,
+    },
+    DirectPageXPCRelative {
+        direct_page: u8,
+        pc_relative: i8,
+    },
+    PCRelative {
+        pc_relative: i8,
+    },
+    PageAddress {
+        address: u8,
+    },
+    DirectPageToX {
+        direct_page: u8,
+    },
+    DirectPageYToX {
+        direct_page: u8,
+    },
+    AbsoluteToX {
+        address: u16,
+    },
+    ImmediateToY {
+        immediate: u8,
+    },
+    DirectPageToY {
+        direct_page: u8,
+    },
+    DirectPageXtoY {
+        direct_page: u8,
+    },
+    AbsoluteToY {
+        address: u16,
+    },
     AToIndirect,
     AToIndirectAutoIncrement,
-    AToDirectPage { direct_page: u8 },
-    AToDirectPageX { direct_page: u8 },
-    AToAbsolute { address: u16 },
-    AToAbsoluteX { address: u16 },
-    AToAbsoluteY { address: u16 },
-    AToDirectPageXIndirect { direct_page: u8 },
-    AToDirectPageIndirectY { direct_page: u8 },
-    XToDirectPage { direct_page: u8 },
-    XToDirectPageY { direct_page: u8 },
-    XToAbsolute { address: u16 },
-    YToDirectPage { direct_page: u8 },
-    YToDirectPageX { direct_page: u8 },
-    YToAbsolute { address: u16 },
+    AToDirectPage {
+        direct_page: u8,
+    },
+    AToDirectPageX {
+        direct_page: u8,
+    },
+    AToAbsolute {
+        address: u16,
+    },
+    AToAbsoluteX {
+        address: u16,
+    },
+    AToAbsoluteY {
+        address: u16,
+    },
+    AToDirectPageXIndirect {
+        direct_page: u8,
+    },
+    AToDirectPageIndirectY {
+        direct_page: u8,
+    },
+    XToDirectPage {
+        direct_page: u8,
+    },
+    XToDirectPageY {
+        direct_page: u8,
+    },
+    XToAbsolute {
+        address: u16,
+    },
+    YToDirectPage {
+        direct_page: u8,
+    },
+    YToDirectPageX {
+        direct_page: u8,
+    },
+    YToAbsolute {
+        address: u16,
+    },
     XToA,
     YToA,
     AToX,
@@ -105,26 +179,61 @@ pub enum SPCOprand {
     YToX,
     StackPointerToX,
     XToStackPointer,
-    AbsoluteMemoryBitToCarrayFlag { address_bit: u16 },
-    CarrayFlagToAbsoluteMemoryBit { address_bit: u16 },
-    DirectPageToYA { direct_page: u8 },
-    YAToDirectPage { direct_page: u8 },
-    DirectPageYPCRelative { direct_page: u8 },
-    DirectPageBit { direct_page: u8 },
-    DirectPageBitPCRelative { direct_page: u8, pc_relative: i8 },
+    AbsoluteMemoryBitToCarrayFlag {
+        address_bit: u16,
+    },
+    CarrayFlagToAbsoluteMemoryBit {
+        address_bit: u16,
+    },
+    DirectPageToYA {
+        direct_page: u8,
+    },
+    YAToDirectPage {
+        direct_page: u8,
+    },
+    DirectPageYPCRelative {
+        direct_page: u8,
+    },
+    DirectPageBit {
+        direct_page: u8,
+    },
+    DirectPageBitPCRelative {
+        direct_page: u8,
+        pc_relative: i8,
+    },
     IndirectPage,
-    Immediate { immediate: u8 },
-    AbsoluteXIndirect { address: u16 },
-    AbsoluteX { address: u16 },
-    AbsoluteY { address: u16 },
+    Immediate {
+        immediate: u8,
+    },
+    AbsoluteXIndirect {
+        address: u16,
+    },
+    AbsoluteX {
+        address: u16,
+    },
+    AbsoluteY {
+        address: u16,
+    },
     IndirectAutoIncrementToA,
-    DirectPageToA { direct_page: u8 },
-    AbsoluteToA { address: u16 },
+    DirectPageToA {
+        direct_page: u8,
+    },
+    AbsoluteToA {
+        address: u16,
+    },
     IndirectToA,
-    DirectPageXToA { direct_page: u8 },
-    DirectPageXToY { direct_page: u8 },
-    YPCRelative { pc_relative: i8 },
-    ImmediateToA { immediate: u8 },
+    DirectPageXToA {
+        direct_page: u8,
+    },
+    DirectPageXToY {
+        direct_page: u8,
+    },
+    YPCRelative {
+        pc_relative: i8,
+    },
+    ImmediateToA {
+        immediate: u8,
+    },
 }
 
 /// SPCオペコード
@@ -264,10 +373,17 @@ pub enum SPCOpcode {
     STOP,
 }
 
+/// MIDIメッセージ
+#[derive(Debug, Clone, Copy)]
+pub struct MIDIMessage {
+    pub data: [u8; 3],
+    pub length: usize,
+}
+
 /// MIDI出力
 #[derive(Debug, Clone)]
 pub struct MIDIOutput {
-    pub messages: [[u8; 3]; MAX_NUM_MIDI_OUTPUT_MESSAGES],
+    pub messages: [MIDIMessage; MAX_NUM_MIDI_OUTPUT_MESSAGES],
     pub num_messages: usize,
 }
 

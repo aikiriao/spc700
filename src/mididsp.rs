@@ -1,10 +1,36 @@
 use crate::eg::*;
 use crate::types::*;
+use core::f32::consts::PI;
 use libm;
 use log::trace;
 
-const MSG_NOTE_ON: u8 = 0x90;
-const MSG_NOTE_OFF: u8 = 0x80;
+/// パーカッションパートのチャンネル
+const MIDI_PERCUSSION_CHANNEL: u8 = 0x09;
+
+/// MIDIメッセージ：ノートオン
+const MIDIMSG_NOTE_ON: u8 = 0x90;
+/// MIDIメッセージ：ノートオフ
+const MIDIMSG_NOTE_OFF: u8 = 0x80;
+/// MIDIメッセージ：コントロールチェンジ
+const MIDIMSG_CONTROL_CHANGE: u8 = 0xB0;
+/// MIDIメッセージ：プログラムチェンジ
+const MIDIMSG_PROGRAM_CHANGE: u8 = 0xC0;
+
+/// MIDIコントロールチェンジ：チャンネルボリューム
+const MIDICC_CHANNEL_VOLUME: u8 = 0x07;
+/// MIDIコントロールチェンジ：パンポット
+const MIDICC_PANPOT: u8 = 0x0A;
+/// MIDIコントロールチェンジ：エクスプレッション
+const MIDICC_EXPRESSION: u8 = 0x0B;
+
+/// MIDI出力のための独自追加アドレス
+
+/// 設定・取得対象のサンプル番号
+pub const DSP_ADDRESS_SRN_TARGET: u8 = 0x0E;
+/// プログラム番号 0x00 - 0x7FはGMと同等、0x80-0xFFはドラムキット音色
+pub const DSP_ADDRESS_SRN_PROGRAM: u8 = 0x1E;
+/// 中央に該当するノート（基準ピッチ） 0x00 - 0x7FはGMと同等、0x80-0xFFはドラムキット音色
+pub const DSP_ADDRESS_SRN_CENTER_NOTE: u8 = 0x2E;
 
 /// ボイス
 #[derive(Copy, Clone, Debug)]
@@ -31,6 +57,20 @@ struct MIDIVoiceRegister {
     pitch_mod: bool,
     /// ノイズ有効か
     noise: bool,
+    /// エンベロープが更新されたか
+    envelope_updated: bool,
+    /// ボリュームが更新されたか
+    volume_updated: bool,
+    /// 最後に発声した音のノート番号
+    last_note: u8,
+}
+
+/// 各サンプルに対応するマップ
+struct SampleSourceMap {
+    /// プログラム番号（音色）
+    program: [u8; 256],
+    /// 基準ノート（ピッチ）
+    center_note: [u8; 256],
 }
 
 /// MIDI-DSP
@@ -53,6 +93,10 @@ pub struct MIDIDSP {
     global_counter: u16,
     /// 各チャンネルのボイス
     voice: [MIDIVoiceRegister; 8],
+    /// 各サンプル番号に対応するマップ
+    sample_source_map: SampleSourceMap,
+    /// 設定対象のサンプル番号
+    sample_source_target: usize,
 }
 
 /// ピッチをMIDIノート番号に変換
@@ -62,16 +106,38 @@ fn pitch_to_note(center_note: u8, pitch: u16) -> u8 {
     // 例2）pitch = 4096 -> semitone =   0
     // 例3）pitch = 8192 -> semitone =  12(+1 octave)
     // 12 * log2(pitch / 4096) = 12 * (log2(pitch) - 12)
-    let semitone = 12.0 * (libm::log2f(pitch as f32) - 12.0); 
+    let semitone = 12.0 * (libm::log2f(pitch as f32) - 12.0);
     // 基準ノート値に加算
-    libm::roundf(center_note as f32 + semitone) as u8
+    libm::roundf(center_note as f32 + semitone).clamp(0.0, 127.0) as u8
+}
+
+/// LRボリュームをボリュームとパンの組に変換
+fn lrvolume_to_pan_and_volume(lrvolume: &[i8; 2]) -> (u8, u8) {
+    let lvol = lrvolume[0] as f32;
+    let rvol = lrvolume[1] as f32;
+    let volume = libm::roundf(libm::sqrtf(0.5 * (lvol * lvol + rvol * rvol))) as u8;
+    let pan = if lrvolume[0] == 0 && lrvolume[1] == 0 {
+        64
+    } else if lrvolume[0] == 0 {
+        127
+    } else if lrvolume[1] == 0 {
+        0
+    } else {
+        const FACTOR: f32 = 256.0 / PI;
+        libm::roundf(FACTOR * libm::atanf(lvol / rvol)) as u8
+    };
+    (volume, pan)
 }
 
 impl MIDIOutput {
     /// MIDIメッセージを追加
-    fn push_message(&mut self, message: &[u8; 3]) {
+    fn push_message(&mut self, data: &[u8]) {
+        assert!(data.len() <= 3);
         assert!(self.num_messages < MAX_NUM_MIDI_OUTPUT_MESSAGES);
-        self.messages[self.num_messages].copy_from_slice(message);
+        for i in 0..data.len() {
+            self.messages[self.num_messages].data[i] = data[i];
+        }
+        self.messages[self.num_messages].length = data.len();
         self.num_messages += 1;
     }
 }
@@ -90,22 +156,60 @@ impl MIDIVoiceRegister {
             noteon: false,
             pitch_mod: false,
             noise: false,
+            envelope_updated: false,
+            volume_updated: false,
+            last_note: 0,
         }
     }
 
     /// 32kHz定期処理
-    fn tick(&mut self, global_counter: u16, out: &mut MIDIOutput) {
+    fn tick(&mut self, global_counter: u16, srn_map: &SampleSourceMap, out: &mut MIDIOutput) {
         // キーオンが入ったとき
         if self.keyon {
             self.keyon = false;
+            // キーオフが漏れていた場合はキーオフを送信
             if self.noteon {
-                out.push_message(&[MSG_NOTE_OFF | self.channel, pitch_to_note(64, self.pitch), 0]);
+                out.push_message(&[MIDIMSG_NOTE_OFF | self.channel, self.last_note, 0]);
             }
             // エンベロープ設定
             self.eg.keyon();
             // ノートオン
-            out.push_message(&[MSG_NOTE_ON | self.channel, pitch_to_note(64, self.pitch), 100]);
-            self.noteon = true;
+            let program = srn_map.program[self.sample_source as usize];
+            let (volume, pan) = lrvolume_to_pan_and_volume(&self.volume);
+            if program <= 0x7F {
+                let note =
+                    pitch_to_note(srn_map.center_note[self.sample_source as usize], self.pitch);
+                out.push_message(&[MIDIMSG_PROGRAM_CHANGE | self.channel, program]); // TODO: もしかしたら過剰かも。プログラム番号の変化を見て送るか送らないかを判断するのがよさそう
+                out.push_message(&[
+                    MIDIMSG_CONTROL_CHANGE | self.channel,
+                    MIDICC_CHANNEL_VOLUME,
+                    volume,
+                ]);
+                out.push_message(&[MIDIMSG_CONTROL_CHANGE | self.channel, MIDICC_PANPOT, pan]);
+                out.push_message(&[
+                    MIDIMSG_CONTROL_CHANGE | self.channel,
+                    MIDICC_EXPRESSION,
+                    0x7F,
+                ]);
+                out.push_message(&[MIDIMSG_NOTE_ON | self.channel, note, 0x7F]);
+
+                self.noteon = true;
+                self.envelope_updated = false;
+                self.last_note = note;
+            } else {
+                // ドラム音色
+                out.push_message(&[
+                    MIDIMSG_CONTROL_CHANGE | MIDI_PERCUSSION_CHANNEL,
+                    MIDICC_PANPOT,
+                    pan,
+                ]);
+                out.push_message(&[
+                    MIDIMSG_NOTE_ON | MIDI_PERCUSSION_CHANNEL,
+                    program - 0x80,
+                    volume,
+                ]);
+                // ドラム音色にノートオフは送らないため、ノートオンに関する情報を残さない
+            }
         }
 
         // キーオフが入ったとき
@@ -113,15 +217,39 @@ impl MIDIVoiceRegister {
             self.keyoff = false;
             // ノートオフ
             if self.noteon {
-                out.push_message(&[MSG_NOTE_OFF | self.channel, pitch_to_note(64, self.pitch), 0]);
+                out.push_message(&[MIDIMSG_NOTE_OFF | self.channel, self.last_note, 0]);
             }
             self.noteon = false;
         }
 
         // エンベロープ内部状態更新
-        if self.eg.update(global_counter) {
-            // TODO: 変更があった時にエクスプレッションを設定？
+        if self.eg.update(global_counter) && !self.envelope_updated {
+            self.envelope_updated = true;
         }
+
+        // エンベロープ・ボリューム・パンの更新（過剰に送ると遅延につながるので間引く）
+        if self.noteon && global_counter % 320 == 0 {
+            if self.envelope_updated {
+                out.push_message(&[
+                    MIDIMSG_CONTROL_CHANGE | self.channel,
+                    MIDICC_EXPRESSION,
+                    ((self.eg.gain >> 4) & 0xFF) as u8,
+                ]);
+                self.envelope_updated = false;
+            }
+            if self.volume_updated {
+                let (volume, pan) = lrvolume_to_pan_and_volume(&self.volume);
+                out.push_message(&[
+                    MIDIMSG_CONTROL_CHANGE | self.channel,
+                    MIDICC_CHANNEL_VOLUME,
+                    volume,
+                ]);
+                out.push_message(&[MIDIMSG_CONTROL_CHANGE | self.channel, MIDICC_PANPOT, pan]);
+                self.volume_updated = false;
+            }
+        }
+
+        // TODO: ピッチベンド
     }
 }
 
@@ -149,6 +277,11 @@ impl SPCDSP for MIDIDSP {
                 MIDIVoiceRegister::new(7),
             ],
             global_counter: 0,
+            sample_source_map: SampleSourceMap {
+                program: [0; 256],
+                center_note: [64; 256],
+            },
+            sample_source_target: 0,
         }
     }
 
@@ -239,14 +372,25 @@ impl SPCDSP for MIDIDSP {
             | DSP_ADDRESS_FIR4 | DSP_ADDRESS_FIR5 | DSP_ADDRESS_FIR6 | DSP_ADDRESS_FIR7 => {
                 // 何もしない
             }
+            DSP_ADDRESS_SRN_TARGET => {
+                self.sample_source_target = value as usize;
+            }
+            DSP_ADDRESS_SRN_PROGRAM => {
+                self.sample_source_map.program[self.sample_source_target] = value;
+            }
+            DSP_ADDRESS_SRN_CENTER_NOTE => {
+                self.sample_source_map.center_note[self.sample_source_target] = value;
+            }
             address if ((address & 0xF) <= 0x9) => {
                 let ch = (address >> 4) as usize;
                 match address & 0xF {
                     DSP_ADDRESS_V0VOLL => {
                         self.voice[ch].volume[0] = value as i8;
+                        self.voice[ch].volume_updated = true;
                     }
                     DSP_ADDRESS_V0VOLR => {
                         self.voice[ch].volume[1] = value as i8;
+                        self.voice[ch].volume_updated = true;
                     }
                     DSP_ADDRESS_V0PITCHL => {
                         self.voice[ch].pitch = (self.voice[ch].pitch & 0xFF00) | (value as u16);
@@ -260,12 +404,15 @@ impl SPCDSP for MIDIDSP {
                     }
                     DSP_ADDRESS_V0ADSR1 => {
                         self.voice[ch].eg.set_adsr1(value);
+                        self.voice[ch].envelope_updated = true;
                     }
                     DSP_ADDRESS_V0ADSR2 => {
                         self.voice[ch].eg.set_adsr2(value);
+                        self.voice[ch].envelope_updated = true;
                     }
                     DSP_ADDRESS_V0GAIN => {
                         self.voice[ch].eg.set_gain(value);
+                        self.voice[ch].envelope_updated = true;
                     }
                     DSP_ADDRESS_V0ENVX => {
                         // 書き込みは無視される（読み取り用レジスタ）
@@ -358,6 +505,11 @@ impl SPCDSP for MIDIDSP {
             DSP_ADDRESS_EDL => 0, // 0を返す
             DSP_ADDRESS_FIR0 | DSP_ADDRESS_FIR1 | DSP_ADDRESS_FIR2 | DSP_ADDRESS_FIR3
             | DSP_ADDRESS_FIR4 | DSP_ADDRESS_FIR5 | DSP_ADDRESS_FIR6 | DSP_ADDRESS_FIR7 => 0, // 0を返す
+            DSP_ADDRESS_SRN_TARGET => self.sample_source_target as u8,
+            DSP_ADDRESS_SRN_PROGRAM => self.sample_source_map.program[self.sample_source_target],
+            DSP_ADDRESS_SRN_CENTER_NOTE => {
+                self.sample_source_map.center_note[self.sample_source_target]
+            }
             address if ((address & 0xF) <= 0x9) => {
                 let ch = (address >> 4) as usize;
                 match address & 0xF {
@@ -385,12 +537,15 @@ impl SPCDSP for MIDIDSP {
     /// 32kHz周期処理
     fn tick(&mut self, _ram: &mut [u8]) -> Option<MIDIOutput> {
         let mut out = MIDIOutput {
-            messages: [[0u8; 3]; MAX_NUM_MIDI_OUTPUT_MESSAGES],
+            messages: [MIDIMessage {
+                data: [0; 3],
+                length: 0,
+            }; MAX_NUM_MIDI_OUTPUT_MESSAGES],
             num_messages: 0,
         };
         // 全チャンネルの周期処理を実行
         for ch in 0..8 {
-            self.voice[ch].tick(self.global_counter, &mut out);
+            self.voice[ch].tick(self.global_counter, &self.sample_source_map, &mut out);
         }
         // ミュートならば無音
         if self.mute {

@@ -2,6 +2,7 @@ use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use fixed_resample::ReadStatus;
 use midir::{MidiOutput, MidiOutputPort};
 use spc::assembler::*;
+use spc::mididsp::*;
 use spc::spc::*;
 use spc::spc_file::*;
 use spc::types::*;
@@ -9,8 +10,8 @@ use std::env;
 use std::fmt::Error;
 use std::io::{stdin, stdout, Write};
 use std::num::NonZero;
-use std::time::{Duration, Instant};
 use std::thread;
+use std::time::{Duration, Instant};
 
 const CLOCK_TICK_CYCLE_64KHZ: u32 = 16; /* 64KHz周期のクロックサイクル SPCのクロック(1.024MHz)を64KHzで割って得られる = 1024000 / 64000 */
 
@@ -163,6 +164,45 @@ fn naive_midi_play(
     let mut emu: spc::spc::SPC<spc::mididsp::MIDIDSP> = SPC::new(&register, ram, dsp_register);
     let mut cycle_count = 0;
 
+    // DSPレジスタへの書き込み
+    fn write_dsp_data<T>(spc: &mut SPC<T>, address: u8, data: u8)
+    where
+        T: spc::types::SPCDSP,
+    {
+        // ラッチしていたアドレスを保存
+        let original_address = spc.read_ram_u8(SPC_ADDRESS_DSPADDR);
+        spc.write_ram_u8(SPC_ADDRESS_DSPADDR, address);
+        spc.write_ram_u8(SPC_ADDRESS_DSPDATA, data);
+        spc.write_ram_u8(SPC_ADDRESS_DSPADDR, original_address);
+    }
+
+    // Big Blueをうまく鳴らしてやりたい
+    write_dsp_data(&mut emu, DSP_ADDRESS_SRN_TARGET, 0x07);
+    write_dsp_data(&mut emu, DSP_ADDRESS_SRN_PROGRAM, 18);
+    write_dsp_data(&mut emu, DSP_ADDRESS_SRN_TARGET, 0x0A);
+    write_dsp_data(&mut emu, DSP_ADDRESS_SRN_PROGRAM, 39);
+    write_dsp_data(&mut emu, DSP_ADDRESS_SRN_CENTER_NOTE, 39);
+    write_dsp_data(&mut emu, DSP_ADDRESS_SRN_TARGET, 0x0F);
+    write_dsp_data(&mut emu, DSP_ADDRESS_SRN_PROGRAM, 32);
+    write_dsp_data(&mut emu, DSP_ADDRESS_SRN_TARGET, 0x17);
+    write_dsp_data(&mut emu, DSP_ADDRESS_SRN_PROGRAM, 56);
+    write_dsp_data(&mut emu, DSP_ADDRESS_SRN_TARGET, 0x11);
+    write_dsp_data(&mut emu, DSP_ADDRESS_SRN_PROGRAM, 35 + 0x80);
+    write_dsp_data(&mut emu, DSP_ADDRESS_SRN_TARGET, 0x14);
+    write_dsp_data(&mut emu, DSP_ADDRESS_SRN_PROGRAM, 38 + 0x80);
+    write_dsp_data(&mut emu, DSP_ADDRESS_SRN_TARGET, 0x15);
+    write_dsp_data(&mut emu, DSP_ADDRESS_SRN_PROGRAM, 44 + 0x80);
+    write_dsp_data(&mut emu, DSP_ADDRESS_SRN_TARGET, 0x1A);
+    write_dsp_data(&mut emu, DSP_ADDRESS_SRN_PROGRAM, 17);
+    write_dsp_data(&mut emu, DSP_ADDRESS_SRN_TARGET, 0x1C);
+    write_dsp_data(&mut emu, DSP_ADDRESS_SRN_PROGRAM, 38 + 0x80);
+    write_dsp_data(&mut emu, DSP_ADDRESS_SRN_TARGET, 0x1D); /* トランペット（高域担当） */
+    write_dsp_data(&mut emu, DSP_ADDRESS_SRN_PROGRAM, 56);
+    write_dsp_data(&mut emu, DSP_ADDRESS_SRN_CENTER_NOTE, 76);
+    write_dsp_data(&mut emu, DSP_ADDRESS_SRN_TARGET, 0x1E); /* トランペット（高域担当） */
+    write_dsp_data(&mut emu, DSP_ADDRESS_SRN_PROGRAM, 56); 
+    write_dsp_data(&mut emu, DSP_ADDRESS_SRN_CENTER_NOTE, 76);
+
     // 64kHz間隔 = 1000 / 64 micro = 15625 nano sec
     let interval = Duration::from_nanos(15625);
     let mut next = Instant::now();
@@ -175,8 +215,9 @@ fn naive_midi_play(
         // MIDI出力
         if let Some(out) = emu.clock_tick_64k_hz() {
             for i in 0..out.num_messages {
-                println!("{:X?}", out.messages[i]);
-                conn_out.send(&out.messages[i]).unwrap();
+                let msg = out.messages[i];
+                println!("{:X?}", msg.data);
+                conn_out.send(&msg.data[..msg.length]).unwrap();
             }
         }
         // ビジーループ
