@@ -186,6 +186,7 @@ fn naive_midi_play(
     write_dsp_data(&mut emu, DSP_ADDRESS_SRN_PROGRAM, 32);
     write_dsp_data(&mut emu, DSP_ADDRESS_SRN_TARGET, 0x17);
     write_dsp_data(&mut emu, DSP_ADDRESS_SRN_PROGRAM, 56);
+    write_dsp_data(&mut emu, DSP_ADDRESS_SRN_CENTER_NOTE, 76);
     write_dsp_data(&mut emu, DSP_ADDRESS_SRN_TARGET, 0x11);
     write_dsp_data(&mut emu, DSP_ADDRESS_SRN_PROGRAM, 35 + 0x80);
     write_dsp_data(&mut emu, DSP_ADDRESS_SRN_TARGET, 0x14);
