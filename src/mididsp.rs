@@ -112,7 +112,7 @@ fn pitch_to_note(center_note: u8, pitch: u16) -> u8 {
 }
 
 /// LRボリュームをボリュームとパンの組に変換
-fn lrvolume_to_pan_and_volume(lrvolume: &[i8; 2]) -> (u8, u8) {
+fn lrvolume_to_volume_and_pan(lrvolume: &[i8; 2]) -> (u8, u8) {
     let lvol = lrvolume[0] as f32;
     let rvol = lrvolume[1] as f32;
     let volume = libm::roundf(libm::sqrtf(0.5 * (lvol * lvol + rvol * rvol))) as u8;
@@ -175,7 +175,7 @@ impl MIDIVoiceRegister {
             self.eg.keyon();
             // ノートオン
             let program = srn_map.program[self.sample_source as usize];
-            let (volume, pan) = lrvolume_to_pan_and_volume(&self.volume);
+            let (volume, pan) = lrvolume_to_volume_and_pan(&self.volume);
             if program <= 0x7F {
                 let note =
                     pitch_to_note(srn_map.center_note[self.sample_source as usize], self.pitch);
@@ -238,7 +238,7 @@ impl MIDIVoiceRegister {
                 self.envelope_updated = false;
             }
             if self.volume_updated {
-                let (volume, pan) = lrvolume_to_pan_and_volume(&self.volume);
+                let (volume, pan) = lrvolume_to_volume_and_pan(&self.volume);
                 out.push_message(&[
                     MIDIMSG_CONTROL_CHANGE | self.channel,
                     MIDICC_CHANNEL_VOLUME,
