@@ -17,26 +17,26 @@ const PSW_FLAG_Z: u8 = 1 << 1;
 /// キャリーフラグ
 const PSW_FLAG_C: u8 = 1 << 0;
 /// スタックのベースアドレス
-const STACK_BASE_ADDRESS: usize = 0x100;
+const STACK_BASE: usize = 0x100;
 /// テストレジスタアドレス
-const TEST_ADDRESS: usize = 0x00F0;
+pub const SPC_ADDRESS_TEST: usize = 0x00F0;
 /// コントロールレジスタアドレス
-const CONTROL_ADDRESS: usize = 0x00F1;
+pub const SPC_ADDRESS_CONTROL: usize = 0x00F1;
 /// DSPレジスタアドレス
-const DSPADDR_ADDRESS: usize = 0x00F2;
+pub const SPC_ADDRESS_DSPADDR: usize = 0x00F2;
 /// DSPデータアドレス
-const DSPDATA_ADDRESS: usize = 0x00F3;
+pub const SPC_ADDRESS_DSPDATA: usize = 0x00F3;
 /// CPUポートのベースアドレス
-const CPUIO0_ADDRESS: usize = 0x00F4;
-const CPUIO1_ADDRESS: usize = 0x00F5;
-const CPUIO2_ADDRESS: usize = 0x00F6;
-const CPUIO3_ADDRESS: usize = 0x00F7;
+pub const SPC_ADDRESS_CPUIO0: usize = 0x00F4;
+pub const SPC_ADDRESS_CPUIO1: usize = 0x00F5;
+pub const SPC_ADDRESS_CPUIO2: usize = 0x00F6;
+pub const SPC_ADDRESS_CPUIO3: usize = 0x00F7;
 /// タイマーターゲットのベースアドレス
-const T0TARGET_ADDRESS: usize = 0x00FA;
+pub const SPC_ADDRESS_T0TARGET: usize = 0x00FA;
 /// タイマーカウントのベースアドレス
-const T0OUT_ADDRESS: usize = 0x00FD;
-const T1OUT_ADDRESS: usize = 0x00FE;
-const T2OUT_ADDRESS: usize = 0x00FF;
+pub const SPC_ADDRESS_T0OUT: usize = 0x00FD;
+pub const SPC_ADDRESS_T1OUT: usize = 0x00FE;
+pub const SPC_ADDRESS_T2OUT: usize = 0x00FF;
 
 /// SPCエミュレータ
 pub struct SPC<T>
@@ -90,11 +90,11 @@ where
         emu.ram.copy_from_slice(ram);
 
         // ramの内容からエミュレータをセットアップ
-        emu.write_ram_u8(CONTROL_ADDRESS, ram[CONTROL_ADDRESS]);
+        emu.write_ram_u8(SPC_ADDRESS_CONTROL, ram[SPC_ADDRESS_CONTROL]);
 
         // CPU PORTの入力は初期状態を維持
         for i in 0..4 {
-            emu.cpu_port_in[i] = ram[CPUIO0_ADDRESS + i];
+            emu.cpu_port_in[i] = ram[SPC_ADDRESS_CPUIO0 + i];
         }
 
         // DSPレジスタのセットアップ
@@ -119,13 +119,13 @@ where
 
     /// クロックカウンタの更新
     fn countup_clock(&mut self, id: usize) {
-        let target = self.ram[T0TARGET_ADDRESS + id];
+        let target = self.ram[SPC_ADDRESS_T0TARGET + id];
         self.timer_internal_count[id] = self.timer_internal_count[id].wrapping_add(1);
         if self.timer_internal_count[id] >= target {
-            let mut counter = self.ram[T0OUT_ADDRESS + id];
+            let mut counter = self.ram[SPC_ADDRESS_T0OUT + id];
             self.timer_internal_count[id] = 0;
             counter = counter.wrapping_add(1);
-            self.ram[T0OUT_ADDRESS + id] = counter & 0x0F;
+            self.ram[SPC_ADDRESS_T0OUT + id] = counter & 0x0F;
         }
     }
 
@@ -160,9 +160,9 @@ where
             if (value & id_bit) != 0 {
                 self.timer_enable[id] = true;
                 // クリア状態からセットするときは内部カウントをリセット
-                if (self.ram[CONTROL_ADDRESS] & id_bit) == 0 {
+                if (self.ram[SPC_ADDRESS_CONTROL] & id_bit) == 0 {
                     self.timer_internal_count[id] = 0;
-                    self.ram[T0OUT_ADDRESS + id] = 0;
+                    self.ram[SPC_ADDRESS_T0OUT + id] = 0;
                 }
             } else {
                 self.timer_enable[id] = false;
@@ -173,45 +173,45 @@ where
     /// CPUIOリードポートのクリア
     fn clear_cpuio_read_ports(&mut self, value: u8) {
         if (value & 0x10) != 0 {
-            self.write_ram_u8(CPUIO0_ADDRESS, 0);
-            self.write_ram_u8(CPUIO1_ADDRESS, 0);
+            self.write_ram_u8(SPC_ADDRESS_CPUIO0, 0);
+            self.write_ram_u8(SPC_ADDRESS_CPUIO1, 0);
             self.cpu_port_in[0] = 0;
             self.cpu_port_in[1] = 0;
         }
         if (value & 0x20) != 0 {
-            self.write_ram_u8(CPUIO2_ADDRESS, 0);
-            self.write_ram_u8(CPUIO3_ADDRESS, 0);
+            self.write_ram_u8(SPC_ADDRESS_CPUIO2, 0);
+            self.write_ram_u8(SPC_ADDRESS_CPUIO3, 0);
             self.cpu_port_in[2] = 0;
             self.cpu_port_in[3] = 0;
         }
     }
 
     /// RAMへの書き込み
-    fn write_ram_u8(&mut self, address: usize, value: u8) {
+    pub fn write_ram_u8(&mut self, address: usize, value: u8) {
         // CPUレジスタへの書き込み
-        if (address >= TEST_ADDRESS) && (address <= T2OUT_ADDRESS) {
+        if (address >= SPC_ADDRESS_TEST) && (address <= SPC_ADDRESS_T2OUT) {
             match address {
-                TEST_ADDRESS => {
+                SPC_ADDRESS_TEST => {
                     panic!("CANNOT write to test register!!");
                 }
-                CONTROL_ADDRESS => {
+                SPC_ADDRESS_CONTROL => {
                     self.write_timer_register(value);
                     self.clear_cpuio_read_ports(value);
                     if (value & 0x80) != 0 {
                         self.ipl_rom = true;
                     }
                 }
-                DSPADDR_ADDRESS => {
+                SPC_ADDRESS_DSPADDR => {
                     // 何もしないがアドレスをラッチすべき？
                 }
-                DSPDATA_ADDRESS => {
+                SPC_ADDRESS_DSPDATA => {
                     self.dsp
-                        .write_register(&self.ram, self.ram[DSPADDR_ADDRESS], value);
+                        .write_register(&self.ram, self.ram[SPC_ADDRESS_DSPADDR], value);
                 }
-                CPUIO0_ADDRESS | CPUIO1_ADDRESS | CPUIO2_ADDRESS | CPUIO3_ADDRESS => {
-                    self.cpu_port_out[address - CPUIO0_ADDRESS] = value;
+                SPC_ADDRESS_CPUIO0 | SPC_ADDRESS_CPUIO1 | SPC_ADDRESS_CPUIO2 | SPC_ADDRESS_CPUIO3 => {
+                    self.cpu_port_out[address - SPC_ADDRESS_CPUIO0] = value;
                 }
-                T0OUT_ADDRESS | T1OUT_ADDRESS | T2OUT_ADDRESS => {
+                SPC_ADDRESS_T0OUT | SPC_ADDRESS_T1OUT | SPC_ADDRESS_T2OUT => {
                     panic!("CANNOT write to TxOUT register!!");
                 }
                 _ => {}
@@ -222,27 +222,27 @@ where
     }
 
     /// RAMからの読み込み
-    fn read_ram_u8(&mut self, address: usize) -> u8 {
+    pub fn read_ram_u8(&mut self, address: usize) -> u8 {
         trace!("R: 0x{:04X} -> {:02X}", address, self.ram[address]);
         // CPUレジスタからの読み込み
-        if (address >= TEST_ADDRESS) && (address <= T2OUT_ADDRESS) {
+        if (address >= SPC_ADDRESS_TEST) && (address <= SPC_ADDRESS_T2OUT) {
             match address {
-                TEST_ADDRESS => {
+                SPC_ADDRESS_TEST => {
                     // 何もしない（実機でどうなるかは不明）
                 }
-                CONTROL_ADDRESS => {
+                SPC_ADDRESS_CONTROL => {
                     // 何もしない
                 }
-                DSPADDR_ADDRESS => {
+                SPC_ADDRESS_DSPADDR => {
                     // 何もしないがアドレスをラッチすべき？
                 }
-                DSPDATA_ADDRESS => {
-                    return self.dsp.read_register(&self.ram, self.ram[DSPADDR_ADDRESS]);
+                SPC_ADDRESS_DSPDATA => {
+                    return self.dsp.read_register(&self.ram, self.ram[SPC_ADDRESS_DSPADDR]);
                 }
-                CPUIO0_ADDRESS | CPUIO1_ADDRESS | CPUIO2_ADDRESS | CPUIO3_ADDRESS => {
-                    return self.cpu_port_in[address - CPUIO0_ADDRESS];
+                SPC_ADDRESS_CPUIO0 | SPC_ADDRESS_CPUIO1 | SPC_ADDRESS_CPUIO2 | SPC_ADDRESS_CPUIO3 => {
+                    return self.cpu_port_in[address - SPC_ADDRESS_CPUIO0];
                 }
-                T0OUT_ADDRESS | T1OUT_ADDRESS | T2OUT_ADDRESS => {
+                SPC_ADDRESS_T0OUT | SPC_ADDRESS_T1OUT | SPC_ADDRESS_T2OUT => {
                     // 注意：読み出しによってタイマーの値はクリアされる
                     let ret = self.ram[address];
                     self.ram[address] = 0;
@@ -302,14 +302,14 @@ where
 
     /// スタックにデータをPUSH
     fn push_stack(&mut self, value: u8) {
-        self.write_ram_u8(STACK_BASE_ADDRESS + self.reg.sp as usize, value);
+        self.write_ram_u8(STACK_BASE + self.reg.sp as usize, value);
         self.reg.sp -= 1;
     }
 
     /// スタックからデータをPOP
     fn pop_stack(&mut self) -> u8 {
         self.reg.sp += 1;
-        self.read_ram_u8(STACK_BASE_ADDRESS + self.reg.sp as usize)
+        self.read_ram_u8(STACK_BASE + self.reg.sp as usize)
     }
 
     /// オペコードを実行
