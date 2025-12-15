@@ -68,7 +68,7 @@ struct MIDIVoiceRegister {
     /// ピッチベンドの基準ピッチ（最後に発声した音のピッチ）
     pitch_bend_base: u16,
     /// 最後に設定したピッチベンド値
-    last_pitch_bend: u16,
+    last_pitch: u16,
 }
 
 /// 各サンプルに対応するマップ
@@ -166,7 +166,7 @@ impl MIDIVoiceRegister {
             volume_updated: false,
             last_note: 0,
             pitch_bend_base: 0,
-            last_pitch_bend: 0,
+            last_pitch: 0,
         }
     }
 
@@ -199,13 +199,14 @@ impl MIDIVoiceRegister {
                     MIDICC_EXPRESSION,
                     0x7F,
                 ]);
-                out.push_message(&[MIDIMSG_NOTE_ON | self.channel, note, 0x7F]);
+                // ピッチベンドの設定値を中心(8192)に戻す
                 out.push_message(&[MIDIMSG_PITCH_BEND | self.channel, 0, 0x40]);
+                out.push_message(&[MIDIMSG_NOTE_ON | self.channel, note, 0x7F]);
 
-                // ピッチベンドセンシティビティを設定（再生直後にやればいいかも...）
+                // ピッチベンドセンシティビティを上下1オクターブに設定（再生直後にやればいいかも...）
                 out.push_message(&[MIDIMSG_CONTROL_CHANGE | self.channel, 0x65, 0x00]);
                 out.push_message(&[MIDIMSG_CONTROL_CHANGE | self.channel, 0x64, 0x00]);
-                out.push_message(&[MIDIMSG_CONTROL_CHANGE | self.channel, 0x06,   12]); // 12半音（1オクターブ）
+                out.push_message(&[MIDIMSG_CONTROL_CHANGE | self.channel, 0x06, 12]); // 12半音（1オクターブ）
                 out.push_message(&[MIDIMSG_CONTROL_CHANGE | self.channel, 0x26, 0x00]);
                 // RPNヌルに設定
                 out.push_message(&[MIDIMSG_CONTROL_CHANGE | self.channel, 0x65, 0x7F]);
@@ -215,7 +216,7 @@ impl MIDIVoiceRegister {
                 self.envelope_updated = false;
                 self.last_note = note;
                 self.pitch_bend_base = self.pitch;
-                self.last_pitch_bend = self.pitch;
+                self.last_pitch = self.pitch;
             } else {
                 // ドラム音色
                 out.push_message(&[
@@ -249,7 +250,7 @@ impl MIDIVoiceRegister {
 
         // 再生パラメータ更新（過剰に送ると遅延につながるので間引く）
         if self.noteon && global_counter % 320 == 0 {
-            // エンベロープ
+            // エクスプレッション（エンベロープ）
             if self.envelope_updated {
                 out.push_message(&[
                     MIDIMSG_CONTROL_CHANGE | self.channel,
@@ -270,18 +271,21 @@ impl MIDIVoiceRegister {
                 self.volume_updated = false;
             }
             // ピッチベンド
-            if self.noteon && self.last_pitch_bend != self.pitch {
+            if self.noteon && self.last_pitch != self.pitch {
+                // [-1,1]オクターブを[-8192,8192]に対応付ける
                 let pitch_bend = libm::roundf(
-                    libm::log2f((self.pitch as f32) / (self.pitch_bend_base as f32)).clamp(-1.0, 1.0)
-                    * 8191.0,
+                    libm::log2f((self.pitch as f32) / (self.pitch_bend_base as f32))
+                        .clamp(-1.0, 1.0)
+                        * 8191.0,
                 ) as i16
                     + 8192;
+                // 7bitを2分割
                 out.push_message(&[
                     MIDIMSG_PITCH_BEND | self.channel,
-                    (pitch_bend & 0x7F) as u8,
-                    ((pitch_bend >> 7) & 0x7F) as u8,
+                    (pitch_bend & 0x7F) as u8,        // LSB
+                    ((pitch_bend >> 7) & 0x7F) as u8, // MSB
                 ]);
-                self.last_pitch_bend = self.pitch;
+                self.last_pitch = self.pitch;
             }
         }
     }
