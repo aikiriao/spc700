@@ -15,6 +15,8 @@ const MIDIMSG_NOTE_OFF: u8 = 0x80;
 const MIDIMSG_CONTROL_CHANGE: u8 = 0xB0;
 /// MIDIメッセージ：プログラムチェンジ
 const MIDIMSG_PROGRAM_CHANGE: u8 = 0xC0;
+/// MIDIメッセージ：ピッチベンド
+const MIDIMSG_PITCH_BEND: u8 = 0xE0;
 
 /// MIDIコントロールチェンジ：チャンネルボリューム
 const MIDICC_CHANNEL_VOLUME: u8 = 0x07;
@@ -63,6 +65,10 @@ struct MIDIVoiceRegister {
     volume_updated: bool,
     /// 最後に発声した音のノート番号
     last_note: u8,
+    /// ピッチベンドの基準ピッチ（最後に発声した音のピッチ）
+    pitch_bend_base: u16,
+    /// 最後に設定したピッチベンド値
+    last_pitch_bend: u16,
 }
 
 /// 各サンプルに対応するマップ
@@ -159,6 +165,8 @@ impl MIDIVoiceRegister {
             envelope_updated: false,
             volume_updated: false,
             last_note: 0,
+            pitch_bend_base: 0,
+            last_pitch_bend: 0,
         }
     }
 
@@ -192,10 +200,22 @@ impl MIDIVoiceRegister {
                     0x7F,
                 ]);
                 out.push_message(&[MIDIMSG_NOTE_ON | self.channel, note, 0x7F]);
+                out.push_message(&[MIDIMSG_PITCH_BEND | self.channel, 0, 0x40]);
+
+                // ピッチベンドセンシティビティを設定（再生直後にやればいいかも...）
+                out.push_message(&[MIDIMSG_CONTROL_CHANGE | self.channel, 0x65, 0x00]);
+                out.push_message(&[MIDIMSG_CONTROL_CHANGE | self.channel, 0x64, 0x00]);
+                out.push_message(&[MIDIMSG_CONTROL_CHANGE | self.channel, 0x06,   12]); // 12半音（1オクターブ）
+                out.push_message(&[MIDIMSG_CONTROL_CHANGE | self.channel, 0x26, 0x00]);
+                // RPNヌルに設定
+                out.push_message(&[MIDIMSG_CONTROL_CHANGE | self.channel, 0x65, 0x7F]);
+                out.push_message(&[MIDIMSG_CONTROL_CHANGE | self.channel, 0x64, 0x7F]);
 
                 self.noteon = true;
                 self.envelope_updated = false;
                 self.last_note = note;
+                self.pitch_bend_base = self.pitch;
+                self.last_pitch_bend = self.pitch;
             } else {
                 // ドラム音色
                 out.push_message(&[
@@ -227,8 +247,9 @@ impl MIDIVoiceRegister {
             self.envelope_updated = true;
         }
 
-        // エンベロープ・ボリューム・パンの更新（過剰に送ると遅延につながるので間引く）
+        // 再生パラメータ更新（過剰に送ると遅延につながるので間引く）
         if self.noteon && global_counter % 320 == 0 {
+            // エンベロープ
             if self.envelope_updated {
                 out.push_message(&[
                     MIDIMSG_CONTROL_CHANGE | self.channel,
@@ -237,6 +258,7 @@ impl MIDIVoiceRegister {
                 ]);
                 self.envelope_updated = false;
             }
+            // ボリューム・パン
             if self.volume_updated {
                 let (volume, pan) = lrvolume_to_volume_and_pan(&self.volume);
                 out.push_message(&[
@@ -247,9 +269,21 @@ impl MIDIVoiceRegister {
                 out.push_message(&[MIDIMSG_CONTROL_CHANGE | self.channel, MIDICC_PANPOT, pan]);
                 self.volume_updated = false;
             }
+            // ピッチベンド
+            if self.noteon && self.last_pitch_bend != self.pitch {
+                let pitch_bend = libm::roundf(
+                    libm::log2f((self.pitch as f32) / (self.pitch_bend_base as f32)).clamp(-1.0, 1.0)
+                    * 8191.0,
+                ) as i16
+                    + 8192;
+                out.push_message(&[
+                    MIDIMSG_PITCH_BEND | self.channel,
+                    (pitch_bend & 0x7F) as u8,
+                    ((pitch_bend >> 7) & 0x7F) as u8,
+                ]);
+                self.last_pitch_bend = self.pitch;
+            }
         }
-
-        // TODO: ピッチベンド
     }
 }
 
