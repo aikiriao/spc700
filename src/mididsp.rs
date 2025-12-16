@@ -232,7 +232,7 @@ impl MIDIVoiceRegister {
                 self.last_note = note;
             }
             self.noteon = true;
-            self.noteon_drum = program >= 0x7F;
+            self.noteon_drum = program > 0x7F;
         }
 
         // キーオフが入ったとき
