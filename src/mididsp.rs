@@ -55,6 +55,8 @@ struct MIDIVoiceRegister {
     keyoff: bool,
     /// ノートオンされているか
     noteon: bool,
+    /// ノートオンした音はドラムか
+    noteon_drum: bool,
     /// 前ボイス出力のピッチモジュレーションをするか
     pitch_mod: bool,
     /// ノイズ有効か
@@ -160,6 +162,7 @@ impl MIDIVoiceRegister {
             keyon: false,
             keyoff: false,
             noteon: false,
+            noteon_drum: false,
             pitch_mod: false,
             noise: false,
             envelope_updated: false,
@@ -175,9 +178,13 @@ impl MIDIVoiceRegister {
         // キーオンが入ったとき
         if self.keyon {
             self.keyon = false;
-            // キーオフが漏れていた場合はキーオフを送信
+            // キーオフが漏れていた場合はノートオフを送信
             if self.noteon {
-                out.push_message(&[MIDIMSG_NOTE_OFF | self.channel, self.last_note, 0]);
+                if self.noteon_drum {
+                    out.push_message(&[MIDIMSG_NOTE_OFF | MIDI_PERCUSSION_CHANNEL, self.last_note, 0]);
+                } else {
+                    out.push_message(&[MIDIMSG_NOTE_OFF | self.channel, self.last_note, 0]);
+                }
             }
             // エンベロープ設定
             self.eg.keyon();
@@ -212,12 +219,12 @@ impl MIDIVoiceRegister {
                 out.push_message(&[MIDIMSG_CONTROL_CHANGE | self.channel, 0x65, 0x7F]);
                 out.push_message(&[MIDIMSG_CONTROL_CHANGE | self.channel, 0x64, 0x7F]);
 
-                self.noteon = true;
                 self.envelope_updated = false;
                 self.last_note = note;
                 self.pitch_bend_base = self.pitch;
                 self.last_pitch = self.pitch;
             } else {
+                let note = program - 0x80;
                 // ドラム音色
                 out.push_message(&[
                     MIDIMSG_CONTROL_CHANGE | MIDI_PERCUSSION_CHANNEL,
@@ -226,11 +233,13 @@ impl MIDIVoiceRegister {
                 ]);
                 out.push_message(&[
                     MIDIMSG_NOTE_ON | MIDI_PERCUSSION_CHANNEL,
-                    program - 0x80,
+                    note,
                     volume,
                 ]);
-                // ドラム音色にノートオフは送らないため、ノートオンに関する情報を残さない
+                self.last_note = note;
             }
+            self.noteon = true;
+            self.noteon_drum = (program <= 0x7F);
         }
 
         // キーオフが入ったとき
@@ -238,9 +247,13 @@ impl MIDIVoiceRegister {
             self.keyoff = false;
             // ノートオフ
             if self.noteon {
-                out.push_message(&[MIDIMSG_NOTE_OFF | self.channel, self.last_note, 0]);
+                if self.noteon_drum {
+                    out.push_message(&[MIDIMSG_NOTE_OFF | MIDI_PERCUSSION_CHANNEL, self.last_note, 0]);
+                } else {
+                    out.push_message(&[MIDIMSG_NOTE_OFF | self.channel, self.last_note, 0]);
+                }
+                self.noteon = false;
             }
-            self.noteon = false;
         }
 
         // エンベロープ内部状態更新
