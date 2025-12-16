@@ -71,6 +71,8 @@ struct MIDIVoiceRegister {
     pitch_bend_base: u16,
     /// 最後に設定したピッチベンド値
     last_pitch: u16,
+    /// 最後に設定したプログラム番号
+    last_program: u8,
 }
 
 /// 各サンプルに対応するマップ
@@ -172,6 +174,7 @@ impl MIDIVoiceRegister {
             last_note: 0,
             pitch_bend_base: 0,
             last_pitch: 0,
+            last_program: 0,
         }
     }
 
@@ -200,7 +203,11 @@ impl MIDIVoiceRegister {
             if program <= 0x7F {
                 let note =
                     pitch_to_note(srn_map.center_note[self.sample_source as usize], self.pitch);
-                out.push_message(&[MIDIMSG_PROGRAM_CHANGE | self.channel, program]); // TODO: もしかしたら過剰かも。プログラム番号の変化を見て送るか送らないかを判断するのがよさそう
+                // 音色が変わっていたらプログラムチェンジを送信
+                if program != self.last_program {
+                    out.push_message(&[MIDIMSG_PROGRAM_CHANGE | self.channel, program]);
+                    self.last_program = program;
+                }
                 out.push_message(&[
                     MIDIMSG_CONTROL_CHANGE | self.channel,
                     MIDICC_CHANNEL_VOLUME,
@@ -258,7 +265,7 @@ impl MIDIVoiceRegister {
             self.envelope_updated = true;
         }
 
-        // 再生パラメータ更新（過剰に送ると遅延につながるので間引く）
+        // 再生パラメータ更新（過剰に送ると遅延するので間引く）
         if self.noteon && global_counter % 320 == 0 {
             // エクスプレッション（エンベロープ）
             if self.envelope_updated {
