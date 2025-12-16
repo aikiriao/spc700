@@ -105,6 +105,8 @@ pub struct MIDIDSP {
     sample_source_map: SampleSourceMap,
     /// 設定対象のサンプル番号
     sample_source_target: usize,
+    /// 最初のメッセージを送ったか？
+    send_initial_message: bool,
 }
 
 /// ピッチをMIDIノート番号に変換
@@ -181,7 +183,11 @@ impl MIDIVoiceRegister {
             // キーオフが漏れていた場合はノートオフを送信
             if self.noteon {
                 if self.noteon_drum {
-                    out.push_message(&[MIDIMSG_NOTE_OFF | MIDI_PERCUSSION_CHANNEL, self.last_note, 0]);
+                    out.push_message(&[
+                        MIDIMSG_NOTE_OFF | MIDI_PERCUSSION_CHANNEL,
+                        self.last_note,
+                        0,
+                    ]);
                 } else {
                     out.push_message(&[MIDIMSG_NOTE_OFF | self.channel, self.last_note, 0]);
                 }
@@ -210,15 +216,6 @@ impl MIDIVoiceRegister {
                 out.push_message(&[MIDIMSG_PITCH_BEND | self.channel, 0, 0x40]);
                 out.push_message(&[MIDIMSG_NOTE_ON | self.channel, note, 0x7F]);
 
-                // ピッチベンドセンシティビティを上下1オクターブに設定（再生直後にやればいいかも...）
-                out.push_message(&[MIDIMSG_CONTROL_CHANGE | self.channel, 0x65, 0x00]);
-                out.push_message(&[MIDIMSG_CONTROL_CHANGE | self.channel, 0x64, 0x00]);
-                out.push_message(&[MIDIMSG_CONTROL_CHANGE | self.channel, 0x06, 12]); // 12半音（1オクターブ）
-                out.push_message(&[MIDIMSG_CONTROL_CHANGE | self.channel, 0x26, 0x00]);
-                // RPNヌルに設定
-                out.push_message(&[MIDIMSG_CONTROL_CHANGE | self.channel, 0x65, 0x7F]);
-                out.push_message(&[MIDIMSG_CONTROL_CHANGE | self.channel, 0x64, 0x7F]);
-
                 self.envelope_updated = false;
                 self.last_note = note;
                 self.pitch_bend_base = self.pitch;
@@ -231,15 +228,11 @@ impl MIDIVoiceRegister {
                     MIDICC_PANPOT,
                     pan,
                 ]);
-                out.push_message(&[
-                    MIDIMSG_NOTE_ON | MIDI_PERCUSSION_CHANNEL,
-                    note,
-                    volume,
-                ]);
+                out.push_message(&[MIDIMSG_NOTE_ON | MIDI_PERCUSSION_CHANNEL, note, volume]);
                 self.last_note = note;
             }
             self.noteon = true;
-            self.noteon_drum = (program <= 0x7F);
+            self.noteon_drum = program >= 0x7F;
         }
 
         // キーオフが入ったとき
@@ -248,7 +241,11 @@ impl MIDIVoiceRegister {
             // ノートオフ
             if self.noteon {
                 if self.noteon_drum {
-                    out.push_message(&[MIDIMSG_NOTE_OFF | MIDI_PERCUSSION_CHANNEL, self.last_note, 0]);
+                    out.push_message(&[
+                        MIDIMSG_NOTE_OFF | MIDI_PERCUSSION_CHANNEL,
+                        self.last_note,
+                        0,
+                    ]);
                 } else {
                     out.push_message(&[MIDIMSG_NOTE_OFF | self.channel, self.last_note, 0]);
                 }
@@ -318,7 +315,7 @@ impl SPCDSP for MIDIDSP {
             echo: [false; 8],
             brr_dir_page: 0,
             voice: [
-                MIDIVoiceRegister::new(0),
+                // 0(1ch)は特別な意味を持つ場合があるので空けておく
                 MIDIVoiceRegister::new(1),
                 MIDIVoiceRegister::new(2),
                 MIDIVoiceRegister::new(3),
@@ -326,6 +323,7 @@ impl SPCDSP for MIDIDSP {
                 MIDIVoiceRegister::new(5),
                 MIDIVoiceRegister::new(6),
                 MIDIVoiceRegister::new(7),
+                MIDIVoiceRegister::new(8),
             ],
             global_counter: 0,
             sample_source_map: SampleSourceMap {
@@ -333,6 +331,7 @@ impl SPCDSP for MIDIDSP {
                 center_note: [64; 256],
             },
             sample_source_target: 0,
+            send_initial_message: false,
         }
     }
 
@@ -345,6 +344,9 @@ impl SPCDSP for MIDIDSP {
         for i in 0..128 {
             self.write_register(ram, i, dsp_register[i as usize]);
         }
+
+        // 再生開始からやり直す
+        self.send_initial_message = false;
     }
 
     /// DSPレジスタの書き込み処理
@@ -594,6 +596,20 @@ impl SPCDSP for MIDIDSP {
             }; MAX_NUM_MIDI_OUTPUT_MESSAGES],
             num_messages: 0,
         };
+        // 再生直後のメッセージを送信
+        if !self.send_initial_message {
+            for ch in 0..8 {
+                // ピッチベンドセンシティビティを上下1オクターブに設定
+                out.push_message(&[MIDIMSG_CONTROL_CHANGE | self.voice[ch].channel, 0x65, 0x00]);
+                out.push_message(&[MIDIMSG_CONTROL_CHANGE | self.voice[ch].channel, 0x64, 0x00]);
+                out.push_message(&[MIDIMSG_CONTROL_CHANGE | self.voice[ch].channel, 0x06, 12]); // 12半音（1オクターブ）
+                out.push_message(&[MIDIMSG_CONTROL_CHANGE | self.voice[ch].channel, 0x26, 0x00]);
+                // RPNヌルに設定
+                out.push_message(&[MIDIMSG_CONTROL_CHANGE | self.voice[ch].channel, 0x65, 0x7F]);
+                out.push_message(&[MIDIMSG_CONTROL_CHANGE | self.voice[ch].channel, 0x64, 0x7F]);
+            }
+            self.send_initial_message = true;
+        }
         // 全チャンネルの周期処理を実行
         for ch in 0..8 {
             self.voice[ch].tick(self.global_counter, &self.sample_source_map, &mut out);
