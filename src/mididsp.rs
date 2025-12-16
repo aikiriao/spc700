@@ -185,15 +185,12 @@ impl MIDIVoiceRegister {
             self.keyon = false;
             // キーオフが漏れていた場合はノートオフを送信
             if self.noteon {
-                if self.noteon_drum {
-                    out.push_message(&[
-                        MIDIMSG_NOTE_OFF | MIDI_PERCUSSION_CHANNEL,
-                        self.last_note,
-                        0,
-                    ]);
+                let first_byte = if self.noteon_drum {
+                    MIDIMSG_NOTE_OFF | MIDI_PERCUSSION_CHANNEL
                 } else {
-                    out.push_message(&[MIDIMSG_NOTE_OFF | self.channel, self.last_note, 0]);
-                }
+                    MIDIMSG_NOTE_OFF | self.channel
+                };
+                out.push_message(&[first_byte, self.last_note, 0]);
             }
             // エンベロープ設定
             self.eg.keyon();
@@ -247,15 +244,12 @@ impl MIDIVoiceRegister {
             self.keyoff = false;
             // ノートオフ
             if self.noteon {
-                if self.noteon_drum {
-                    out.push_message(&[
-                        MIDIMSG_NOTE_OFF | MIDI_PERCUSSION_CHANNEL,
-                        self.last_note,
-                        0,
-                    ]);
+                let first_byte = if self.noteon_drum {
+                    MIDIMSG_NOTE_OFF | MIDI_PERCUSSION_CHANNEL
                 } else {
-                    out.push_message(&[MIDIMSG_NOTE_OFF | self.channel, self.last_note, 0]);
-                }
+                    MIDIMSG_NOTE_OFF | self.channel
+                };
+                out.push_message(&[first_byte, self.last_note, 0]);
                 self.noteon = false;
             }
         }
@@ -291,9 +285,8 @@ impl MIDIVoiceRegister {
             if self.noteon && self.last_pitch != self.pitch {
                 // [-1,1]オクターブを[-8192,8192]に対応付ける
                 let pitch_bend = libm::roundf(
-                    libm::log2f((self.pitch as f32) / (self.pitch_bend_base as f32))
-                        .clamp(-1.0, 1.0)
-                        * 8191.0,
+                    (libm::log2f((self.pitch as f32) / (self.pitch_bend_base as f32)) * 8192.0)
+                        .clamp(-8192.0, 8191.0),
                 ) as i16
                     + 8192;
                 // 7bitを2分割
@@ -606,14 +599,15 @@ impl SPCDSP for MIDIDSP {
         // 再生直後のメッセージを送信
         if !self.send_initial_message {
             for ch in 0..8 {
+                let first_byte = MIDIMSG_CONTROL_CHANGE | self.voice[ch].channel;
                 // ピッチベンドセンシティビティを上下1オクターブに設定
-                out.push_message(&[MIDIMSG_CONTROL_CHANGE | self.voice[ch].channel, 0x65, 0x00]);
-                out.push_message(&[MIDIMSG_CONTROL_CHANGE | self.voice[ch].channel, 0x64, 0x00]);
-                out.push_message(&[MIDIMSG_CONTROL_CHANGE | self.voice[ch].channel, 0x06, 12]); // 12半音（1オクターブ）
-                out.push_message(&[MIDIMSG_CONTROL_CHANGE | self.voice[ch].channel, 0x26, 0x00]);
+                out.push_message(&[first_byte, 0x65, 0x00]);
+                out.push_message(&[first_byte, 0x64, 0x00]);
+                out.push_message(&[first_byte, 0x06, 12]); // 12半音（1オクターブ）
+                out.push_message(&[first_byte, 0x26, 0x00]);
                 // RPNヌルに設定
-                out.push_message(&[MIDIMSG_CONTROL_CHANGE | self.voice[ch].channel, 0x65, 0x7F]);
-                out.push_message(&[MIDIMSG_CONTROL_CHANGE | self.voice[ch].channel, 0x64, 0x7F]);
+                out.push_message(&[first_byte, 0x65, 0x7F]);
+                out.push_message(&[first_byte, 0x64, 0x7F]);
             }
             self.send_initial_message = true;
         }
