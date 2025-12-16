@@ -260,7 +260,7 @@ impl MIDIVoiceRegister {
         }
 
         // 再生パラメータ更新（過剰に送ると遅延するので間引く）
-        if self.noteon && global_counter % 320 == 0 {
+        if self.noteon && global_counter % 320 == 1 {
             // エクスプレッション（エンベロープ）
             if self.envelope_updated {
                 out.push_message(&[
