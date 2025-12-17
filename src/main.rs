@@ -178,7 +178,8 @@ fn naive_midi_play(
 
     // Big Blueをうまく鳴らしてやりたい
     write_dsp_data(&mut emu, DSP_ADDRESS_SRN_TARGET, 0x07);
-    write_dsp_data(&mut emu, DSP_ADDRESS_SRN_PROGRAM, 18);
+    write_dsp_data(&mut emu, DSP_ADDRESS_SRN_PROGRAM, 5);
+    write_dsp_data(&mut emu, DSP_ADDRESS_SRN_CENTER_NOTE, 76);
     write_dsp_data(&mut emu, DSP_ADDRESS_SRN_TARGET, 0x0A);
     write_dsp_data(&mut emu, DSP_ADDRESS_SRN_PROGRAM, 34);
     write_dsp_data(&mut emu, DSP_ADDRESS_SRN_CENTER_NOTE, 38);
@@ -203,6 +204,10 @@ fn naive_midi_play(
     write_dsp_data(&mut emu, DSP_ADDRESS_SRN_CENTER_NOTE, 76);
     write_dsp_data(&mut emu, DSP_ADDRESS_SRN_TARGET, 0x1E); /* トランペット（高域担当） */
     write_dsp_data(&mut emu, DSP_ADDRESS_SRN_PROGRAM, 56); 
+    write_dsp_data(&mut emu, DSP_ADDRESS_SRN_CENTER_NOTE, 76);
+
+    write_dsp_data(&mut emu, DSP_ADDRESS_SRN_TARGET, 0x03);
+    write_dsp_data(&mut emu, DSP_ADDRESS_SRN_PROGRAM, 56);
     write_dsp_data(&mut emu, DSP_ADDRESS_SRN_CENTER_NOTE, 76);
 
     // 64kHz間隔 = 1000 / 64 micro = 15625 nano sec
