@@ -24,6 +24,14 @@ const MIDICC_CHANNEL_VOLUME: u8 = 0x07;
 const MIDICC_PANPOT: u8 = 0x0A;
 /// MIDIコントロールチェンジ：エクスプレッション
 const MIDICC_EXPRESSION: u8 = 0x0B;
+/// MIDIコントロールチェンジ：RPN LSB
+const MIDICC_RPN_LSB: u8 = 0x64;
+/// MIDIコントロールチェンジ：RPN MSB
+const MIDICC_RPN_MSB: u8 = 0x65;
+/// MIDIコントロールチェンジ：RPN データエントリーLSB
+const MIDICC_RPN_DATA_ENTRY_LSB: u8 = 0x06;
+/// MIDIコントロールチェンジ：RPN データエントリーMSB
+const MIDICC_RPN_DATA_ENTRY_MSB: u8 = 0x26;
 
 /// MIDI出力のための独自追加アドレス
 
@@ -332,7 +340,7 @@ impl SPCDSP for MIDIDSP {
             global_counter: 0,
             sample_source_map: SampleSourceMap {
                 program: [0; 256],
-                center_note: [64 << 8; 256],
+                center_note: [64 << 8; 256], // 中心ノートは64で仮置き
             },
             sample_source_target: 0,
             send_initial_message: false,
@@ -385,7 +393,7 @@ impl SPCDSP for MIDIDSP {
                 }
             }
             DSP_ADDRESS_FLG => {
-                // FIXME: RESETは無視
+                // RESETは無視
                 self.mute = (value & 0x40) != 0;
                 self.noise_clock = value & 0x1F;
                 // 読まれる可能性があるので、値としては保持しておく
@@ -615,13 +623,13 @@ impl SPCDSP for MIDIDSP {
             for ch in 0..8 {
                 let first_byte = MIDIMSG_CONTROL_CHANGE | self.voice[ch].channel;
                 // ピッチベンドセンシティビティを上下1オクターブに設定
-                out.push_message(&[first_byte, 0x65, 0x00]);
-                out.push_message(&[first_byte, 0x64, 0x00]);
-                out.push_message(&[first_byte, 0x06, 12]); // 12半音（1オクターブ）
-                out.push_message(&[first_byte, 0x26, 0x00]);
+                out.push_message(&[first_byte, MIDICC_RPN_MSB, 0x00]);
+                out.push_message(&[first_byte, MIDICC_RPN_LSB, 0x00]);
+                out.push_message(&[first_byte, MIDICC_RPN_DATA_ENTRY_LSB, 12]); // 12半音（1オクターブ）
+                out.push_message(&[first_byte, MIDICC_RPN_DATA_ENTRY_MSB, 0]);
                 // RPNヌルに設定
-                out.push_message(&[first_byte, 0x65, 0x7F]);
-                out.push_message(&[first_byte, 0x64, 0x7F]);
+                out.push_message(&[first_byte, MIDICC_RPN_MSB, 0x7F]);
+                out.push_message(&[first_byte, MIDICC_RPN_LSB, 0x7F]);
             }
             self.send_initial_message = true;
         }
