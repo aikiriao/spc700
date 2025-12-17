@@ -31,8 +31,10 @@ const MIDICC_EXPRESSION: u8 = 0x0B;
 pub const DSP_ADDRESS_SRN_TARGET: u8 = 0x0E;
 /// プログラム番号 0x00 - 0x7FはGMと同等、0x80-0xFFはドラムキット音色
 pub const DSP_ADDRESS_SRN_PROGRAM: u8 = 0x1E;
-/// 中央に該当するノート（基準ピッチ） 0x00 - 0x7FはGMと同等、0x80-0xFFはドラムキット音色
+/// 中央に該当するノート（基準ピッチ）の整数部8bit
 pub const DSP_ADDRESS_SRN_CENTER_NOTE: u8 = 0x2E;
+/// 中央に該当するノート（基準ピッチ）の小数部8bit
+pub const DSP_ADDRESS_SRN_CENTER_NOTE_FRACTION: u8 = 0x3E;
 
 /// ボイス
 #[derive(Copy, Clone, Debug)]
@@ -79,8 +81,8 @@ struct MIDIVoiceRegister {
 struct SampleSourceMap {
     /// プログラム番号（音色）
     program: [u8; 256],
-    /// 基準ノート（ピッチ）
-    center_note: [u8; 256],
+    /// 基準ノート（ピッチ） 整数部8bit, 小数部8bit
+    center_note: [u16; 256],
 }
 
 /// MIDI-DSP
@@ -112,15 +114,17 @@ pub struct MIDIDSP {
 }
 
 /// ピッチをMIDIノート番号に変換
-fn pitch_to_note(center_note: u8, pitch: u16) -> u8 {
+fn pitch_to_note(center_note: u16, pitch: u16) -> u8 {
     // pitch(2^12を基準とする再生速度)から半音単位でのずれを計算
     // 例1）pitch = 2048 -> semitone = -12(-1 octave)
     // 例2）pitch = 4096 -> semitone =   0
     // 例3）pitch = 8192 -> semitone =  12(+1 octave)
     // 12 * log2(pitch / 4096) = 12 * (log2(pitch) - 12)
-    let semitone = 12.0 * (libm::log2f(pitch as f32) - 12.0);
-    // 基準ノート値に加算
-    libm::roundf(center_note as f32 + semitone).clamp(0.0, 127.0) as u8
+    let mut semitone = 12.0 * (libm::log2f(pitch as f32) - 12.0);
+    // 基準ノート値（固定小数 8bit整数/8bit小数）を加算
+    const NOTE_FRACTION_FACTOR: f32 = 1.0 / 256.0;
+    semitone += center_note as f32 * NOTE_FRACTION_FACTOR;
+    libm::roundf(semitone).clamp(0.0, 127.0) as u8
 }
 
 /// LRボリュームをボリュームとパンの組に変換
@@ -260,7 +264,7 @@ impl MIDIVoiceRegister {
         }
 
         // 再生パラメータ更新（過剰に送ると遅延するので間引く）
-        if self.noteon && global_counter % 320 == 1 {
+        if self.noteon && !self.noteon_drum && global_counter % 320 == 1 {
             // エクスプレッション（エンベロープ）
             if self.envelope_updated {
                 out.push_message(&[
@@ -328,7 +332,7 @@ impl SPCDSP for MIDIDSP {
             global_counter: 0,
             sample_source_map: SampleSourceMap {
                 program: [0; 256],
-                center_note: [64; 256],
+                center_note: [64 << 8; 256],
             },
             sample_source_target: 0,
             send_initial_message: false,
@@ -432,7 +436,14 @@ impl SPCDSP for MIDIDSP {
                 self.sample_source_map.program[self.sample_source_target] = value;
             }
             DSP_ADDRESS_SRN_CENTER_NOTE => {
-                self.sample_source_map.center_note[self.sample_source_target] = value;
+                let note = self.sample_source_map.center_note[self.sample_source_target];
+                self.sample_source_map.center_note[self.sample_source_target] =
+                    ((value as u16) << 8) | (note & 0x00FF);
+            }
+            DSP_ADDRESS_SRN_CENTER_NOTE_FRACTION => {
+                let note = self.sample_source_map.center_note[self.sample_source_target];
+                self.sample_source_map.center_note[self.sample_source_target] =
+                    ((value as u16) << 0) | (note & 0xFF00);
             }
             address if ((address & 0xF) <= 0x9) => {
                 let ch = (address >> 4) as usize;
@@ -561,7 +572,10 @@ impl SPCDSP for MIDIDSP {
             DSP_ADDRESS_SRN_TARGET => self.sample_source_target as u8,
             DSP_ADDRESS_SRN_PROGRAM => self.sample_source_map.program[self.sample_source_target],
             DSP_ADDRESS_SRN_CENTER_NOTE => {
-                self.sample_source_map.center_note[self.sample_source_target]
+                ((self.sample_source_map.center_note[self.sample_source_target] >> 8) & 0xFF) as u8
+            }
+            DSP_ADDRESS_SRN_CENTER_NOTE_FRACTION => {
+                ((self.sample_source_map.center_note[self.sample_source_target] >> 0) & 0xFF) as u8
             }
             address if ((address & 0xF) <= 0x9) => {
                 let ch = (address >> 4) as usize;
