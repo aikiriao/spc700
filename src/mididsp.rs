@@ -244,7 +244,12 @@ impl MIDIVoiceRegister {
                     MIDICC_PANPOT,
                     pan,
                 ]);
-                out.push_message(&[MIDIMSG_NOTE_ON | MIDI_PERCUSSION_CHANNEL, note, volume]);
+                out.push_message(&[
+                    MIDIMSG_CONTROL_CHANGE | MIDI_PERCUSSION_CHANNEL,
+                    MIDICC_CHANNEL_VOLUME,
+                    volume,
+                ]);
+                out.push_message(&[MIDIMSG_NOTE_ON | MIDI_PERCUSSION_CHANNEL, note, 0x7F]);
                 self.last_note = note;
             }
             self.noteon = true;
