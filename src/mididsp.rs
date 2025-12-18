@@ -36,13 +36,18 @@ const MIDICC_RPN_DATA_ENTRY_MSB: u8 = 0x26;
 /// MIDI出力のための独自追加アドレス
 
 /// 設定・取得対象のサンプル番号
-pub const DSP_ADDRESS_SRN_TARGET: u8 = 0x0E;
+pub const DSP_ADDRESS_SRN_TARGET: u8 = 0x0A;
 /// プログラム番号 0x00 - 0x7FはGMと同等、0x80-0xFFはドラムキット音色
-pub const DSP_ADDRESS_SRN_PROGRAM: u8 = 0x1E;
+pub const DSP_ADDRESS_SRN_PROGRAM: u8 = 0x1A;
 /// 中央に該当するノート（基準ピッチ）の整数部8bit
-pub const DSP_ADDRESS_SRN_CENTER_NOTE: u8 = 0x2E;
+pub const DSP_ADDRESS_SRN_CENTER_NOTE: u8 = 0x2A;
 /// 中央に該当するノート（基準ピッチ）の小数部8bit
-pub const DSP_ADDRESS_SRN_CENTER_NOTE_FRACTION: u8 = 0x3E;
+pub const DSP_ADDRESS_SRN_CENTER_NOTE_FRACTION: u8 = 0x3A;
+/// ノートオンのベロシティ値
+pub const DSP_ADDRESS_NOTEON_VELOCITY: u8 = 0x0B;
+
+/// デフォルトのノートオン時のベロシティ
+const MIDIDSP_DEFAULT_NOTEON_VELOCITY: u8 = 127;
 
 /// ボイス
 #[derive(Copy, Clone, Debug)]
@@ -119,6 +124,8 @@ pub struct MIDIDSP {
     sample_source_target: usize,
     /// 最初のメッセージを送ったか？
     send_initial_message: bool,
+    /// ノートオン時のベロシティ
+    noteon_velocity: u8,
 }
 
 /// ピッチをMIDIノート番号に変換
@@ -190,7 +197,13 @@ impl MIDIVoiceRegister {
     }
 
     /// 32kHz定期処理
-    fn tick(&mut self, global_counter: u16, srn_map: &SampleSourceMap, out: &mut MIDIOutput) {
+    fn tick(
+        &mut self,
+        global_counter: u16,
+        noteon_velocity: u8,
+        srn_map: &SampleSourceMap,
+        out: &mut MIDIOutput,
+    ) {
         // キーオンが入ったとき
         if self.keyon {
             self.keyon = false;
@@ -229,7 +242,7 @@ impl MIDIVoiceRegister {
                 ]);
                 // ピッチベンドの設定値を中心(8192)に戻す
                 out.push_message(&[MIDIMSG_PITCH_BEND | self.channel, 0, 0x40]);
-                out.push_message(&[MIDIMSG_NOTE_ON | self.channel, note, 0x7F]);
+                out.push_message(&[MIDIMSG_NOTE_ON | self.channel, note, noteon_velocity]);
 
                 self.envelope_updated = false;
                 self.last_note = note;
@@ -248,7 +261,11 @@ impl MIDIVoiceRegister {
                     MIDICC_CHANNEL_VOLUME,
                     volume,
                 ]);
-                out.push_message(&[MIDIMSG_NOTE_ON | MIDI_PERCUSSION_CHANNEL, note, 0x7F]);
+                out.push_message(&[
+                    MIDIMSG_NOTE_ON | MIDI_PERCUSSION_CHANNEL,
+                    note,
+                    noteon_velocity,
+                ]);
                 self.last_note = note;
             }
             self.noteon = true;
@@ -348,6 +365,7 @@ impl SPCDSP for MIDIDSP {
             },
             sample_source_target: 0,
             send_initial_message: false,
+            noteon_velocity: 0,
         }
     }
 
@@ -363,6 +381,9 @@ impl SPCDSP for MIDIDSP {
 
         // 再生開始からやり直す
         self.send_initial_message = false;
+
+        // ノートオンをデフォルト値に戻す
+        self.noteon_velocity = MIDIDSP_DEFAULT_NOTEON_VELOCITY;
     }
 
     /// DSPレジスタの書き込み処理
@@ -456,6 +477,9 @@ impl SPCDSP for MIDIDSP {
                 let note = self.sample_source_map.center_note[self.sample_source_target];
                 self.sample_source_map.center_note[self.sample_source_target] =
                     ((value as u16) << 0) | (note & 0xFF00);
+            }
+            DSP_ADDRESS_NOTEON_VELOCITY => {
+                self.noteon_velocity = value & 0x7F;
             }
             address if ((address & 0xF) <= 0x9) => {
                 let ch = (address >> 4) as usize;
@@ -589,6 +613,7 @@ impl SPCDSP for MIDIDSP {
             DSP_ADDRESS_SRN_CENTER_NOTE_FRACTION => {
                 ((self.sample_source_map.center_note[self.sample_source_target] >> 0) & 0xFF) as u8
             }
+            DSP_ADDRESS_NOTEON_VELOCITY => self.noteon_velocity,
             address if ((address & 0xF) <= 0x9) => {
                 let ch = (address >> 4) as usize;
                 match address & 0xF {
@@ -639,7 +664,12 @@ impl SPCDSP for MIDIDSP {
         }
         // 全チャンネルの周期処理を実行
         for ch in 0..8 {
-            self.voice[ch].tick(self.global_counter, &self.sample_source_map, &mut out);
+            self.voice[ch].tick(
+                self.global_counter,
+                self.noteon_velocity,
+                &self.sample_source_map,
+                &mut out,
+            );
         }
         // ミュートならば無音
         if self.mute {
