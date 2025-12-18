@@ -137,9 +137,8 @@ fn pitch_to_note(center_note: u16, pitch: u16) -> u8 {
 
 /// LRボリュームをボリュームとパンの組に変換
 fn lrvolume_to_volume_and_pan(lrvolume: &[i8; 2]) -> (u8, u8) {
-    let lvol = lrvolume[0] as f32;
-    let rvol = lrvolume[1] as f32;
-    let volume = libm::roundf(libm::sqrtf(0.5 * (lvol * lvol + rvol * rvol))) as u8;
+    // 振幅（パワー）比を維持するように設定
+    let volume = lrvolume[0].max(lrvolume[1]) as u8;
     let pan = if lrvolume[0] == 0 && lrvolume[1] == 0 {
         64
     } else if lrvolume[0] == 0 {
@@ -148,7 +147,7 @@ fn lrvolume_to_volume_and_pan(lrvolume: &[i8; 2]) -> (u8, u8) {
         0
     } else {
         const FACTOR: f32 = 256.0 / PI;
-        libm::roundf(FACTOR * libm::atanf(lvol / rvol)) as u8
+        libm::roundf(FACTOR * libm::atanf(lrvolume[0] as f32 / lrvolume[1] as f32)) as u8
     };
     (volume, pan)
 }
