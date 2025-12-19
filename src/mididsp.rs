@@ -299,7 +299,7 @@ impl MIDIVoiceRegister {
                 out.push_message(&[
                     MIDIMSG_CONTROL_CHANGE | self.channel,
                     MIDICC_EXPRESSION,
-                    ((self.eg.gain >> 4) & 0xFF) as u8,
+                    ((self.eg.gain >> 4) & 0x7F) as u8,
                 ]);
                 self.envelope_updated = false;
             }
@@ -671,17 +671,14 @@ impl SPCDSP for MIDIDSP {
                 &mut out,
             );
         }
-        // ミュートならば無音
-        if self.mute {
-            // TODO
-        }
         // グローバルカウンタの更新
         if self.global_counter == 0 {
             self.global_counter = 0x77FF;
         }
         self.global_counter -= 1;
 
-        if out.num_messages == 0 {
+        // ミュートならば強制的に無音
+        if self.mute || out.num_messages == 0 {
             None
         } else {
             Some(out)
