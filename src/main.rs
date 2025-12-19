@@ -275,6 +275,7 @@ fn naive_midi_dump(
             let delta_nano_time = total_elapsed_time_nanosec as f64 - previous_event_time;
             let ticks =
                 (delta_nano_time * (MIDI_BPM * MIDI_DIVISIONS) as f64) / (60.0 * 1000_000_000.0);
+            // ティック数は切り捨てる（切り上げると経過時間が未来になって経過時間が負になりうる）
             for i in 0..out.num_messages {
                 let msg = out.messages[i];
                 smf.tracks[0].events.push(TrackEvent {
