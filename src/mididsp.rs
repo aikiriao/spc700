@@ -45,6 +45,8 @@ pub const DSP_ADDRESS_SRN_CENTER_NOTE: u8 = 0x2A;
 pub const DSP_ADDRESS_SRN_CENTER_NOTE_FRACTION: u8 = 0x3A;
 /// ノートオンのベロシティ値
 pub const DSP_ADDRESS_SRN_NOTEON_VELOCITY: u8 = 0x4A;
+/// ピッチベンドセンシティビティ
+pub const DSP_ADDRESS_SRN_PITCHBEND_SENSITIVITY: u8 = 0x5A;
 
 /// ボイス
 #[derive(Copy, Clone, Debug)]
@@ -123,8 +125,6 @@ pub struct MIDIDSP {
     sample_source_map: SampleSourceMap,
     /// 設定対象のサンプル番号
     sample_source_target: usize,
-    /// 最初のメッセージを送ったか？
-    send_initial_message: bool,
 }
 
 /// ピッチをMIDIノート番号に変換
@@ -220,6 +220,16 @@ impl MIDIVoiceRegister {
                 // 音色が変わっていたらプログラムチェンジを送信
                 if program != self.last_program {
                     out.push_message(&[MIDIMSG_PROGRAM_CHANGE | self.channel, program]);
+                    // ピッチベンドセンシティビティ設定
+                    let first_byte = MIDIMSG_CONTROL_CHANGE | self.channel;
+                    out.push_message(&[first_byte, MIDICC_RPN_MSB, 0x00]);
+                    out.push_message(&[first_byte, MIDICC_RPN_LSB, 0x00]);
+                    out.push_message(&[
+                        first_byte,
+                        MIDICC_RPN_DATA_ENTRY_LSB,
+                        srn_map.pitchbend_sensitibity[self.sample_source as usize],
+                    ]);
+                    out.push_message(&[first_byte, MIDICC_RPN_DATA_ENTRY_MSB, 0]);
                     self.last_program = program;
                 }
                 out.push_message(&[
@@ -290,7 +300,7 @@ impl MIDIVoiceRegister {
         }
 
         // 再生パラメータ更新（過剰に送ると遅延するので間引く）
-        if self.noteon && !self.noteon_drum && global_counter % 320 == 1 {
+        if self.noteon && !self.noteon_drum && global_counter % 160 == 1 {
             // エクスプレッション（エンベロープ）
             if self.envelope_updated {
                 out.push_message(&[
@@ -363,7 +373,6 @@ impl SPCDSP for MIDIDSP {
                 pitchbend_sensitibity: [12; 256],
             },
             sample_source_target: 0,
-            send_initial_message: false,
         }
     }
 
@@ -376,9 +385,6 @@ impl SPCDSP for MIDIDSP {
         for i in 0..128 {
             self.write_register(ram, i, dsp_register[i as usize]);
         }
-
-        // 再生開始からやり直す
-        self.send_initial_message = false;
     }
 
     /// DSPレジスタの書き込み処理
@@ -475,6 +481,9 @@ impl SPCDSP for MIDIDSP {
             }
             DSP_ADDRESS_SRN_NOTEON_VELOCITY => {
                 self.sample_source_map.noteon_velocity[self.sample_source_target] = value;
+            }
+            DSP_ADDRESS_SRN_PITCHBEND_SENSITIVITY => {
+                self.sample_source_map.pitchbend_sensitibity[self.sample_source_target] = value;
             }
             address if ((address & 0xF) <= 0x9) => {
                 let ch = (address >> 4) as usize;
@@ -611,6 +620,9 @@ impl SPCDSP for MIDIDSP {
             DSP_ADDRESS_SRN_NOTEON_VELOCITY => {
                 self.sample_source_map.noteon_velocity[self.sample_source_target]
             }
+            DSP_ADDRESS_SRN_PITCHBEND_SENSITIVITY => {
+                self.sample_source_map.pitchbend_sensitibity[self.sample_source_target]
+            }
             address if ((address & 0xF) <= 0x9) => {
                 let ch = (address >> 4) as usize;
                 match address & 0xF {
@@ -644,19 +656,6 @@ impl SPCDSP for MIDIDSP {
             }; MAX_NUM_MIDI_OUTPUT_MESSAGES],
             num_messages: 0,
         };
-        // 再生直後のメッセージを送信
-        if !self.send_initial_message {
-            for ch in 0..8 {
-                let first_byte = MIDIMSG_CONTROL_CHANGE | self.voice[ch].channel;
-                // ピッチベンドセンシティビティを上下1オクターブに設定
-                // TODO: 音色ごとに設定
-                out.push_message(&[first_byte, MIDICC_RPN_MSB, 0x00]);
-                out.push_message(&[first_byte, MIDICC_RPN_LSB, 0x00]);
-                out.push_message(&[first_byte, MIDICC_RPN_DATA_ENTRY_LSB, 12]); // 12半音（1オクターブ）
-                out.push_message(&[first_byte, MIDICC_RPN_DATA_ENTRY_MSB, 0]);
-            }
-            self.send_initial_message = true;
-        }
         // 全チャンネルの周期処理を実行
         for ch in 0..8 {
             self.voice[ch].tick(self.global_counter, &self.sample_source_map, &mut out);
