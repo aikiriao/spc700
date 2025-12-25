@@ -2,11 +2,11 @@ use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use fixed_resample::ReadStatus;
 use midir::{MidiOutput, MidiOutputPort};
 use rimd::{Event, MidiMessage, SMFFormat, SMFWriter, Track, TrackEvent, SMF};
-use spc::assembler::*;
-use spc::mididsp::*;
-use spc::spc::*;
-use spc::spc_file::*;
-use spc::types::*;
+use spc700::assembler::*;
+use spc700::mididsp::*;
+use spc700::spc::*;
+use spc700::spc_file::*;
+use spc700::types::*;
 use std::env;
 use std::fmt::Error;
 use std::io::{stdin, stdout, Write};
@@ -31,7 +31,7 @@ fn naive_disassemble(ram: &[u8]) {
 
 /// 実行してみる
 fn naive_execution(register: &SPCRegister, ram: &[u8], dsp_register: &[u8; 128]) {
-    let mut emu: spc::spc::SPC<spc::mididsp::MIDIDSP> = SPC::new(&register, ram, dsp_register);
+    let mut emu: spc700::spc::SPC<spc700::mididsp::MIDIDSP> = SPC::new(&register, ram, dsp_register);
     let mut cycle_count = 0;
     loop {
         let cycle = emu.execute_step();
@@ -71,7 +71,7 @@ fn naive_play(
     );
 
     // SPCエミュレータ初期化
-    let mut emu: spc::spc::SPC<spc::sdsp::SDSP> = SPC::new(&register, ram, dsp_register);
+    let mut emu: spc700::spc::SPC<spc700::sdsp::SDSP> = SPC::new(&register, ram, dsp_register);
     let mut cycle_count = 0;
 
     // 再生ストリーム作成
@@ -164,13 +164,13 @@ fn naive_midi_play(
     println!("Connection open. Listen!");
 
     // SPCの作成
-    let mut emu: spc::spc::SPC<spc::mididsp::MIDIDSP> = SPC::new(&register, ram, dsp_register);
+    let mut emu: spc700::spc::SPC<spc700::mididsp::MIDIDSP> = SPC::new(&register, ram, dsp_register);
     let mut cycle_count = 0;
 
     // DSPレジスタへの書き込み
     fn write_dsp_data<T>(spc: &mut SPC<T>, address: u8, data: u8)
     where
-        T: spc::types::SPCDSP,
+        T: spc700::types::SPCDSP,
     {
         // ラッチしていたアドレスを保存
         let original_address = spc.read_ram_u8(SPC_ADDRESS_DSPADDR);
@@ -178,40 +178,6 @@ fn naive_midi_play(
         spc.write_ram_u8(SPC_ADDRESS_DSPDATA, data);
         spc.write_ram_u8(SPC_ADDRESS_DSPADDR, original_address);
     }
-
-    // Big Blueをうまく鳴らしてやりたい
-    write_dsp_data(&mut emu, DSP_ADDRESS_SRN_TARGET, 0x07);
-    write_dsp_data(&mut emu, DSP_ADDRESS_SRN_PROGRAM, 5);
-    write_dsp_data(&mut emu, DSP_ADDRESS_SRN_CENTER_NOTE, 76);
-    write_dsp_data(&mut emu, DSP_ADDRESS_SRN_TARGET, 0x0A);
-    write_dsp_data(&mut emu, DSP_ADDRESS_SRN_PROGRAM, 34);
-    write_dsp_data(&mut emu, DSP_ADDRESS_SRN_CENTER_NOTE, 38);
-    write_dsp_data(&mut emu, DSP_ADDRESS_SRN_CENTER_NOTE_FRACTION, 220);
-    write_dsp_data(&mut emu, DSP_ADDRESS_SRN_TARGET, 0x0F);
-    write_dsp_data(&mut emu, DSP_ADDRESS_SRN_PROGRAM, 32);
-    write_dsp_data(&mut emu, DSP_ADDRESS_SRN_TARGET, 0x17);
-    write_dsp_data(&mut emu, DSP_ADDRESS_SRN_PROGRAM, 56);
-    write_dsp_data(&mut emu, DSP_ADDRESS_SRN_CENTER_NOTE, 76);
-    write_dsp_data(&mut emu, DSP_ADDRESS_SRN_TARGET, 0x11);
-    write_dsp_data(&mut emu, DSP_ADDRESS_SRN_PROGRAM, 35 + 0x80);
-    write_dsp_data(&mut emu, DSP_ADDRESS_SRN_TARGET, 0x14);
-    write_dsp_data(&mut emu, DSP_ADDRESS_SRN_PROGRAM, 38 + 0x80);
-    write_dsp_data(&mut emu, DSP_ADDRESS_SRN_TARGET, 0x15);
-    write_dsp_data(&mut emu, DSP_ADDRESS_SRN_PROGRAM, 44 + 0x80);
-    write_dsp_data(&mut emu, DSP_ADDRESS_SRN_TARGET, 0x1A);
-    write_dsp_data(&mut emu, DSP_ADDRESS_SRN_PROGRAM, 17);
-    write_dsp_data(&mut emu, DSP_ADDRESS_SRN_TARGET, 0x1C);
-    write_dsp_data(&mut emu, DSP_ADDRESS_SRN_PROGRAM, 38 + 0x80);
-    write_dsp_data(&mut emu, DSP_ADDRESS_SRN_TARGET, 0x1D); /* トランペット（高域担当） */
-    write_dsp_data(&mut emu, DSP_ADDRESS_SRN_PROGRAM, 56);
-    write_dsp_data(&mut emu, DSP_ADDRESS_SRN_CENTER_NOTE, 76);
-    write_dsp_data(&mut emu, DSP_ADDRESS_SRN_TARGET, 0x1E); /* トランペット（高域担当） */
-    write_dsp_data(&mut emu, DSP_ADDRESS_SRN_PROGRAM, 56); 
-    write_dsp_data(&mut emu, DSP_ADDRESS_SRN_CENTER_NOTE, 76);
-
-    write_dsp_data(&mut emu, DSP_ADDRESS_SRN_TARGET, 0x03);
-    write_dsp_data(&mut emu, DSP_ADDRESS_SRN_PROGRAM, 56);
-    write_dsp_data(&mut emu, DSP_ADDRESS_SRN_CENTER_NOTE, 76);
 
     // 64kHz間隔 = 1000 / 64 micro = 15625 nano sec
     let interval = Duration::from_nanos(CLOCK_TICK_CYCLE_64KHZ_NANOSEC);
@@ -257,7 +223,7 @@ fn naive_midi_dump(
     };
 
     // SPCの作成
-    let mut emu: spc::spc::SPC<spc::mididsp::MIDIDSP> = SPC::new(&register, ram, dsp_register);
+    let mut emu: spc700::spc::SPC<spc700::mididsp::MIDIDSP> = SPC::new(&register, ram, dsp_register);
     let mut cycle_count = 0;
     let mut total_elapsed_time_nanosec = 0;
     let mut previous_event_time = 0.0;
@@ -350,7 +316,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .unwrap()
                 .trim_end_matches('\0'),
         );
-        let _ = naive_midi_dump(
+        let _ = naive_play(
             &spcfile.header.spc_register,
             &spcfile.ram,
             &spcfile.dsp_register,
