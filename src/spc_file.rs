@@ -1,6 +1,7 @@
 use crate::types::*;
 
 /// SPCファイルタグ
+#[derive(Debug, Clone)]
 pub enum SPCFileTag {
     /// ID666フォーマット
     ID666 = 0x1A,
@@ -9,6 +10,7 @@ pub enum SPCFileTag {
 }
 
 /// エミュレータの種類
+#[derive(Debug, Clone)]
 pub enum EmuratorType {
     /// 不明
     Unknown = 0x00,
@@ -31,6 +33,7 @@ pub enum EmuratorType {
 }
 
 /// SPCファイルヘッダ
+#[derive(Debug, Clone)]
 pub struct SPCFileHeader {
     /// ヘッダ情報
     pub info: [u8; 33],
@@ -67,6 +70,7 @@ pub struct SPCFileHeader {
 }
 
 /// SPCファイル
+#[derive(Debug, Clone)]
 pub struct SPCFile {
     /// SPCファイルヘッダ
     pub header: SPCFileHeader,
