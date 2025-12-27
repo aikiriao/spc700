@@ -6,5 +6,5 @@ pub mod assembler;
 pub mod spc;
 pub mod sdsp;
 pub mod mididsp;
+pub mod decoder;
 mod eg;
-mod decoder;
