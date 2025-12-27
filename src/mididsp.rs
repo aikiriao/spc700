@@ -48,14 +48,6 @@ pub const DSP_ADDRESS_SRN_NOTEON_VELOCITY: u8 = 0x4A;
 /// ピッチベンドセンシティビティ
 pub const DSP_ADDRESS_SRN_PITCHBEND_SENSITIVITY: u8 = 0x5A;
 
-/// 音源の情報
-pub struct SourceInformation {
-    /// 圧縮データのアドレスが入っているベースアドレス
-    brr_dir_base_address: usize,
-    /// ソース番号
-    sample_source: u8,
-}
-
 /// ボイス
 #[derive(Copy, Clone, Debug)]
 struct MIDIVoiceRegister {
@@ -95,8 +87,6 @@ struct MIDIVoiceRegister {
     last_pitch: u16,
     /// 最後に設定したプログラム番号
     last_program: u8,
-    /// キーオン時のコールバック
-    keyon_callback: Option<fn(&SourceInformation)>,
 }
 
 /// 各サンプルに対応するマップ
@@ -202,7 +192,6 @@ impl MIDIVoiceRegister {
             pitch_bend_base: 0,
             last_pitch: 0,
             last_program: 0,
-            keyon_callback: None,
         }
     }
 
@@ -288,14 +277,6 @@ impl MIDIVoiceRegister {
             }
             self.noteon = true;
             self.noteon_drum = program > 0x7F;
-            // コールバックが登録されていれば実行
-            if let Some(keyon_callback) = self.keyon_callback {
-                let information = SourceInformation {
-                    sample_source: self.sample_source,
-                    brr_dir_base_address: self.brr_dir_address_base,
-                };
-                keyon_callback(&information);
-            }
         }
 
         // キーオフが入ったとき
@@ -692,16 +673,6 @@ impl SPCDSP for MIDIDSP {
             None
         } else {
             Some(out)
-        }
-    }
-}
-
-impl MIDIDSP {
-    /// コールバックを設定
-    pub fn set_keyon_callback(&mut self, callback: fn(&SourceInformation)) {
-        // 全チャンネルにコールバックを設定
-        for ch in 0..8 {
-            self.voice[ch].keyon_callback = Some(callback);
         }
     }
 }
