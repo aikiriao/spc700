@@ -46,7 +46,7 @@ where
     /// レジスタ
     reg: SPCRegister,
     /// DSP
-    dsp: T,
+    pub dsp: T,
     /// RAM(ARAM)
     ram: [u8; 65536],
     /// CPU入力ポート（未使用！）
