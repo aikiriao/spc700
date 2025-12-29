@@ -35,18 +35,25 @@ const MIDICC_RPN_DATA_ENTRY_MSB: u8 = 0x26;
 
 /// MIDI出力のための独自追加アドレス
 
-/// 設定・取得対象のサンプル番号
+/// 設定・取得対象のサンプル番号(SRN)
 pub const DSP_ADDRESS_SRN_TARGET: u8 = 0x0A;
-/// プログラム番号 0x00 - 0x7FはGMと同等、0x80-0xFFはドラムキット音色+0x80
-pub const DSP_ADDRESS_SRN_PROGRAM: u8 = 0x1A;
-/// 中央に該当するノート（基準ピッチ）の整数部8bit
-pub const DSP_ADDRESS_SRN_CENTER_NOTE: u8 = 0x2A;
-/// 中央に該当するノート（基準ピッチ）の小数部8bit
-pub const DSP_ADDRESS_SRN_CENTER_NOTE_FRACTION: u8 = 0x3A;
-/// ノートオンのベロシティ値
-pub const DSP_ADDRESS_SRN_NOTEON_VELOCITY: u8 = 0x4A;
-/// ピッチベンドセンシティビティ
-pub const DSP_ADDRESS_SRN_PITCHBEND_SENSITIVITY: u8 = 0x5A;
+/// SRNのフラグ EVP00000
+/// E: エンベロープをエクスプレッションとして出力
+/// V: ボリュームの再生中更新
+/// P: ピッチベンド
+pub const DSP_ADDRESS_SRN_FLAG: u8 = 0x1A;
+/// SRNのプログラム番号 0x00 - 0x7FはGMと同等、0x80-0xFFはドラムキット音色+0x80
+pub const DSP_ADDRESS_SRN_PROGRAM: u8 = 0x2A;
+/// SRNの中央に該当するノート（基準ピッチ）の整数部8bit
+pub const DSP_ADDRESS_SRN_CENTER_NOTE: u8 = 0x3A;
+/// SRNの中央に該当するノート（基準ピッチ）の小数部8bit
+pub const DSP_ADDRESS_SRN_CENTER_NOTE_FRACTION: u8 = 0x4A;
+/// SRNのノートオンのベロシティ値
+pub const DSP_ADDRESS_SRN_NOTEON_VELOCITY: u8 = 0x5A;
+/// SRNのピッチベンドセンシティビティ
+pub const DSP_ADDRESS_SRN_PITCHBEND_SENSITIVITY: u8 = 0x6A;
+/// エンベロープ・ボリューム・ピッチベンド更新間隔(ms)
+pub const DSP_ADDRESS_PLAYBACK_PARAMETER_UPDATE_PERIOD: u8 = 0x0B;
 
 /// ボイス
 #[derive(Copy, Clone, Debug)]
@@ -99,6 +106,12 @@ struct SampleSourceMap {
     noteon_velocity: [u8; 256],
     /// ピッチベンドセンシティビティ
     pitchbend_sensitibity: [u8; 256],
+    /// エンベロープ出力有効か
+    output_envelope: [bool; 256],
+    /// 再生中のボリューム・パン出力有効か
+    output_volume_pan: [bool; 256],
+    /// ピッチベンド出力有効か
+    output_pitch_bend: [bool; 256],
 }
 
 /// MIDI-DSP
@@ -125,6 +138,8 @@ pub struct MIDIDSP {
     sample_source_map: SampleSourceMap,
     /// 設定対象のサンプル番号
     sample_source_target: usize,
+    /// エンベロープ・ボリューム・ピッチベンド更新間隔サンプル
+    playback_parameter_update_period: u16,
 }
 
 /// ピッチをMIDIノート番号に変換
@@ -196,7 +211,13 @@ impl MIDIVoiceRegister {
     }
 
     /// 32kHz定期処理
-    fn tick(&mut self, global_counter: u16, srn_map: &SampleSourceMap, out: &mut MIDIOutput) {
+    fn tick(
+        &mut self,
+        global_counter: u16,
+        playback_parameter_update: bool,
+        srn_map: &SampleSourceMap,
+        out: &mut MIDIOutput,
+    ) {
         // キーオンが入ったとき
         if self.keyon {
             self.keyon = false;
@@ -300,9 +321,9 @@ impl MIDIVoiceRegister {
         }
 
         // 再生パラメータ更新（過剰に送ると遅延するので間引く）
-        if self.noteon && !self.noteon_drum && global_counter % 160 == 1 {
+        if self.noteon && !self.noteon_drum && playback_parameter_update {
             // エクスプレッション（エンベロープ）
-            if self.envelope_updated {
+            if self.envelope_updated && srn_map.output_envelope[self.sample_source as usize] {
                 out.push_message(&[
                     MIDIMSG_CONTROL_CHANGE | self.channel,
                     MIDICC_EXPRESSION,
@@ -311,7 +332,7 @@ impl MIDIVoiceRegister {
                 self.envelope_updated = false;
             }
             // ボリューム・パン
-            if self.volume_updated {
+            if self.volume_updated && srn_map.output_volume_pan[self.sample_source as usize] {
                 let (volume, pan) = lrvolume_to_volume_and_pan(&self.volume);
                 out.push_message(&[
                     MIDIMSG_CONTROL_CHANGE | self.channel,
@@ -322,7 +343,10 @@ impl MIDIVoiceRegister {
                 self.volume_updated = false;
             }
             // ピッチベンド
-            if self.noteon && self.last_pitch != self.pitch {
+            if self.noteon
+                && self.last_pitch != self.pitch
+                && srn_map.output_pitch_bend[self.sample_source as usize]
+            {
                 let max_semitone =
                     srn_map.pitchbend_sensitibity[self.sample_source as usize] as f32;
                 let pitchbend_ratio =
@@ -373,8 +397,12 @@ impl SPCDSP for MIDIDSP {
                 center_note: [64 << 8; 256], // 中心ノートは64で仮置き
                 noteon_velocity: [0x7F; 256],
                 pitchbend_sensitibity: [12; 256],
+                output_envelope: [true; 256],
+                output_volume_pan: [true; 256],
+                output_pitch_bend: [true; 256],
             },
             sample_source_target: 0,
+            playback_parameter_update_period: 160,
         }
     }
 
@@ -468,6 +496,14 @@ impl SPCDSP for MIDIDSP {
             DSP_ADDRESS_SRN_TARGET => {
                 self.sample_source_target = value as usize;
             }
+            DSP_ADDRESS_SRN_FLAG => {
+                self.sample_source_map.output_envelope[self.sample_source_target] =
+                    (value & 0x80) != 0;
+                self.sample_source_map.output_volume_pan[self.sample_source_target] =
+                    (value & 0x40) != 0;
+                self.sample_source_map.output_pitch_bend[self.sample_source_target] =
+                    (value & 0x20) != 0;
+            }
             DSP_ADDRESS_SRN_PROGRAM => {
                 self.sample_source_map.program[self.sample_source_target] = value;
             }
@@ -486,6 +522,9 @@ impl SPCDSP for MIDIDSP {
             }
             DSP_ADDRESS_SRN_PITCHBEND_SENSITIVITY => {
                 self.sample_source_map.pitchbend_sensitibity[self.sample_source_target] = value;
+            }
+            DSP_ADDRESS_PLAYBACK_PARAMETER_UPDATE_PERIOD => {
+                self.playback_parameter_update_period = (value as u16) << 5;
             }
             address if ((address & 0xF) <= 0x9) => {
                 let ch = (address >> 4) as usize;
@@ -612,6 +651,19 @@ impl SPCDSP for MIDIDSP {
             DSP_ADDRESS_FIR0 | DSP_ADDRESS_FIR1 | DSP_ADDRESS_FIR2 | DSP_ADDRESS_FIR3
             | DSP_ADDRESS_FIR4 | DSP_ADDRESS_FIR5 | DSP_ADDRESS_FIR6 | DSP_ADDRESS_FIR7 => 0, // 0を返す
             DSP_ADDRESS_SRN_TARGET => self.sample_source_target as u8,
+            DSP_ADDRESS_SRN_FLAG => {
+                let mut value = 0;
+                if self.sample_source_map.output_envelope[self.sample_source_target] {
+                    value |= 0x80;
+                }
+                if self.sample_source_map.output_volume_pan[self.sample_source_target] {
+                    value |= 0x40;
+                }
+                if self.sample_source_map.output_pitch_bend[self.sample_source_target] {
+                    value |= 0x20;
+                }
+                value
+            }
             DSP_ADDRESS_SRN_PROGRAM => self.sample_source_map.program[self.sample_source_target],
             DSP_ADDRESS_SRN_CENTER_NOTE => {
                 ((self.sample_source_map.center_note[self.sample_source_target] >> 8) & 0xFF) as u8
@@ -624,6 +676,9 @@ impl SPCDSP for MIDIDSP {
             }
             DSP_ADDRESS_SRN_PITCHBEND_SENSITIVITY => {
                 self.sample_source_map.pitchbend_sensitibity[self.sample_source_target]
+            }
+            DSP_ADDRESS_PLAYBACK_PARAMETER_UPDATE_PERIOD => {
+                (self.playback_parameter_update_period >> 5) as u8
             }
             address if ((address & 0xF) <= 0x9) => {
                 let ch = (address >> 4) as usize;
@@ -659,8 +714,18 @@ impl SPCDSP for MIDIDSP {
             num_messages: 0,
         };
         // 全チャンネルの周期処理を実行
+        let playback_parameter_update = if self.playback_parameter_update_period == 0 {
+            false
+        } else {
+            (self.global_counter % self.playback_parameter_update_period) == 1
+        };
         for ch in 0..8 {
-            self.voice[ch].tick(self.global_counter, &self.sample_source_map, &mut out);
+            self.voice[ch].tick(
+                self.global_counter,
+                playback_parameter_update,
+                &self.sample_source_map,
+                &mut out,
+            );
         }
         // グローバルカウンタの更新
         if self.global_counter == 0 {
