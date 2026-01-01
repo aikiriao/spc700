@@ -52,8 +52,10 @@ pub const DSP_ADDRESS_SRN_CENTER_NOTE_FRACTION: u8 = 0x4A;
 pub const DSP_ADDRESS_SRN_NOTEON_VELOCITY: u8 = 0x5A;
 /// SRNのピッチベンドセンシティビティ
 pub const DSP_ADDRESS_SRN_PITCHBEND_SENSITIVITY: u8 = 0x6A;
+/// ノートオンフラグ
+pub const DSP_ADDRESS_NOTEON: u8 = 0x0B;
 /// エンベロープ・ボリューム・ピッチベンド更新間隔(ms)
-pub const DSP_ADDRESS_PLAYBACK_PARAMETER_UPDATE_PERIOD: u8 = 0x0B;
+pub const DSP_ADDRESS_PLAYBACK_PARAMETER_UPDATE_PERIOD: u8 = 0x1B;
 
 /// ボイス
 #[derive(Copy, Clone, Debug)]
@@ -523,6 +525,11 @@ impl SPCDSP for MIDIDSP {
             DSP_ADDRESS_SRN_PITCHBEND_SENSITIVITY => {
                 self.sample_source_map.pitchbend_sensitibity[self.sample_source_target] = value;
             }
+            DSP_ADDRESS_NOTEON => {
+                for ch in 0..8 {
+                    self.voice[ch].noteon = ((value >> ch) & 0x1) != 0;
+                }
+            }
             DSP_ADDRESS_PLAYBACK_PARAMETER_UPDATE_PERIOD => {
                 self.playback_parameter_update_period = (value as u16) << 5;
             }
@@ -676,6 +683,17 @@ impl SPCDSP for MIDIDSP {
             }
             DSP_ADDRESS_SRN_PITCHBEND_SENSITIVITY => {
                 self.sample_source_map.pitchbend_sensitibity[self.sample_source_target]
+            }
+            DSP_ADDRESS_NOTEON => {
+                let mut ret = 0;
+                let mut bit = 1;
+                for ch in 0..8 {
+                    if self.voice[ch].noteon {
+                        ret |= bit;
+                    }
+                    bit <<= 1;
+                }
+                ret
             }
             DSP_ADDRESS_PLAYBACK_PARAMETER_UPDATE_PERIOD => {
                 (self.playback_parameter_update_period >> 5) as u8
