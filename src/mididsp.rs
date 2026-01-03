@@ -32,6 +32,8 @@ const MIDICC_RPN_MSB: u8 = 0x65;
 const MIDICC_RPN_DATA_ENTRY_LSB: u8 = 0x06;
 /// MIDIコントロールチェンジ：RPN データエントリーMSB
 const MIDICC_RPN_DATA_ENTRY_MSB: u8 = 0x26;
+/// MIDIコントロールチェンジ：エフェクト1デプス
+const MIDICC_EFFECT1_DEPTH: u8 = 0x5B;
 
 /// MIDI出力のための独自追加アドレス
 
@@ -84,6 +86,8 @@ struct MIDIVoiceRegister {
     pitch_mod: bool,
     /// ノイズ有効か
     noise: bool,
+    /// エコー有効か
+    echo: bool,
     /// エンベロープが更新されたか
     envelope_updated: bool,
     /// ボリュームが更新されたか
@@ -114,6 +118,8 @@ struct SampleSourceMap {
     output_volume_pan: [bool; 256],
     /// ピッチベンド出力有効か
     output_pitch_bend: [bool; 256],
+    /// エコーをエフェクト1デプス（リバーブ）として出力するか
+    echo_as_effect1_depth: [bool; 256],
 }
 
 /// MIDI-DSP
@@ -128,8 +134,6 @@ pub struct MIDIDSP {
     mute: bool,
     /// ノイズ周波数
     noise_clock: u8,
-    /// 各チャンネルのエコー有効フラグ
-    echo: [bool; 8],
     /// BRRのディレクトリのページ
     brr_dir_page: u8,
     /// ゲイン更新用のカウンタ
@@ -175,6 +179,11 @@ fn lrvolume_to_volume_and_pan(lrvolume: &[i8; 2]) -> (u8, u8) {
     (volume, pan)
 }
 
+/// エコーボリュームをエフェクト1デプスに変換
+fn echovolume_to_effect1_depth(echo_volume: &[i8; 2]) -> u8 {
+    (echo_volume[0].abs() + echo_volume[1].abs()) as u8 / 2
+}
+
 impl MIDIOutput {
     /// MIDIメッセージを追加
     fn push_message(&mut self, data: &[u8]) {
@@ -203,6 +212,7 @@ impl MIDIVoiceRegister {
             noteon_drum: false,
             pitch_mod: false,
             noise: false,
+            echo: false,
             envelope_updated: false,
             volume_updated: false,
             last_note: 0,
@@ -215,6 +225,7 @@ impl MIDIVoiceRegister {
     /// 32kHz定期処理
     fn tick(
         &mut self,
+        echo_volume: u8,
         global_counter: u16,
         playback_parameter_update: bool,
         srn_map: &SampleSourceMap,
@@ -237,6 +248,12 @@ impl MIDIVoiceRegister {
             // ノートオン
             let program = srn_map.program[self.sample_source as usize];
             let (volume, pan) = lrvolume_to_volume_and_pan(&self.volume);
+            let effect1_depth =
+                if self.echo && srn_map.echo_as_effect1_depth[self.sample_source as usize] {
+                    echo_volume
+                } else {
+                    0
+                };
             if program <= 0x7F {
                 let note =
                     pitch_to_note(srn_map.center_note[self.sample_source as usize], self.pitch);
@@ -255,12 +272,21 @@ impl MIDIVoiceRegister {
                     out.push_message(&[first_byte, MIDICC_RPN_DATA_ENTRY_MSB, 0]);
                     self.last_program = program;
                 }
+                // ボリューム・パン
                 out.push_message(&[
                     MIDIMSG_CONTROL_CHANGE | self.channel,
                     MIDICC_CHANNEL_VOLUME,
                     volume,
                 ]);
                 out.push_message(&[MIDIMSG_CONTROL_CHANGE | self.channel, MIDICC_PANPOT, pan]);
+                // エフェクト1デプス
+                out.push_message(&[
+                    MIDIMSG_CONTROL_CHANGE | self.channel,
+                    MIDICC_EFFECT1_DEPTH,
+                    effect1_depth,
+                ]);
+                // エクスプレッションは最大値を設定
+                // SPCのほとんどの音源ではアタックが鋭いため
                 out.push_message(&[
                     MIDIMSG_CONTROL_CHANGE | self.channel,
                     MIDICC_EXPRESSION,
@@ -268,6 +294,7 @@ impl MIDIVoiceRegister {
                 ]);
                 // ピッチベンドの設定値を中心(8192)に戻す
                 out.push_message(&[MIDIMSG_PITCH_BEND | self.channel, 0, 0x40]);
+                // ノートオン発行
                 out.push_message(&[
                     MIDIMSG_NOTE_ON | self.channel,
                     note,
@@ -290,6 +317,11 @@ impl MIDIVoiceRegister {
                     MIDIMSG_CONTROL_CHANGE | MIDI_PERCUSSION_CHANNEL,
                     MIDICC_CHANNEL_VOLUME,
                     volume,
+                ]);
+                out.push_message(&[
+                    MIDIMSG_CONTROL_CHANGE | MIDI_PERCUSSION_CHANNEL,
+                    MIDICC_EFFECT1_DEPTH,
+                    effect1_depth,
                 ]);
                 out.push_message(&[
                     MIDIMSG_NOTE_ON | MIDI_PERCUSSION_CHANNEL,
@@ -380,7 +412,6 @@ impl SPCDSP for MIDIDSP {
             flag: 0,
             mute: false,
             noise_clock: 0,
-            echo: [false; 8],
             brr_dir_page: 0,
             voice: [
                 // 0(1ch)は特別な意味を持つ場合があるので空けておく
@@ -402,6 +433,7 @@ impl SPCDSP for MIDIDSP {
                 output_envelope: [true; 256],
                 output_volume_pan: [true; 256],
                 output_pitch_bend: [true; 256],
+                echo_as_effect1_depth: [true; 256],
             },
             sample_source_target: 0,
             playback_parameter_update_period: 160,
@@ -476,7 +508,7 @@ impl SPCDSP for MIDIDSP {
             }
             DSP_ADDRESS_EON => {
                 for ch in 0..8 {
-                    self.echo[ch] = ((value >> ch) & 0x1) != 0;
+                    self.voice[ch].echo = ((value >> ch) & 0x1) != 0;
                 }
             }
             DSP_ADDRESS_DIR => {
@@ -505,6 +537,8 @@ impl SPCDSP for MIDIDSP {
                     (value & 0x40) != 0;
                 self.sample_source_map.output_pitch_bend[self.sample_source_target] =
                     (value & 0x20) != 0;
+                self.sample_source_map.echo_as_effect1_depth[self.sample_source_target] =
+                    (value & 0x10) != 0;
             }
             DSP_ADDRESS_SRN_PROGRAM => {
                 self.sample_source_map.program[self.sample_source_target] = value;
@@ -645,7 +679,7 @@ impl SPCDSP for MIDIDSP {
                 let mut ret = 0;
                 let mut bit = 1;
                 for ch in 0..8 {
-                    if self.echo[ch] {
+                    if self.voice[ch].echo {
                         ret |= bit;
                     }
                     bit <<= 1;
@@ -668,6 +702,9 @@ impl SPCDSP for MIDIDSP {
                 }
                 if self.sample_source_map.output_pitch_bend[self.sample_source_target] {
                     value |= 0x20;
+                }
+                if self.sample_source_map.echo_as_effect1_depth[self.sample_source_target] {
+                    value |= 0x10;
                 }
                 value
             }
@@ -739,6 +776,7 @@ impl SPCDSP for MIDIDSP {
         };
         for ch in 0..8 {
             self.voice[ch].tick(
+                echovolume_to_effect1_depth(&self.echo_volume),
                 self.global_counter,
                 playback_parameter_update,
                 &self.sample_source_map,
