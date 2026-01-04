@@ -286,10 +286,15 @@ impl MIDIVoiceRegister {
                     effect1_depth,
                 ]);
                 // エクスプレッション
+                let initial_expression = if srn_map.output_envelope[self.sample_source as usize] {
+                    ((self.eg.gain >> 4) & 0x7F) as u8
+                } else {
+                    0x7F
+                };
                 out.push_message(&[
                     MIDIMSG_CONTROL_CHANGE | self.channel,
                     MIDICC_EXPRESSION,
-                    ((self.eg.gain >> 4) & 0x7F) as u8,
+                    initial_expression,
                 ]);
                 // ピッチベンドの設定値を中心(8192)に戻す
                 out.push_message(&[MIDIMSG_PITCH_BEND | self.channel, 0, 0x40]);
