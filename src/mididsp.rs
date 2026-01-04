@@ -285,12 +285,11 @@ impl MIDIVoiceRegister {
                     MIDICC_EFFECT1_DEPTH,
                     effect1_depth,
                 ]);
-                // エクスプレッションは最大値を設定
-                // SPCのほとんどの音源ではアタックが鋭いため
+                // エクスプレッション
                 out.push_message(&[
                     MIDIMSG_CONTROL_CHANGE | self.channel,
                     MIDICC_EXPRESSION,
-                    0x7F,
+                    ((self.eg.gain >> 4) & 0x7F) as u8,
                 ]);
                 // ピッチベンドの設定値を中心(8192)に戻す
                 out.push_message(&[MIDIMSG_PITCH_BEND | self.channel, 0, 0x40]);
