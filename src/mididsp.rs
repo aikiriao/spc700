@@ -254,14 +254,22 @@ impl MIDIVoiceRegister {
                 } else {
                     0
                 };
+            let channel = if program <= 0x7F {
+                self.channel
+            } else {
+                MIDI_PERCUSSION_CHANNEL
+            };
+            let note = if program <= 0x7F {
+                pitch_to_note(srn_map.center_note[self.sample_source as usize], self.pitch)
+            } else {
+                program - 0x80
+            };
             if program <= 0x7F {
-                let note =
-                    pitch_to_note(srn_map.center_note[self.sample_source as usize], self.pitch);
                 // 音色が変わっていたらプログラムチェンジを送信
                 if program != self.last_program {
-                    out.push_message(&[MIDIMSG_PROGRAM_CHANGE | self.channel, program]);
+                    out.push_message(&[MIDIMSG_PROGRAM_CHANGE | channel, program]);
                     // ピッチベンドセンシティビティ設定
-                    let first_byte = MIDIMSG_CONTROL_CHANGE | self.channel;
+                    let first_byte = MIDIMSG_CONTROL_CHANGE | channel;
                     out.push_message(&[first_byte, MIDICC_RPN_MSB, 0x00]);
                     out.push_message(&[first_byte, MIDICC_RPN_LSB, 0x00]);
                     out.push_message(&[
@@ -272,70 +280,45 @@ impl MIDIVoiceRegister {
                     out.push_message(&[first_byte, MIDICC_RPN_DATA_ENTRY_MSB, 0]);
                     self.last_program = program;
                 }
-                // ボリューム・パン
-                out.push_message(&[
-                    MIDIMSG_CONTROL_CHANGE | self.channel,
-                    MIDICC_CHANNEL_VOLUME,
-                    volume,
-                ]);
-                out.push_message(&[MIDIMSG_CONTROL_CHANGE | self.channel, MIDICC_PANPOT, pan]);
-                // エフェクト1デプス
-                out.push_message(&[
-                    MIDIMSG_CONTROL_CHANGE | self.channel,
-                    MIDICC_EFFECT1_DEPTH,
-                    effect1_depth,
-                ]);
-                // エクスプレッション
-                let initial_expression = if srn_map.output_envelope[self.sample_source as usize] {
-                    ((self.eg.gain >> 4) & 0x7F) as u8
-                } else {
-                    0x7F
-                };
-                out.push_message(&[
-                    MIDIMSG_CONTROL_CHANGE | self.channel,
-                    MIDICC_EXPRESSION,
-                    initial_expression,
-                ]);
-                // ピッチベンドの設定値を中心(8192)に戻す
-                out.push_message(&[MIDIMSG_PITCH_BEND | self.channel, 0, 0x40]);
-                // ノートオン発行
-                out.push_message(&[
-                    MIDIMSG_NOTE_ON | self.channel,
-                    note,
-                    srn_map.noteon_velocity[self.sample_source as usize],
-                ]);
-
-                self.envelope_updated = false;
-                self.last_note = note;
                 self.pitch_bend_base = self.pitch;
                 self.last_pitch = self.pitch;
-            } else {
-                let note = program - 0x80;
-                // ドラム音色
-                out.push_message(&[
-                    MIDIMSG_CONTROL_CHANGE | MIDI_PERCUSSION_CHANNEL,
-                    MIDICC_PANPOT,
-                    pan,
-                ]);
-                out.push_message(&[
-                    MIDIMSG_CONTROL_CHANGE | MIDI_PERCUSSION_CHANNEL,
-                    MIDICC_CHANNEL_VOLUME,
-                    volume,
-                ]);
-                out.push_message(&[
-                    MIDIMSG_CONTROL_CHANGE | MIDI_PERCUSSION_CHANNEL,
-                    MIDICC_EFFECT1_DEPTH,
-                    effect1_depth,
-                ]);
-                out.push_message(&[
-                    MIDIMSG_NOTE_ON | MIDI_PERCUSSION_CHANNEL,
-                    note,
-                    srn_map.noteon_velocity[self.sample_source as usize],
-                ]);
-                self.last_note = note;
             }
-            self.noteon = true;
+            // ボリューム・パン
+            out.push_message(&[
+                MIDIMSG_CONTROL_CHANGE | channel,
+                MIDICC_CHANNEL_VOLUME,
+                volume,
+            ]);
+            out.push_message(&[MIDIMSG_CONTROL_CHANGE | channel, MIDICC_PANPOT, pan]);
+            // エフェクト1デプス
+            out.push_message(&[
+                MIDIMSG_CONTROL_CHANGE | channel,
+                MIDICC_EFFECT1_DEPTH,
+                effect1_depth,
+            ]);
+            // エクスプレッション
+            let initial_expression = if srn_map.output_envelope[self.sample_source as usize] {
+                ((self.eg.gain >> 4) & 0x7F) as u8
+            } else {
+                0x7F
+            };
+            out.push_message(&[
+                MIDIMSG_CONTROL_CHANGE | channel,
+                MIDICC_EXPRESSION,
+                initial_expression,
+            ]);
+            // ピッチベンドの設定値を中心(8192)に戻す
+            out.push_message(&[MIDIMSG_PITCH_BEND | channel, 0, 0x40]);
+            // ノートオン発行
+            out.push_message(&[
+                MIDIMSG_NOTE_ON | channel,
+                note,
+                srn_map.noteon_velocity[self.sample_source as usize],
+            ]);
             self.noteon_drum = program > 0x7F;
+            self.last_note = note;
+            self.envelope_updated = false;
+            self.noteon = true;
         }
 
         // キーオフが入ったとき
