@@ -403,10 +403,9 @@ impl MIDIVoiceRegister {
             {
                 let max_semitone =
                     srn_map.pitchbend_sensitibity[self.sample_source as usize] as f32;
-                let pitchbend_ratio =
-                    libm::log2f((self.pitch as f32) / (self.pitch_bend_base as f32)) * max_semitone
-                        / 12.0;
                 // [-max_semitone,max_semitone]半音を[-8192,8192]に対応付ける
+                let pitchbend_ratio =
+                    libm::log2f((self.pitch as f32) / (self.pitch_bend_base as f32)) * 12.0 / max_semitone;
                 let pitch_bend =
                     libm::roundf((pitchbend_ratio * 8192.0).clamp(-8192.0, 8191.0)) as i16 + 8192;
                 // 7bitを2分割
