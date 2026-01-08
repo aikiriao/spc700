@@ -175,18 +175,21 @@ fn pitch_to_note(center_note: u16, pitch: u16) -> u8 {
 }
 
 /// LRボリュームをボリュームとパンの組に変換
+/// LRボリュームは負値がありうるが、絶対値を取って前方パン・非負ボリュームに変換する
+/// MIDIは前方のパンのみ考えるため
 fn lrvolume_to_volume_and_pan(lrvolume: &[i8; 2]) -> (u8, u8) {
+    let abs_lrvolume = [lrvolume[0].abs(), lrvolume[1].abs()];
     // 振幅（パワー）比を維持するように設定
-    let volume = lrvolume[0].max(lrvolume[1]) as u8;
-    let pan = if lrvolume[0] == 0 && lrvolume[1] == 0 {
+    let volume = abs_lrvolume[0].max(abs_lrvolume[1]) as u8;
+    let pan = if abs_lrvolume[0] == 0 && abs_lrvolume[1] == 0 {
         64
-    } else if lrvolume[0] == 0 {
+    } else if abs_lrvolume[0] == 0 {
         127
-    } else if lrvolume[1] == 0 {
+    } else if abs_lrvolume[1] == 0 {
         0
     } else {
         const FACTOR: f32 = 256.0 / PI;
-        libm::roundf(FACTOR * libm::atanf(lrvolume[0] as f32 / lrvolume[1] as f32)) as u8
+        libm::roundf(FACTOR * libm::atanf(abs_lrvolume[0] as f32 / abs_lrvolume[1] as f32)) as u8
     };
     (volume, pan)
 }
@@ -405,7 +408,8 @@ impl MIDIVoiceRegister {
                     srn_map.pitchbend_sensitibity[self.sample_source as usize] as f32;
                 // [-max_semitone,max_semitone]半音を[-8192,8192]に対応付ける
                 let pitchbend_ratio =
-                    libm::log2f((self.pitch as f32) / (self.pitch_bend_base as f32)) * 12.0 / max_semitone;
+                    libm::log2f((self.pitch as f32) / (self.pitch_bend_base as f32)) * 12.0
+                        / max_semitone;
                 let pitch_bend =
                     libm::roundf((pitchbend_ratio * 8192.0).clamp(-8192.0, 8191.0)) as i16 + 8192;
                 // 7bitを2分割
