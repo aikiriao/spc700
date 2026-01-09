@@ -178,7 +178,7 @@ fn pitch_to_note(center_note: u16, pitch: u16) -> u8 {
 /// LRボリュームは負値がありうるが、絶対値を取って前方パン・非負ボリュームに変換する
 /// MIDIは前方のパンのみ考えるため
 fn lrvolume_to_volume_and_pan(lrvolume: &[i8; 2]) -> (u8, u8) {
-    let abs_lrvolume = [lrvolume[0].abs(), lrvolume[1].abs()];
+    let abs_lrvolume = [lrvolume[0].unsigned_abs(), lrvolume[1].unsigned_abs()];
     // 振幅（パワー）比を維持するように設定
     let volume = abs_lrvolume[0].max(abs_lrvolume[1]) as u8;
     let pan = if abs_lrvolume[0] == 0 && abs_lrvolume[1] == 0 {
@@ -196,7 +196,7 @@ fn lrvolume_to_volume_and_pan(lrvolume: &[i8; 2]) -> (u8, u8) {
 
 /// エコーボリュームをエフェクト1デプスに変換
 fn echovolume_to_effect1_depth(echo_volume: &[i8; 2]) -> u8 {
-    (echo_volume[0].abs() + echo_volume[1].abs()) as u8 / 2
+    (echo_volume[0].unsigned_abs() + echo_volume[1].unsigned_abs()) as u8 / 2
 }
 
 impl MIDIOutput {
