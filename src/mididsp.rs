@@ -61,9 +61,11 @@ pub const DSP_ADDRESS_SRN_FIXED_PAN: u8 = 0x3B;
 /// SRNのピッチベンドセンシティビティ
 pub const DSP_ADDRESS_SRN_PITCHBEND_SENSITIVITY: u8 = 0x4A;
 /// ノートオンフラグ
-pub const DSP_ADDRESS_NOTEON: u8 = 0x6A;
+pub const DSP_ADDRESS_NOTEON: u8 = 0x5A;
+/// MIDIミュートフラグ
+pub const DSP_ADDRESS_MIDI_MUTE: u8 = 0x5B;
 /// エンベロープ・ボリューム・ピッチベンド更新間隔(ms)
-pub const DSP_ADDRESS_PLAYBACK_PARAMETER_UPDATE_PERIOD: u8 = 0x6B;
+pub const DSP_ADDRESS_PLAYBACK_PARAMETER_UPDATE_PERIOD: u8 = 0x6A;
 
 /// ボイス
 #[derive(Copy, Clone, Debug)]
@@ -106,6 +108,8 @@ struct MIDIVoiceRegister {
     last_pitch: u16,
     /// 最後に設定したプログラム番号
     last_program: u8,
+    /// MIDIミュートフラグ
+    midi_mute: bool,
 }
 
 /// 各サンプルに対応するマップ
@@ -201,7 +205,10 @@ fn echovolume_to_effect1_depth(echo_volume: &[i8; 2]) -> u8 {
 
 impl MIDIOutput {
     /// MIDIメッセージを追加
-    fn push_message(&mut self, data: &[u8]) {
+    fn push_message(&mut self, mute: bool, data: &[u8]) {
+        if mute {
+            return;
+        }
         assert!(data.len() <= 3);
         assert!(self.num_messages < MAX_NUM_MIDI_OUTPUT_MESSAGES);
         for i in 0..data.len() {
@@ -234,6 +241,7 @@ impl MIDIVoiceRegister {
             pitch_bend_base: 0,
             last_pitch: 0,
             last_program: 0,
+            midi_mute: false,
         }
     }
 
@@ -256,7 +264,7 @@ impl MIDIVoiceRegister {
                 } else {
                     MIDIMSG_NOTE_OFF | self.channel
                 };
-                out.push_message(&[first_byte, self.last_note, 0]);
+                out.push_message(self.midi_mute, &[first_byte, self.last_note, 0]);
             }
             // エンベロープ設定
             self.eg.keyon();
@@ -270,17 +278,20 @@ impl MIDIVoiceRegister {
             if program <= 0x7F {
                 // 音色が変わっていたらプログラムチェンジを送信
                 if program != self.last_program {
-                    out.push_message(&[MIDIMSG_PROGRAM_CHANGE | channel, program]);
+                    out.push_message(self.midi_mute, &[MIDIMSG_PROGRAM_CHANGE | channel, program]);
                     // ピッチベンドセンシティビティ設定
                     let first_byte = MIDIMSG_CONTROL_CHANGE | channel;
-                    out.push_message(&[first_byte, MIDICC_RPN_MSB, 0x00]);
-                    out.push_message(&[first_byte, MIDICC_RPN_LSB, 0x00]);
-                    out.push_message(&[
-                        first_byte,
-                        MIDICC_RPN_DATA_ENTRY_LSB,
-                        srn_map.pitchbend_sensitibity[self.sample_source as usize],
-                    ]);
-                    out.push_message(&[first_byte, MIDICC_RPN_DATA_ENTRY_MSB, 0]);
+                    out.push_message(self.midi_mute, &[first_byte, MIDICC_RPN_MSB, 0x00]);
+                    out.push_message(self.midi_mute, &[first_byte, MIDICC_RPN_LSB, 0x00]);
+                    out.push_message(
+                        self.midi_mute,
+                        &[
+                            first_byte,
+                            MIDICC_RPN_DATA_ENTRY_LSB,
+                            srn_map.pitchbend_sensitibity[self.sample_source as usize],
+                        ],
+                    );
+                    out.push_message(self.midi_mute, &[first_byte, MIDICC_RPN_DATA_ENTRY_MSB, 0]);
                     self.last_program = program;
                 }
                 self.pitch_bend_base = self.pitch;
@@ -288,24 +299,30 @@ impl MIDIVoiceRegister {
             }
             // ボリューム・パン
             let (volume, pan) = lrvolume_to_volume_and_pan(&self.volume);
-            out.push_message(&[
-                MIDIMSG_CONTROL_CHANGE | channel,
-                MIDICC_CHANNEL_VOLUME,
-                if srn_map.auto_volume[self.sample_source as usize] {
-                    volume
-                } else {
-                    srn_map.fixed_volume[self.sample_source as usize]
-                },
-            ]);
-            out.push_message(&[
-                MIDIMSG_CONTROL_CHANGE | channel,
-                MIDICC_PANPOT,
-                if srn_map.auto_pan[self.sample_source as usize] {
-                    pan
-                } else {
-                    srn_map.fixed_pan[self.sample_source as usize]
-                },
-            ]);
+            out.push_message(
+                self.midi_mute,
+                &[
+                    MIDIMSG_CONTROL_CHANGE | channel,
+                    MIDICC_CHANNEL_VOLUME,
+                    if srn_map.auto_volume[self.sample_source as usize] {
+                        volume
+                    } else {
+                        srn_map.fixed_volume[self.sample_source as usize]
+                    },
+                ],
+            );
+            out.push_message(
+                self.midi_mute,
+                &[
+                    MIDIMSG_CONTROL_CHANGE | channel,
+                    MIDICC_PANPOT,
+                    if srn_map.auto_pan[self.sample_source as usize] {
+                        pan
+                    } else {
+                        srn_map.fixed_pan[self.sample_source as usize]
+                    },
+                ],
+            );
             // エフェクト1デプス
             let effect1_depth =
                 if self.echo && srn_map.echo_as_effect1_depth[self.sample_source as usize] {
@@ -313,35 +330,44 @@ impl MIDIVoiceRegister {
                 } else {
                     0
                 };
-            out.push_message(&[
-                MIDIMSG_CONTROL_CHANGE | channel,
-                MIDICC_EFFECT1_DEPTH,
-                effect1_depth,
-            ]);
+            out.push_message(
+                self.midi_mute,
+                &[
+                    MIDIMSG_CONTROL_CHANGE | channel,
+                    MIDICC_EFFECT1_DEPTH,
+                    effect1_depth,
+                ],
+            );
             // エクスプレッション
             let initial_expression = if srn_map.output_envelope[self.sample_source as usize] {
                 ((self.eg.gain >> 4) & 0x7F) as u8
             } else {
                 0x7F
             };
-            out.push_message(&[
-                MIDIMSG_CONTROL_CHANGE | channel,
-                MIDICC_EXPRESSION,
-                initial_expression,
-            ]);
+            out.push_message(
+                self.midi_mute,
+                &[
+                    MIDIMSG_CONTROL_CHANGE | channel,
+                    MIDICC_EXPRESSION,
+                    initial_expression,
+                ],
+            );
             // ピッチベンドの設定値を中心(8192)に戻す
-            out.push_message(&[MIDIMSG_PITCH_BEND | channel, 0, 0x40]);
+            out.push_message(self.midi_mute, &[MIDIMSG_PITCH_BEND | channel, 0, 0x40]);
             // ノートオン発行
             let note = if program <= 0x7F {
                 pitch_to_note(srn_map.center_note[self.sample_source as usize], self.pitch)
             } else {
                 program - 0x80
             };
-            out.push_message(&[
-                MIDIMSG_NOTE_ON | channel,
-                note,
-                srn_map.noteon_velocity[self.sample_source as usize],
-            ]);
+            out.push_message(
+                self.midi_mute,
+                &[
+                    MIDIMSG_NOTE_ON | channel,
+                    note,
+                    srn_map.noteon_velocity[self.sample_source as usize],
+                ],
+            );
             self.noteon_drum = program > 0x7F;
             self.last_note = note;
             self.envelope_updated = false;
@@ -358,7 +384,7 @@ impl MIDIVoiceRegister {
                 } else {
                     MIDIMSG_NOTE_OFF | self.channel
                 };
-                out.push_message(&[first_byte, self.last_note, 0]);
+                out.push_message(self.midi_mute, &[first_byte, self.last_note, 0]);
                 self.noteon = false;
             }
         }
@@ -377,25 +403,34 @@ impl MIDIVoiceRegister {
             };
             // エクスプレッション（エンベロープ）
             if self.envelope_updated && srn_map.output_envelope[self.sample_source as usize] {
-                out.push_message(&[
-                    MIDIMSG_CONTROL_CHANGE | channel,
-                    MIDICC_EXPRESSION,
-                    ((self.eg.gain >> 4) & 0x7F) as u8,
-                ]);
+                out.push_message(
+                    self.midi_mute,
+                    &[
+                        MIDIMSG_CONTROL_CHANGE | channel,
+                        MIDICC_EXPRESSION,
+                        ((self.eg.gain >> 4) & 0x7F) as u8,
+                    ],
+                );
                 self.envelope_updated = false;
             }
             // ボリューム・パン
             if self.volume_updated {
                 let (volume, pan) = lrvolume_to_volume_and_pan(&self.volume);
                 if srn_map.auto_volume[self.sample_source as usize] {
-                    out.push_message(&[
-                        MIDIMSG_CONTROL_CHANGE | channel,
-                        MIDICC_CHANNEL_VOLUME,
-                        volume,
-                    ]);
+                    out.push_message(
+                        self.midi_mute,
+                        &[
+                            MIDIMSG_CONTROL_CHANGE | channel,
+                            MIDICC_CHANNEL_VOLUME,
+                            volume,
+                        ],
+                    );
                 }
                 if srn_map.auto_pan[self.sample_source as usize] {
-                    out.push_message(&[MIDIMSG_CONTROL_CHANGE | channel, MIDICC_PANPOT, pan]);
+                    out.push_message(
+                        self.midi_mute,
+                        &[MIDIMSG_CONTROL_CHANGE | channel, MIDICC_PANPOT, pan],
+                    );
                 }
                 self.volume_updated = false;
             }
@@ -413,11 +448,14 @@ impl MIDIVoiceRegister {
                 let pitch_bend =
                     libm::roundf((pitchbend_ratio * 8192.0).clamp(-8192.0, 8191.0)) as i16 + 8192;
                 // 7bitを2分割
-                out.push_message(&[
-                    MIDIMSG_PITCH_BEND | channel,
-                    (pitch_bend & 0x7F) as u8,        // LSB
-                    ((pitch_bend >> 7) & 0x7F) as u8, // MSB
-                ]);
+                out.push_message(
+                    self.midi_mute,
+                    &[
+                        MIDIMSG_PITCH_BEND | channel,
+                        (pitch_bend & 0x7F) as u8,        // LSB
+                        ((pitch_bend >> 7) & 0x7F) as u8, // MSB
+                    ],
+                );
                 self.last_pitch = self.pitch;
             }
         }
@@ -596,6 +634,11 @@ impl SPCDSP for MIDIDSP {
                     self.voice[ch].noteon = ((value >> ch) & 0x1) != 0;
                 }
             }
+            DSP_ADDRESS_MIDI_MUTE => {
+                for ch in 0..8 {
+                    self.voice[ch].midi_mute = ((value >> ch) & 0x1) != 0;
+                }
+            }
             DSP_ADDRESS_PLAYBACK_PARAMETER_UPDATE_PERIOD => {
                 self.playback_parameter_update_period = (value as u16) << 5;
             }
@@ -767,6 +810,17 @@ impl SPCDSP for MIDIDSP {
                 let mut bit = 1;
                 for ch in 0..8 {
                     if self.voice[ch].noteon {
+                        ret |= bit;
+                    }
+                    bit <<= 1;
+                }
+                ret
+            }
+            DSP_ADDRESS_MIDI_MUTE => {
+                let mut ret = 0;
+                let mut bit = 1;
+                for ch in 0..8 {
+                    if self.voice[ch].midi_mute {
                         ret |= bit;
                     }
                     bit <<= 1;
