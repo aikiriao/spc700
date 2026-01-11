@@ -178,13 +178,23 @@ fn pitch_to_note(center_note: u16, pitch: u16) -> u8 {
     libm::roundf(semitone).clamp(0.0, 127.0) as u8
 }
 
+/// ゲインをMIDIのボリューム設定値に変換
+/// f(x) = A log10(gain / 127) + Bとして、f(0) = 0, f(1) = 1, f(127) = 127となるように設定
+fn gain_to_midi_volume(gain: u8) -> u8 {
+    const GAINTOMIDI_CONST: f32 = 59.89151875002212; // = 126 / log10(127)
+    if gain == 0 {
+        0
+    } else {
+        libm::roundf(GAINTOMIDI_CONST * libm::log10f(gain as f32) + 1.0).clamp(0.0, 127.0) as u8
+    }
+}
+
 /// LRボリュームをボリュームとパンの組に変換
 /// LRボリュームは負値がありうるが、絶対値を取って前方パン・非負ボリュームに変換する
 /// MIDIは前方のパンのみ考えるため
 fn lrvolume_to_volume_and_pan(lrvolume: &[i8; 2]) -> (u8, u8) {
     let abs_lrvolume = [lrvolume[0].unsigned_abs(), lrvolume[1].unsigned_abs()];
-    // 振幅（パワー）比を維持するように設定
-    let volume = abs_lrvolume[0].max(abs_lrvolume[1]) as u8;
+    let volume = gain_to_midi_volume(abs_lrvolume[0].max(abs_lrvolume[1]));
     let pan = if abs_lrvolume[0] == 0 && abs_lrvolume[1] == 0 {
         64
     } else if abs_lrvolume[0] == 0 {
@@ -340,7 +350,7 @@ impl MIDIVoiceRegister {
             );
             // エクスプレッション
             let initial_expression = if srn_map.output_envelope[self.sample_source as usize] {
-                ((self.eg.gain >> 4) & 0x7F) as u8
+                gain_to_midi_volume(((self.eg.gain >> 4) & 0x7F) as u8)
             } else {
                 0x7F
             };
@@ -408,7 +418,7 @@ impl MIDIVoiceRegister {
                     &[
                         MIDIMSG_CONTROL_CHANGE | channel,
                         MIDICC_EXPRESSION,
-                        ((self.eg.gain >> 4) & 0x7F) as u8,
+                        gain_to_midi_volume(((self.eg.gain >> 4) & 0x7F) as u8),
                     ],
                 );
                 self.envelope_updated = false;
