@@ -304,8 +304,6 @@ impl MIDIVoiceRegister {
                     out.push_message(self.midi_mute, &[first_byte, MIDICC_RPN_DATA_ENTRY_MSB, 0]);
                     self.last_program = program;
                 }
-                self.pitch_bend_base = self.pitch;
-                self.last_pitch = self.pitch;
             }
             // ボリューム・パン
             let (volume, pan) = lrvolume_to_volume_and_pan(&self.volume);
@@ -382,6 +380,8 @@ impl MIDIVoiceRegister {
             self.last_note = note;
             self.envelope_updated = false;
             self.noteon = true;
+            self.pitch_bend_base = self.pitch;
+            self.last_pitch = self.pitch;
         }
 
         // キーオフが入ったとき
