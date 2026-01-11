@@ -875,7 +875,7 @@ impl SPCDSP for MIDIDSP {
         };
         // 全チャンネルの周期処理を実行
         let playback_parameter_update = if self.playback_parameter_update_period == 0 {
-            false
+            true
         } else {
             (self.global_counter % self.playback_parameter_update_period) == 1
         };
