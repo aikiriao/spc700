@@ -1,5 +1,8 @@
 use crate::types::*;
 
+/// BRRブロックサイズ
+const BRR_BLOCK_SIZE: usize = 9;
+
 /// ガウス補間テーブル
 const GAUSS_INTERPOLATION_TABLE: [i32; 512] = [
     0x000, 0x000, 0x000, 0x000, 0x000, 0x000, 0x000, 0x000, 0x000, 0x000, 0x000, 0x000, 0x000,
@@ -197,7 +200,7 @@ impl Decoder {
     fn decode_brr_block(&mut self, ram: &[u8]) {
         let granularity;
         let filter;
-        assert!(ram.len() >= 9);
+        assert!(ram.len() >= BRR_BLOCK_SIZE);
 
         // ブロックヘッダデコード
         (granularity, filter, self.loop_flag, self.end) = decode_brr_block_header(ram[0]);
@@ -227,13 +230,24 @@ impl Decoder {
         // バッファが尽きたら次のブロックをデコード
         if next_block {
             // 1ブロックデコード
-            self.decode_brr_block(&ram[self.decode_read_pos..]);
+            if (self.decode_read_pos + BRR_BLOCK_SIZE) <= 0xFFFF {
+                self.decode_brr_block(&ram[self.decode_read_pos..]);
+            } else {
+                // デコードアドレスが16bitを超える場合は、RAMの先頭に戻る
+                let mut decode_ram = [0u8; BRR_BLOCK_SIZE];
+                let remain = 0x10000 - self.decode_read_pos;
+                decode_ram[..remain].copy_from_slice(&ram[self.decode_read_pos..]);
+                decode_ram[remain..].copy_from_slice(&ram[..(BRR_BLOCK_SIZE - remain)]);
+                self.decode_brr_block(&decode_ram);
+            }
             if self.end {
                 // 末尾に達していたらループ開始アドレスに戻る
                 self.decode_read_pos = self.decode_loop_address;
             } else {
                 // 次のブロックに進む
-                self.decode_read_pos += 9;
+                self.decode_read_pos += BRR_BLOCK_SIZE;
+                // アドレスの回り込みを考慮
+                self.decode_read_pos &= 0xFFFF;
             }
         }
 
