@@ -490,7 +490,7 @@ impl SPCDSP for MIDIDSP {
             noise_clock: 0,
             brr_dir_page: 0,
             voice: [
-                // 0(1ch)は特別な意味を持つ場合があるので空けておく
+                MIDIVoiceRegister::new(0),
                 MIDIVoiceRegister::new(1),
                 MIDIVoiceRegister::new(2),
                 MIDIVoiceRegister::new(3),
@@ -498,7 +498,6 @@ impl SPCDSP for MIDIDSP {
                 MIDIVoiceRegister::new(5),
                 MIDIVoiceRegister::new(6),
                 MIDIVoiceRegister::new(7),
-                MIDIVoiceRegister::new(8),
             ],
             global_counter: 0,
             sample_source_map: SampleSourceMap {
