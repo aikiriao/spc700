@@ -162,6 +162,8 @@ pub struct MIDIDSP {
     sample_source_map: SampleSourceMap,
     /// 設定対象のサンプル番号
     sample_source_target: usize,
+    /// エンベロープ・ボリューム・ピッチベンド更新間隔カウンタ
+    playback_parameter_count: u16,
     /// エンベロープ・ボリューム・ピッチベンド更新間隔サンプル
     playback_parameter_update_period: u16,
 }
@@ -515,6 +517,7 @@ impl SPCDSP for MIDIDSP {
                 echo_as_effect1_depth: [true; 256],
             },
             sample_source_target: 0,
+            playback_parameter_count: 0,
             playback_parameter_update_period: 160,
         }
     }
@@ -882,28 +885,37 @@ impl SPCDSP for MIDIDSP {
             }; MAX_NUM_MIDI_OUTPUT_MESSAGES],
             num_messages: 0,
         };
-        // 全チャンネルの周期処理を実行
-        let playback_parameter_update = if self.playback_parameter_update_period == 0 {
+
+        // エンベロープ・ボリューム・ピッチベンド更新するか
+        let playback_parameter_update = if self.playback_parameter_update_period == 0
+            || self.playback_parameter_count >= self.playback_parameter_update_period
+        {
+            self.playback_parameter_count = 0;
             true
         } else {
-            (self.global_counter % self.playback_parameter_update_period) == 1
+            self.playback_parameter_count += 1;
+            false
         };
+
+        // 全チャンネルの周期処理を実行
+        let effect1_depth = echovolume_to_effect1_depth(&self.echo_volume);
         for ch in 0..8 {
             self.voice[ch].tick(
-                echovolume_to_effect1_depth(&self.echo_volume),
+                effect1_depth,
                 self.global_counter,
                 playback_parameter_update,
                 &self.sample_source_map,
                 &mut out,
             );
         }
+
         // グローバルカウンタの更新
         if self.global_counter == 0 {
             self.global_counter = 0x77FF;
         }
         self.global_counter -= 1;
 
-        // ミュートならば強制的に無音
+        // ミュートならばメッセージなし
         if self.mute || out.num_messages == 0 {
             None
         } else {
