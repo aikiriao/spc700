@@ -212,7 +212,7 @@ fn lrvolume_to_volume_and_pan(lrvolume: &[i8; 2]) -> (u8, u8) {
 
 /// エコーボリュームをエフェクト1デプスに変換
 fn echovolume_to_effect1_depth(echo_volume: &[i8; 2]) -> u8 {
-    (echo_volume[0].unsigned_abs() + echo_volume[1].unsigned_abs()) as u8 / 2
+    (echo_volume[0].unsigned_abs() as u16 + echo_volume[1].unsigned_abs() as u16) as u8 / 2
 }
 
 impl MIDIOutput {
