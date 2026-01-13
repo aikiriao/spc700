@@ -887,14 +887,16 @@ impl SPCDSP for MIDIDSP {
         };
 
         // エンベロープ・ボリューム・ピッチベンド更新するか
-        let playback_parameter_update = if self.playback_parameter_update_period == 0
-            || self.playback_parameter_count >= self.playback_parameter_update_period
-        {
-            self.playback_parameter_count = 0;
+        let playback_parameter_update = if self.playback_parameter_update_period <= 1 {
             true
         } else {
-            self.playback_parameter_count += 1;
-            false
+            if self.playback_parameter_count >= self.playback_parameter_update_period {
+                self.playback_parameter_count = 1;
+                true
+            } else {
+                self.playback_parameter_count += 1;
+                false
+            }
         };
 
         // 全チャンネルの周期処理を実行
