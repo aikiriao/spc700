@@ -123,7 +123,7 @@ struct SampleSourceMap {
     /// ノートオンベロシティ
     noteon_velocity: [u8; 256],
     /// ピッチベンドセンシティビティ
-    pitchbend_sensitibity: [u8; 256],
+    pitch_bend_sensitibity: [u8; 256],
     /// エンベロープ出力有効か
     output_envelope: [bool; 256],
     /// パンを自動更新するか
@@ -138,6 +138,8 @@ struct SampleSourceMap {
     output_pitch_bend: [bool; 256],
     /// エコーをエフェクト1デプス（リバーブ）として出力するか
     echo_as_effect1_depth: [bool; 256],
+    /// ピッチベンドセンシティビティが更新されたか
+    pitch_bend_sensitibity_updated: [bool; 256],
 }
 
 /// MIDI-DSP
@@ -265,7 +267,7 @@ impl MIDIVoiceRegister {
         echo_volume: u8,
         global_counter: u16,
         playback_parameter_update: bool,
-        srn_map: &SampleSourceMap,
+        srn_map: &mut SampleSourceMap,
         out: &mut MIDIOutput,
     ) {
         // 対象ソースのミュートフラグ取得
@@ -305,7 +307,7 @@ impl MIDIVoiceRegister {
                         &[
                             first_byte,
                             MIDICC_RPN_DATA_ENTRY_LSB,
-                            srn_map.pitchbend_sensitibity[self.sample_source as usize],
+                            srn_map.pitch_bend_sensitibity[self.sample_source as usize],
                         ],
                     );
                     out.push_message(mute, &[first_byte, MIDICC_RPN_DATA_ENTRY_MSB, 0]);
@@ -451,13 +453,30 @@ impl MIDIVoiceRegister {
                 }
                 self.volume_updated = false;
             }
+            // ピッチベンドセンシティビティ
+            if srn_map.pitch_bend_sensitibity_updated[self.sample_source as usize]
+                && srn_map.output_pitch_bend[self.sample_source as usize]
+            {
+                let first_byte = MIDIMSG_CONTROL_CHANGE | channel;
+                out.push_message(mute, &[first_byte, MIDICC_RPN_MSB, 0x00]);
+                out.push_message(mute, &[first_byte, MIDICC_RPN_LSB, 0x00]);
+                out.push_message(
+                    mute,
+                    &[
+                        first_byte,
+                        MIDICC_RPN_DATA_ENTRY_LSB,
+                        srn_map.pitch_bend_sensitibity[self.sample_source as usize],
+                    ],
+                );
+                out.push_message(mute, &[first_byte, MIDICC_RPN_DATA_ENTRY_MSB, 0]);
+                srn_map.pitch_bend_sensitibity_updated[self.sample_source as usize] = false;
+            }
             // ピッチベンド
-            if self.noteon
-                && self.last_pitch != self.pitch
+            if self.last_pitch != self.pitch
                 && srn_map.output_pitch_bend[self.sample_source as usize]
             {
                 let max_semitone =
-                    srn_map.pitchbend_sensitibity[self.sample_source as usize] as f32;
+                    srn_map.pitch_bend_sensitibity[self.sample_source as usize] as f32;
                 // [-max_semitone,max_semitone]半音を[-8192,8192]に対応付ける
                 let pitchbend_ratio =
                     libm::log2f((self.pitch as f32) / (self.pitch_bend_base as f32)) * 12.0
@@ -507,7 +526,7 @@ impl SPCDSP for MIDIDSP {
                 program: [0; 256],
                 center_note: [64 << 8; 256], // 中心ノートは64で仮置き
                 noteon_velocity: [0x7F; 256],
-                pitchbend_sensitibity: [12; 256],
+                pitch_bend_sensitibity: [12; 256],
                 output_envelope: [true; 256],
                 auto_pan: [true; 256],
                 fixed_pan: [64; 256],
@@ -515,6 +534,7 @@ impl SPCDSP for MIDIDSP {
                 fixed_volume: [100; 256],
                 output_pitch_bend: [true; 256],
                 echo_as_effect1_depth: [true; 256],
+                pitch_bend_sensitibity_updated: [false; 256],
             },
             sample_source_target: 0,
             playback_parameter_count: 0,
@@ -646,7 +666,9 @@ impl SPCDSP for MIDIDSP {
                 self.sample_source_map.noteon_velocity[self.sample_source_target] = value;
             }
             DSP_ADDRESS_SRN_PITCHBEND_SENSITIVITY => {
-                self.sample_source_map.pitchbend_sensitibity[self.sample_source_target] = value;
+                self.sample_source_map.pitch_bend_sensitibity[self.sample_source_target] = value;
+                self.sample_source_map.pitch_bend_sensitibity_updated[self.sample_source_target] =
+                    true;
             }
             DSP_ADDRESS_NOTEON => {
                 for ch in 0..8 {
@@ -825,7 +847,7 @@ impl SPCDSP for MIDIDSP {
                 self.sample_source_map.noteon_velocity[self.sample_source_target]
             }
             DSP_ADDRESS_SRN_PITCHBEND_SENSITIVITY => {
-                self.sample_source_map.pitchbend_sensitibity[self.sample_source_target]
+                self.sample_source_map.pitch_bend_sensitibity[self.sample_source_target]
             }
             DSP_ADDRESS_NOTEON => {
                 let mut ret = 0;
@@ -906,7 +928,7 @@ impl SPCDSP for MIDIDSP {
                 effect1_depth,
                 self.global_counter,
                 playback_parameter_update,
-                &self.sample_source_map,
+                &mut self.sample_source_map,
                 &mut out,
             );
         }
