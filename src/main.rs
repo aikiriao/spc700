@@ -1,49 +1,13 @@
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use fixed_resample::ReadStatus;
-use midir::{MidiOutput, MidiOutputPort};
-use rimd::{Event, MidiMessage, SMFFormat, SMFWriter, Track, TrackEvent, SMF};
-use spc700::assembler::*;
-use spc700::mididsp::*;
 use spc700::spc::*;
 use spc700::spc_file::*;
 use spc700::types::*;
 use std::env;
 use std::fmt::Error;
-use std::io::{stdin, stdout, Write};
 use std::num::NonZero;
-use std::path::Path;
-use std::thread;
-use std::time::{Duration, Instant};
 
 const CLOCK_TICK_CYCLE_64KHZ: u32 = 16; /* 64KHz周期のクロックサイクル SPCのクロック(1.024MHz)を64KHzで割って得られる = 1024000 / 64000 */
-const CLOCK_TICK_CYCLE_64KHZ_NANOSEC: u64 = 15625; /* 64kHz間隔に相当するナノ秒 */
-
-/// バイナリをディスアセンブル
-fn naive_disassemble(ram: &[u8]) {
-    let mut pc = 0x100;
-
-    while pc < ram.len() {
-        let (opcode, len) = parse_opcode(&ram[pc..]);
-        println!("{:#06X}: {:X?}", pc, opcode);
-        pc += len as usize;
-    }
-}
-
-/// 実行してみる
-fn naive_execution(register: &SPCRegister, ram: &[u8], dsp_register: &[u8; 128]) {
-    let mut emu: spc700::spc::SPC<spc700::mididsp::MIDIDSP> = SPC::new(&register, ram, dsp_register);
-    let mut cycle_count = 0;
-    loop {
-        let cycle = emu.execute_step();
-        cycle_count += cycle as u32;
-        if cycle_count >= CLOCK_TICK_CYCLE_64KHZ {
-            cycle_count -= CLOCK_TICK_CYCLE_64KHZ;
-            if let Some(out) = emu.clock_tick_64k_hz() {
-                println!("{:X?}", out);
-            }
-        }
-    }
-}
 
 /// 再生してみる
 fn naive_play(
@@ -123,146 +87,6 @@ fn naive_play(
     // 再生開始
     stream.play()?;
     loop {}
-}
-
-/// MIDIを出力してみる
-fn naive_midi_play(
-    register: &SPCRegister,
-    ram: &[u8],
-    dsp_register: &[u8; 128],
-) -> Result<(), Box<dyn std::error::Error>> {
-    let midi_out = MidiOutput::new("My Test Output")?;
-
-    // Get an output port (read from console if multiple are available)
-    let out_ports = midi_out.ports();
-    let out_port: &MidiOutputPort = match out_ports.len() {
-        0 => return Err("no output port found".into()),
-        1 => {
-            println!(
-                "Choosing the only available output port: {}",
-                midi_out.port_name(&out_ports[0]).unwrap()
-            );
-            &out_ports[0]
-        }
-        _ => {
-            println!("\nAvailable output ports:");
-            for (i, p) in out_ports.iter().enumerate() {
-                println!("{}: {}", i, midi_out.port_name(p).unwrap());
-            }
-            print!("Please select output port: ");
-            stdout().flush()?;
-            let mut input = String::new();
-            stdin().read_line(&mut input)?;
-            out_ports
-                .get(input.trim().parse::<usize>()?)
-                .ok_or("invalid output port selected")?
-        }
-    };
-
-    println!("\nOpening connection");
-    let mut conn_out = midi_out.connect(out_port, "midir-test")?;
-    println!("Connection open. Listen!");
-
-    // SPCの作成
-    let mut emu: spc700::spc::SPC<spc700::mididsp::MIDIDSP> = SPC::new(&register, ram, dsp_register);
-    let mut cycle_count = 0;
-
-    // DSPレジスタへの書き込み
-    fn write_dsp_data<T>(spc: &mut SPC<T>, address: u8, data: u8)
-    where
-        T: spc700::types::SPCDSP,
-    {
-        // ラッチしていたアドレスを保存
-        let original_address = spc.read_ram_u8(SPC_ADDRESS_DSPADDR);
-        spc.write_ram_u8(SPC_ADDRESS_DSPADDR, address);
-        spc.write_ram_u8(SPC_ADDRESS_DSPDATA, data);
-        spc.write_ram_u8(SPC_ADDRESS_DSPADDR, original_address);
-    }
-
-    // 64kHz間隔 = 1000 / 64 micro = 15625 nano sec
-    let interval = Duration::from_nanos(CLOCK_TICK_CYCLE_64KHZ_NANOSEC);
-    let mut next = Instant::now();
-    loop {
-        // 64kHzタイマーティックするまで処理
-        while cycle_count < CLOCK_TICK_CYCLE_64KHZ {
-            cycle_count += emu.execute_step() as u32;
-        }
-        cycle_count -= CLOCK_TICK_CYCLE_64KHZ;
-        // MIDI出力
-        if let Some(out) = emu.clock_tick_64k_hz() {
-            for i in 0..out.num_messages {
-                let msg = out.messages[i];
-                println!("{:X?}", msg.data);
-                conn_out.send(&msg.data[..msg.length]).unwrap();
-            }
-        }
-        // ビジーループ
-        next += interval;
-        while Instant::now() < next {
-            thread::yield_now();
-        }
-    }
-}
-
-/// MIDIファイルを書き出してみる
-fn naive_midi_dump(
-    register: &SPCRegister,
-    ram: &[u8],
-    dsp_register: &[u8; 128],
-) -> Result<(), Box<dyn std::error::Error>> {
-    const MIDI_BPM: u64 = 120;
-    const MIDI_DIVISIONS: u64 = 3200;
-    let mut smf = SMF {
-        format: SMFFormat::Single,
-        tracks: vec![Track {
-            copyright: Some("tmp".to_string()),
-            name: Some("tmp".to_string()),
-            events: Vec::new(),
-        }],
-        division: MIDI_DIVISIONS as i16,
-    };
-
-    // SPCの作成
-    let mut emu: spc700::spc::SPC<spc700::mididsp::MIDIDSP> = SPC::new(&register, ram, dsp_register);
-    let mut cycle_count = 0;
-    let mut total_elapsed_time_nanosec = 0;
-    let mut previous_event_time = 0.0;
-
-    // 60秒出力する
-    while total_elapsed_time_nanosec < 60 * 1000_000_000 {
-        // 64kHzタイマーティックするまで処理
-        while cycle_count < CLOCK_TICK_CYCLE_64KHZ {
-            cycle_count += emu.execute_step() as u32;
-        }
-        cycle_count -= CLOCK_TICK_CYCLE_64KHZ;
-        // MIDI出力
-        if let Some(out) = emu.clock_tick_64k_hz() {
-            // 経過時間からティック数を計算
-            let delta_nano_time = total_elapsed_time_nanosec as f64 - previous_event_time;
-            let ticks =
-                (delta_nano_time * (MIDI_BPM * MIDI_DIVISIONS) as f64) / (60.0 * 1000_000_000.0);
-            // ティック数は切り捨てる（切り上げると経過時間が未来になって経過時間が負になりうる）
-            for i in 0..out.num_messages {
-                let msg = out.messages[i];
-                smf.tracks[0].events.push(TrackEvent {
-                    vtime: if i == 0 { ticks.floor() as u64 } else { 0 },
-                    event: Event::Midi(MidiMessage {
-                        data: msg.data[..msg.length].to_vec(),
-                    }),
-                });
-            }
-            // 実際のtickから経過時間計算
-            previous_event_time +=
-                (ticks.floor() * 60.0 * 1000_000_000.0) / ((MIDI_DIVISIONS * MIDI_BPM) as f64);
-        }
-        // 時間を進める
-        total_elapsed_time_nanosec += CLOCK_TICK_CYCLE_64KHZ_NANOSEC;
-    }
-
-    let writer = SMFWriter::from_smf(smf);
-    let _ = writer.write_to_file(Path::new("test.mid"));
-
-    Ok(())
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
