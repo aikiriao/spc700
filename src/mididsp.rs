@@ -54,10 +54,10 @@ pub const DSP_ADDRESS_SRN_NOTEON_VELOCITY: u8 = 0x1B;
 pub const DSP_ADDRESS_SRN_CENTER_NOTE_HIGH: u8 = 0x2A;
 /// SRNの中央に該当するノート（基準ピッチ）の下位8bit
 pub const DSP_ADDRESS_SRN_CENTER_NOTE_LOW: u8 = 0x2B;
-/// SRNの固定ボリューム値
-pub const DSP_ADDRESS_SRN_FIXED_VOLUME: u8 = 0x3A;
-/// SRNの固定パン値
-pub const DSP_ADDRESS_SRN_FIXED_PAN: u8 = 0x3B;
+/// SRNのボリューム値（1bitフラグ + 7bit固定ボリューム値）
+pub const DSP_ADDRESS_SRN_VOLUME: u8 = 0x3A;
+/// SRNのパン値（1bitフラグ + 7bit固定パン値）
+pub const DSP_ADDRESS_SRN_PAN: u8 = 0x3B;
 /// SRNのピッチベンドセンシティビティ
 pub const DSP_ADDRESS_SRN_PITCHBEND_SENSITIVITY: u8 = 0x4A;
 /// ノートオンフラグ
@@ -636,12 +636,8 @@ impl SPCDSP for MIDIDSP {
                 self.sample_source_map.mute[self.sample_source_target] = (value & 0x80) != 0;
                 self.sample_source_map.output_envelope[self.sample_source_target] =
                     (value & 0x40) != 0;
-                self.sample_source_map.output_pitch_bend[self.sample_source_target] =
-                    (value & 0x20) != 0;
                 self.sample_source_map.echo_as_effect1_depth[self.sample_source_target] =
-                    (value & 0x10) != 0;
-                self.sample_source_map.auto_volume[self.sample_source_target] = (value & 0x08) != 0;
-                self.sample_source_map.auto_pan[self.sample_source_target] = (value & 0x04) != 0;
+                    (value & 0x20) != 0;
             }
             DSP_ADDRESS_SRN_PROGRAM => {
                 self.sample_source_map.program[self.sample_source_target] = value;
@@ -656,16 +652,20 @@ impl SPCDSP for MIDIDSP {
                 self.sample_source_map.center_note[self.sample_source_target] =
                     ((value as u16) << 0) | (note & 0xFF00);
             }
-            DSP_ADDRESS_SRN_FIXED_VOLUME => {
-                self.sample_source_map.fixed_volume[self.sample_source_target] = value;
+            DSP_ADDRESS_SRN_VOLUME => {
+                self.sample_source_map.auto_volume[self.sample_source_target] = (value & 0x80) != 0;
+                self.sample_source_map.fixed_volume[self.sample_source_target] = value & 0x7F;
             }
-            DSP_ADDRESS_SRN_FIXED_PAN => {
-                self.sample_source_map.fixed_pan[self.sample_source_target] = value;
+            DSP_ADDRESS_SRN_PAN => {
+                self.sample_source_map.auto_pan[self.sample_source_target] = (value & 0x80) != 0;
+                self.sample_source_map.fixed_pan[self.sample_source_target] = value & 0x7F;
             }
             DSP_ADDRESS_SRN_NOTEON_VELOCITY => {
                 self.sample_source_map.noteon_velocity[self.sample_source_target] = value;
             }
             DSP_ADDRESS_SRN_PITCHBEND_SENSITIVITY => {
+                self.sample_source_map.output_pitch_bend[self.sample_source_target] =
+                    (value & 0x80) != 0;
                 self.sample_source_map.pitch_bend_sensitibity[self.sample_source_target] = value;
                 self.sample_source_map.pitch_bend_sensitibity_updated[self.sample_source_target] =
                     true;
@@ -816,17 +816,8 @@ impl SPCDSP for MIDIDSP {
                 if self.sample_source_map.output_envelope[self.sample_source_target] {
                     value |= 0x40;
                 }
-                if self.sample_source_map.output_pitch_bend[self.sample_source_target] {
-                    value |= 0x20;
-                }
                 if self.sample_source_map.echo_as_effect1_depth[self.sample_source_target] {
-                    value |= 0x10;
-                }
-                if self.sample_source_map.auto_volume[self.sample_source_target] {
-                    value |= 0x08;
-                }
-                if self.sample_source_map.auto_pan[self.sample_source_target] {
-                    value |= 0x04;
+                    value |= 0x20;
                 }
                 value
             }
@@ -837,17 +828,30 @@ impl SPCDSP for MIDIDSP {
             DSP_ADDRESS_SRN_CENTER_NOTE_LOW => {
                 ((self.sample_source_map.center_note[self.sample_source_target] >> 0) & 0xFF) as u8
             }
-            DSP_ADDRESS_SRN_FIXED_VOLUME => {
-                self.sample_source_map.fixed_volume[self.sample_source_target]
+            DSP_ADDRESS_SRN_VOLUME => {
+                let mut value = self.sample_source_map.fixed_volume[self.sample_source_target];
+                if self.sample_source_map.auto_volume[self.sample_source_target] {
+                    value |= 0x80;
+                }
+                value
             }
-            DSP_ADDRESS_SRN_FIXED_PAN => {
-                self.sample_source_map.fixed_pan[self.sample_source_target]
+            DSP_ADDRESS_SRN_PAN => {
+                let mut value = self.sample_source_map.fixed_pan[self.sample_source_target];
+                if self.sample_source_map.auto_pan[self.sample_source_target] {
+                    value |= 0x80;
+                }
+                value
             }
             DSP_ADDRESS_SRN_NOTEON_VELOCITY => {
                 self.sample_source_map.noteon_velocity[self.sample_source_target]
             }
             DSP_ADDRESS_SRN_PITCHBEND_SENSITIVITY => {
-                self.sample_source_map.pitch_bend_sensitibity[self.sample_source_target]
+                let mut value =
+                    self.sample_source_map.pitch_bend_sensitibity[self.sample_source_target];
+                if self.sample_source_map.output_pitch_bend[self.sample_source_target] {
+                    value |= 0x80;
+                }
+                value
             }
             DSP_ADDRESS_NOTEON => {
                 let mut ret = 0;
