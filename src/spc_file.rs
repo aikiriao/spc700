@@ -118,8 +118,7 @@ fn parse_spc_header(data: &[u8]) -> Option<SPCFileHeader> {
     }
 
     // テキストかバイナリかを日付の表記とバージョン文字列で判定
-    let binary = (data[0x9E + 2] != b'/' || data[0x9E + 5] != b'/')
-        && (data[29] != b'0' || data[30] != b'.' || data[31] != b'3' || data[32] != b'0');
+    let binary = data[0x9E + 2] != b'/' || data[0x9E + 5] != b'/';
 
     if binary {
         Some(SPCFileHeader {
