@@ -131,9 +131,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             std::str::from_utf8(&spcfile.header.comment)
                 .unwrap()
                 .trim_end_matches('\0'),
-            spcfile.header.generate_date,
-            spcfile.header.generate_month,
             spcfile.header.generate_year,
+            spcfile.header.generate_month,
+            spcfile.header.generate_date,
             spcfile.header.duration,
             spcfile.header.fadeout_time,
             std::str::from_utf8(&spcfile.header.composer)
