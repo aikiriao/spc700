@@ -124,9 +124,9 @@ fn determine_data_format_is_binary(data: &[u8]) -> bool {
     };
 
     if date_exist {
-        // 日付を区切るスラッシュがない
-        if data[0x9E + 2] != b'/' || data[0x9E + 5] != b'/' {
-            return true;
+        // 日付を区切るスラッシュがあればテキストの可能性が高い
+        if data[0x9E + 2] == b'/' && data[0x9E + 5] == b'/' {
+            return false;
         }
         // 先頭4バイトがバイナリ
         if u8array_to_numeric(&data[0x9E..0x9E + 4]).is_none() {
@@ -138,7 +138,7 @@ fn determine_data_format_is_binary(data: &[u8]) -> bool {
     let duration_exist = {
         let mut flag = false;
         for i in 0..3 {
-            if data[0x9A + i] != 0 {
+            if data[0xA9 + i] != 0 {
                 flag = true;
                 break;
             }
@@ -148,7 +148,7 @@ fn determine_data_format_is_binary(data: &[u8]) -> bool {
 
     if duration_exist {
         // 先頭2バイトがバイナリ
-        if u8array_to_numeric(&data[0x9E..0x9E + 2]).is_none() {
+        if u8array_to_numeric(&data[0xA9..0xA9 + 2]).is_none() {
             return true;
         }
     }
@@ -157,7 +157,7 @@ fn determine_data_format_is_binary(data: &[u8]) -> bool {
     let fadeout_exist = {
         let mut flag = false;
         for i in 0..3 {
-            if data[0x9C + i] != 0 {
+            if data[0xAC + i] != 0 {
                 flag = true;
                 break;
             }
@@ -167,11 +167,12 @@ fn determine_data_format_is_binary(data: &[u8]) -> bool {
 
     if fadeout_exist {
         // 先頭3バイトがバイナリ
-        if u8array_to_numeric(&data[0x9E..0x9E + 3]).is_none() {
+        if u8array_to_numeric(&data[0xAC..0xAC + 3]).is_none() {
             return true;
         }
     }
 
+    // 判定不可能な場合はテキストとする
     false
 }
 
@@ -208,9 +209,9 @@ fn parse_spc_header(data: &[u8]) -> Option<SPCFileHeader> {
             generate_month: data[0x9F],
             generate_year: make_u16_from_u8(&data[0xA0..0xA2]),
             duration: make_u16_from_u8(&data[0xA9..0xAB]),
-            fadeout_time: ((data[0xAC] as u32) << 16)
+            fadeout_time: ((data[0xAC] as u32) << 0)
                 | ((data[0xAD] as u32) << 8)
-                | (data[0xAE] as u32), // TODO: エンディアンは？
+                | ((data[0xAE] as u32) << 16),
             composer: data[0xB0..0xB0 + 32].try_into().unwrap(),
             initial_channel_invalid: data[0xD0],
             emurator_type: match data[0xD1] {
