@@ -110,6 +110,71 @@ fn u8array_to_numeric(data: &[u8]) -> Option<u64> {
     Some(ret)
 }
 
+fn determine_data_format_is_binary(data: &[u8]) -> bool {
+    // 日付情報が存在するか
+    let date_exist = {
+        let mut flag = false;
+        for i in 0..11 {
+            if data[0x9E + i] != 0 {
+                flag = true;
+                break;
+            }
+        }
+        flag
+    };
+
+    if date_exist {
+        // 日付を区切るスラッシュがない
+        if data[0x9E + 2] != b'/' || data[0x9E + 5] != b'/' {
+            return true;
+        }
+        // 先頭4バイトがバイナリ
+        if u8array_to_numeric(&data[0x9E..0x9E + 4]).is_none() {
+            return true;
+        }
+    }
+
+    // 演奏時間が存在するか
+    let duration_exist = {
+        let mut flag = false;
+        for i in 0..3 {
+            if data[0x9A + i] != 0 {
+                flag = true;
+                break;
+            }
+        }
+        flag
+    };
+
+    if duration_exist {
+        // 先頭2バイトがバイナリ
+        if u8array_to_numeric(&data[0x9E..0x9E + 2]).is_none() {
+            return true;
+        }
+    }
+
+    // フェードアウト時間が存在するか
+    let fadeout_exist = {
+        let mut flag = false;
+        for i in 0..3 {
+            if data[0x9C + i] != 0 {
+                flag = true;
+                break;
+            }
+        }
+        flag
+    };
+
+    if fadeout_exist {
+        // 先頭3バイトがバイナリ
+        if u8array_to_numeric(&data[0x9E..0x9E + 3]).is_none() {
+            return true;
+        }
+    }
+
+    false
+}
+
 /// SPCファイルヘッダのパース
 fn parse_spc_header(data: &[u8]) -> Option<SPCFileHeader> {
     // サイズチェック
@@ -117,10 +182,8 @@ fn parse_spc_header(data: &[u8]) -> Option<SPCFileHeader> {
         return None;
     }
 
-    // テキストかバイナリかを日付の表記とバージョン文字列で判定
-    let binary = data[0x9E + 2] != b'/' || data[0x9E + 5] != b'/';
-
-    if binary {
+    // バイナリ/テキストフォーマット判定してからパース
+    if determine_data_format_is_binary(data) {
         Some(SPCFileHeader {
             info: data[0..33].try_into().unwrap(),
             tag: if data[0x23] == 0x1A {
