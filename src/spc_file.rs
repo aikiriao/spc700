@@ -110,6 +110,7 @@ fn u8array_to_numeric(data: &[u8]) -> Option<u64> {
     Some(ret)
 }
 
+// ヘッダがバイナリフォーマットか否（テキスト）か判定
 fn determine_data_format_is_binary(data: &[u8]) -> bool {
     // 日付情報が存在するか
     let date_exist = {
@@ -124,13 +125,19 @@ fn determine_data_format_is_binary(data: &[u8]) -> bool {
     };
 
     if date_exist {
-        // 日付を区切るスラッシュがあればテキストの可能性が高い
+        // 日付を区切るスラッシュがあればテキスト
         if data[0x9E + 2] == b'/' && data[0x9E + 5] == b'/' {
             return false;
         }
-        // 先頭4バイトがバイナリ
-        if u8array_to_numeric(&data[0x9E..0x9E + 4]).is_none() {
-            return true;
+        // 日付が文字としてパースできればテキスト
+        if let Some(_) = u8array_to_numeric(&data[0x9E..0x9E + 2]) {
+            return false;
+        }
+        if let Some(_) = u8array_to_numeric(&data[0x9E + 3..0x9E + 5]) {
+            return false;
+        }
+        if let Some(_) = u8array_to_numeric(&data[0x9E + 6..0x9E + 11]) {
+            return false;
         }
     }
 
@@ -147,16 +154,16 @@ fn determine_data_format_is_binary(data: &[u8]) -> bool {
     };
 
     if duration_exist {
-        // 先頭2バイトがバイナリ
-        if u8array_to_numeric(&data[0xA9..0xA9 + 2]).is_none() {
-            return true;
+        // 演奏時間が文字としてパースできればテキスト
+        if let Some(_) = u8array_to_numeric(&data[0xA9..0xA9 + 3]) {
+            return false;
         }
     }
 
     // フェードアウト時間が存在するか
     let fadeout_exist = {
         let mut flag = false;
-        for i in 0..3 {
+        for i in 0..5 {
             if data[0xAC + i] != 0 {
                 flag = true;
                 break;
@@ -166,14 +173,14 @@ fn determine_data_format_is_binary(data: &[u8]) -> bool {
     };
 
     if fadeout_exist {
-        // 先頭3バイトがバイナリ
-        if u8array_to_numeric(&data[0xAC..0xAC + 3]).is_none() {
-            return true;
+        // フェードアウト時間が文字としてパースできればテキスト
+        if let Some(_) = u8array_to_numeric(&data[0xAC..0xAC + 5]) {
+            return false;
         }
     }
 
-    // 判定不可能な場合はテキストとする
-    false
+    // 判定不可能な場合はバイナリとする
+    true
 }
 
 /// SPCファイルヘッダのパース
