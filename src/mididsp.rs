@@ -166,6 +166,8 @@ pub struct MIDIDSP {
     playback_parameter_count: u16,
     /// エンベロープ・ボリューム・ピッチベンド更新間隔サンプル
     playback_parameter_update_period: u16,
+    /// 最後に出力したチャンネルメッセージのステータスバイト
+    status_byte: u8,
 }
 
 /// ステータスバイト情報付きMIDIメッセージ
@@ -553,6 +555,7 @@ impl SPCDSP for MIDIDSP {
             sample_source_target: 0,
             playback_parameter_count: 0,
             playback_parameter_update_period: 160,
+            status_byte: 0,
         }
     }
 
@@ -926,7 +929,7 @@ impl SPCDSP for MIDIDSP {
                 }; MAX_NUM_MIDI_OUTPUT_MESSAGES],
                 num_messages: 0,
             },
-            status_byte: 0,
+            status_byte: self.status_byte,
         };
 
         // エンベロープ・ボリューム・ピッチベンド更新するか
@@ -959,6 +962,9 @@ impl SPCDSP for MIDIDSP {
             self.global_counter = 0x77FF;
         }
         self.global_counter -= 1;
+
+        // ステータスバイト更新
+        self.status_byte = out.status_byte;
 
         // ミュートならばメッセージなし
         if self.mute || out.message.num_messages == 0 {
