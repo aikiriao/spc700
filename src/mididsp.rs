@@ -39,12 +39,10 @@ const MIDICC_EFFECT1_DEPTH: u8 = 0x5B;
 
 /// 設定・取得対象のサンプル番号(SRN)
 pub const DSP_ADDRESS_SRN_TARGET: u8 = 0x0A;
-/// SRNのフラグ EBDVP000
+/// SRNのフラグ MED00000
+/// M: ミュートフラグ（1ならばメッセージを出力しない）
 /// E: エンベロープをエクスプレッションとして出力
-/// B: ピッチベンド
 /// D: エコーをエフェクト1デプスとして出力
-/// V: ボリュームを自動更新（falseで固定値を使用）
-/// P: パンを自動更新（falseで固定値を使用）
 pub const DSP_ADDRESS_SRN_FLAG: u8 = 0x0B;
 /// SRNのプログラム番号 0x00 - 0x7FはGMと同等、0x80-0xFFはドラムキット音色+0x80
 pub const DSP_ADDRESS_SRN_PROGRAM: u8 = 0x1A;
