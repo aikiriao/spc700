@@ -56,7 +56,7 @@ pub const DSP_ADDRESS_SRN_CENTER_NOTE_LOW: u8 = 0x2B;
 pub const DSP_ADDRESS_SRN_VOLUME: u8 = 0x3A;
 /// SRNのパン値（1bitフラグ + 7bit固定パン値）
 pub const DSP_ADDRESS_SRN_PAN: u8 = 0x3B;
-/// SRNのピッチベンドセンシティビティ
+/// SRNのピッチベンドセンシティビティ（1bitフラグ + 下位ビットで半音単位で幅を指定）
 pub const DSP_ADDRESS_SRN_PITCHBEND_SENSITIVITY: u8 = 0x4A;
 /// ノートオンフラグ
 pub const DSP_ADDRESS_NOTEON: u8 = 0x5A;
@@ -683,7 +683,7 @@ impl SPCDSP for MIDIDSP {
             DSP_ADDRESS_SRN_PITCHBEND_SENSITIVITY => {
                 self.sample_source_map.output_pitch_bend[self.sample_source_target] =
                     (value & 0x80) != 0;
-                self.sample_source_map.pitch_bend_sensitibity[self.sample_source_target] = value;
+                self.sample_source_map.pitch_bend_sensitibity[self.sample_source_target] = value & 0x7F;
                 self.sample_source_map.pitch_bend_sensitibity_updated[self.sample_source_target] =
                     true;
             }
