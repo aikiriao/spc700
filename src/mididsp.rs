@@ -234,14 +234,13 @@ impl MIDIOutputWithStatusByte {
         assert!(data.len() <= 3);
         assert!(self.message.num_messages < MAX_NUM_MIDI_OUTPUT_MESSAGES);
 
-        // 先頭1バイト（ステータスバイト）を見て直前と同じならば省略（ランニングステータス）
+        // 先頭1バイト（ステータスバイト）を見て直前と同じならばステータスバイトを省略（ランニングステータス）
         if self.status_byte == data[0] {
-            self.message.messages[self.message.num_messages].data[1..data.len()]
+            self.message.messages[self.message.num_messages].data[0..(data.len() - 1)]
                 .copy_from_slice(&data[1..data.len()]);
             self.message.messages[self.message.num_messages].length = data.len() - 1;
         } else {
-            self.message.messages[self.message.num_messages]
-                .data
+            self.message.messages[self.message.num_messages].data[..data.len()]
                 .copy_from_slice(&data);
             self.message.messages[self.message.num_messages].length = data.len();
             self.status_byte = data[0];
