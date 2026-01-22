@@ -28,6 +28,8 @@ struct VoiceRegister {
     noise: bool,
     /// デコーダ
     decoder: Decoder,
+    /// ミュートしているか
+    ch_mute: bool,
 }
 
 /// S-DSP
@@ -83,6 +85,7 @@ impl VoiceRegister {
             pitch_mod: false,
             noise: false,
             decoder: Decoder::new(),
+            ch_mute: false,
         }
     }
 
@@ -317,6 +320,11 @@ impl SPCDSP for SDSP {
                 let index = address >> 4;
                 self.fir_coef[index as usize] = value as i8;
             }
+            DSP_ADDRESS_CHANNEL_MUTE => {
+                for ch in 0..8 {
+                    self.voice[ch].ch_mute = ((value >> ch) & 0x1) != 0;
+                }
+            }
             address if ((address & 0xF) <= 0x9) => {
                 let ch = (address >> 4) as usize;
                 match address & 0xF {
@@ -455,6 +463,17 @@ impl SPCDSP for SDSP {
                 let index = address >> 4;
                 self.fir_coef[index as usize] as u8
             }
+            DSP_ADDRESS_CHANNEL_MUTE => {
+                let mut ret = 0;
+                let mut bit = 1;
+                for ch in 0..8 {
+                    if self.voice[ch].ch_mute {
+                        ret |= bit;
+                    }
+                    bit <<= 1;
+                }
+                ret
+            }
             address if ((address & 0xF) <= 0x9) => {
                 let ch = (address >> 4) as usize;
                 match address & 0xF {
@@ -487,11 +506,13 @@ impl SPCDSP for SDSP {
         // 全チャンネルの出力をミックス
         for ch in 0..8 {
             let vout = self.voice[ch].tick(ram, self.global_counter, prev_voice_out);
-            out[0] += vout[0] as i32;
-            out[1] += vout[1] as i32;
-            if self.echo[ch] {
-                echo_in[0] += vout[0] as i32;
-                echo_in[1] += vout[1] as i32;
+            if !self.voice[ch].ch_mute {
+                out[0] += vout[0] as i32;
+                out[1] += vout[1] as i32;
+                if self.echo[ch] {
+                    echo_in[0] += vout[0] as i32;
+                    echo_in[1] += vout[1] as i32;
+                }
             }
             prev_voice_out = self.voice[ch].output_sample;
         }

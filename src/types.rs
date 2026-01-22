@@ -35,6 +35,8 @@ pub const DSP_ADDRESS_V0ADSR2: u8 = 0x06;
 pub const DSP_ADDRESS_V0GAIN: u8 = 0x07;
 pub const DSP_ADDRESS_V0ENVX: u8 = 0x08;
 pub const DSP_ADDRESS_V0OUTX: u8 = 0x09;
+/// チャンネルごとのミュートフラグ（独自追加）
+pub const DSP_ADDRESS_CHANNEL_MUTE: u8 = 0x7B;
 
 /// SPCレジスタ
 #[derive(Debug, Clone)]

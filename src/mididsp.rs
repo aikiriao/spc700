@@ -60,10 +60,8 @@ pub const DSP_ADDRESS_SRN_PAN: u8 = 0x3B;
 pub const DSP_ADDRESS_SRN_PITCHBEND_SENSITIVITY: u8 = 0x4A;
 /// ノートオンフラグ
 pub const DSP_ADDRESS_NOTEON: u8 = 0x5A;
-/// MIDIミュートフラグ
-pub const DSP_ADDRESS_MIDI_MUTE: u8 = 0x5B;
 /// エンベロープ・ボリューム・ピッチベンド更新間隔(ms)
-pub const DSP_ADDRESS_PLAYBACK_PARAMETER_UPDATE_PERIOD: u8 = 0x6A;
+pub const DSP_ADDRESS_PLAYBACK_PARAMETER_UPDATE_PERIOD: u8 = 0x5B;
 
 /// ボイス
 #[derive(Copy, Clone, Debug)]
@@ -106,8 +104,8 @@ struct MIDIVoiceRegister {
     last_pitch: u16,
     /// 最後に設定したプログラム番号
     last_program: u8,
-    /// MIDIミュートフラグ
-    midi_mute: bool,
+    /// ミュートフラグ
+    ch_mute: bool,
 }
 
 /// 各サンプルに対応するマップ
@@ -273,7 +271,7 @@ impl MIDIVoiceRegister {
             pitch_bend_base: 0,
             last_pitch: 0,
             last_program: 0,
-            midi_mute: false,
+            ch_mute: false,
         }
     }
 
@@ -287,7 +285,7 @@ impl MIDIVoiceRegister {
         out: &mut MIDIOutputWithStatusByte,
     ) {
         // 対象ソースのミュートフラグ取得
-        let mute = self.midi_mute || srn_map.mute[self.sample_source as usize];
+        let mute = self.ch_mute || srn_map.mute[self.sample_source as usize];
 
         // キーオンが入ったとき
         if self.keyon {
@@ -692,9 +690,9 @@ impl SPCDSP for MIDIDSP {
                     self.voice[ch].noteon = ((value >> ch) & 0x1) != 0;
                 }
             }
-            DSP_ADDRESS_MIDI_MUTE => {
+            DSP_ADDRESS_CHANNEL_MUTE => {
                 for ch in 0..8 {
-                    self.voice[ch].midi_mute = ((value >> ch) & 0x1) != 0;
+                    self.voice[ch].ch_mute = ((value >> ch) & 0x1) != 0;
                 }
             }
             DSP_ADDRESS_PLAYBACK_PARAMETER_UPDATE_PERIOD => {
@@ -881,11 +879,11 @@ impl SPCDSP for MIDIDSP {
                 }
                 ret
             }
-            DSP_ADDRESS_MIDI_MUTE => {
+            DSP_ADDRESS_CHANNEL_MUTE => {
                 let mut ret = 0;
                 let mut bit = 1;
                 for ch in 0..8 {
-                    if self.voice[ch].midi_mute {
+                    if self.voice[ch].ch_mute {
                         ret |= bit;
                     }
                     bit <<= 1;
