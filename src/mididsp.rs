@@ -94,8 +94,10 @@ struct MIDIVoiceRegister {
     echo: bool,
     /// エンベロープが更新されたか
     envelope_updated: bool,
-    /// ボリュームが更新されたか
-    volume_updated: bool,
+    /// 最後のボリューム設定値
+    last_volume: u8,
+    /// 最後のパン設定値
+    last_pan: u8,
     /// 最後に発声した音のノート番号
     last_note: u8,
     /// ピッチベンドの基準ピッチ（最後に発声した音のピッチ）
@@ -266,7 +268,8 @@ impl MIDIVoiceRegister {
             noise: false,
             echo: false,
             envelope_updated: false,
-            volume_updated: false,
+            last_volume: 0,
+            last_pan: 64,
             last_note: 0,
             pitch_bend_base: 0,
             last_pitch: 0,
@@ -399,6 +402,8 @@ impl MIDIVoiceRegister {
                     srn_map.noteon_velocity[self.sample_source as usize],
                 ],
             );
+            self.last_volume = volume;
+            self.last_pan = pan;
             self.noteon_drum = program > 0x7F;
             self.last_note = note;
             self.pitch_bend_base = self.pitch;
@@ -447,25 +452,24 @@ impl MIDIVoiceRegister {
                 self.envelope_updated = false;
             }
             // ボリューム・パン
-            if self.volume_updated {
-                let (volume, pan) = lrvolume_to_volume_and_pan(&self.volume);
-                if srn_map.auto_volume[self.sample_source as usize] {
-                    out.push_channel_message(
-                        mute,
-                        &[
-                            MIDIMSG_CONTROL_CHANGE | channel,
-                            MIDICC_CHANNEL_VOLUME,
-                            volume,
-                        ],
-                    );
-                }
-                if srn_map.auto_pan[self.sample_source as usize] {
-                    out.push_channel_message(
-                        mute,
-                        &[MIDIMSG_CONTROL_CHANGE | channel, MIDICC_PANPOT, pan],
-                    );
-                }
-                self.volume_updated = false;
+            let (volume, pan) = lrvolume_to_volume_and_pan(&self.volume);
+            if self.last_volume != volume && srn_map.auto_volume[self.sample_source as usize] {
+                out.push_channel_message(
+                    mute,
+                    &[
+                        MIDIMSG_CONTROL_CHANGE | channel,
+                        MIDICC_CHANNEL_VOLUME,
+                        volume,
+                    ],
+                );
+                self.last_volume = volume;
+            }
+            if self.last_pan != pan && srn_map.auto_pan[self.sample_source as usize] {
+                out.push_channel_message(
+                    mute,
+                    &[MIDIMSG_CONTROL_CHANGE | channel, MIDICC_PANPOT, pan],
+                );
+                self.last_pan = pan;
             }
             // ピッチベンドセンシティビティ
             if srn_map.pitch_bend_sensitibity_updated[self.sample_source as usize]
@@ -681,7 +685,8 @@ impl SPCDSP for MIDIDSP {
             DSP_ADDRESS_SRN_PITCHBEND_SENSITIVITY => {
                 self.sample_source_map.output_pitch_bend[self.sample_source_target] =
                     (value & 0x80) != 0;
-                self.sample_source_map.pitch_bend_sensitibity[self.sample_source_target] = value & 0x7F;
+                self.sample_source_map.pitch_bend_sensitibity[self.sample_source_target] =
+                    value & 0x7F;
                 self.sample_source_map.pitch_bend_sensitibity_updated[self.sample_source_target] =
                     true;
             }
@@ -703,11 +708,9 @@ impl SPCDSP for MIDIDSP {
                 match address & 0xF {
                     DSP_ADDRESS_V0VOLL => {
                         self.voice[ch].volume[0] = value as i8;
-                        self.voice[ch].volume_updated = true;
                     }
                     DSP_ADDRESS_V0VOLR => {
                         self.voice[ch].volume[1] = value as i8;
-                        self.voice[ch].volume_updated = true;
                     }
                     DSP_ADDRESS_V0PITCHL => {
                         self.voice[ch].pitch = (self.voice[ch].pitch & 0xFF00) | (value as u16);
