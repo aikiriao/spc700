@@ -209,7 +209,7 @@ fn gain_to_midi_volume(gain: u8) -> u8 {
 fn lrvolume_to_volume_and_pan(lrvolume: &[i8; 2]) -> (u8, u8) {
     let abs_lrvolume = [lrvolume[0].unsigned_abs(), lrvolume[1].unsigned_abs()];
     let volume = gain_to_midi_volume(abs_lrvolume[0].max(abs_lrvolume[1]));
-    let pan = if abs_lrvolume[0] == 0 && abs_lrvolume[1] == 0 {
+    let pan = if abs_lrvolume[0] == abs_lrvolume[1] {
         64
     } else if abs_lrvolume[0] == 0 {
         127
@@ -217,7 +217,7 @@ fn lrvolume_to_volume_and_pan(lrvolume: &[i8; 2]) -> (u8, u8) {
         0
     } else {
         const FACTOR: f32 = 256.0 / PI;
-        libm::roundf(FACTOR * libm::atanf(abs_lrvolume[0] as f32 / abs_lrvolume[1] as f32)) as u8
+        libm::roundf(FACTOR * libm::atan2f(abs_lrvolume[1] as f32, abs_lrvolume[0] as f32)) as u8
     };
     (volume, pan)
 }
