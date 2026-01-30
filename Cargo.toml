@@ -4,7 +4,9 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-cpal = "0.16.0"
-fixed-resample = "0.9.2"
 libm = "0.2.15"
 log = "0.4.28"
+
+[dev-dependencies]
+cpal = "0.16.0"
+fixed-resample = "0.9.2"
