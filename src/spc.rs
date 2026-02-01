@@ -337,7 +337,7 @@ where
                     // 様々な資料で4としている。注意。fullsnesやSNESAPUでは5
                     5
                 }
-                _ => panic!("Invalid oprand!"),
+                _ => unreachable!("Invalid oprand!"),
             },
             SPCOpcode::XCN => {
                 let ret = (self.reg.a >> 4) | (self.reg.a << 4);
@@ -365,7 +365,7 @@ where
                     self.set_psw_flag(PSW_FLAG_C, ret >= 0x10000);
                     5
                 }
-                _ => panic!("Invalid oprand!"),
+                _ => unreachable!("Invalid oprand!"),
             },
             SPCOpcode::DEC { oprand } => self.execute_dec(oprand),
             SPCOpcode::DECW { oprand } => match oprand {
@@ -379,7 +379,7 @@ where
                     self.set_psw_flag(PSW_FLAG_Z, wval == 0);
                     6
                 }
-                _ => panic!("Invalid oprand!"),
+                _ => unreachable!("Invalid oprand!"),
             },
             SPCOpcode::DIV => {
                 let ya = ((self.reg.y as u16) << 8) | (self.reg.a as u16);
@@ -420,7 +420,7 @@ where
                     self.set_psw_flag(PSW_FLAG_Z, wval == 0);
                     6
                 }
-                _ => panic!("Invalid oprand!"),
+                _ => unreachable!("Invalid oprand!"),
             },
             SPCOpcode::MUL => {
                 let mul = (self.reg.y as u16) * (self.reg.a as u16);
@@ -449,7 +449,7 @@ where
                     self.set_psw_flag(PSW_FLAG_C, !(ret >= 0x10000));
                     5
                 }
-                _ => panic!("Invalid oprand!"),
+                _ => unreachable!("Invalid oprand!"),
             },
             // スタック操作命令
             SPCOpcode::PUSH { oprand } => {
@@ -466,7 +466,7 @@ where
                     SPCOprand::ProgramStatusWord => {
                         self.push_stack(self.reg.psw);
                     }
-                    _ => panic!("Invalid oprand!"),
+                    _ => unreachable!("Invalid oprand!"),
                 }
                 4
             }
@@ -484,7 +484,7 @@ where
                     SPCOprand::ProgramStatusWord => {
                         self.reg.psw = self.pop_stack();
                     }
-                    _ => panic!("Invalid oprand!"),
+                    _ => unreachable!("Invalid oprand!"),
                 }
                 4
             }
@@ -505,7 +505,7 @@ where
                     self.write_ram_u8(address, memval & !(1 << (*bit)));
                     4
                 }
-                _ => panic!("Invalid oprand!"),
+                _ => unreachable!("Invalid oprand!"),
             },
             SPCOpcode::EOR1 { oprand } => match oprand {
                 SPCOprand::AbsoluteBit { address_bit } => {
@@ -515,7 +515,7 @@ where
                     self.set_psw_flag(PSW_FLAG_C, ret != 0);
                     5
                 }
-                _ => panic!("Invalid oprand!"),
+                _ => unreachable!("Invalid oprand!"),
             },
             SPCOpcode::OR1 { oprand } => self.execute_or1(oprand),
             SPCOpcode::MOV1 { oprand } => match oprand {
@@ -539,7 +539,7 @@ where
                     );
                     6
                 }
-                _ => panic!("Invalid oprand!"),
+                _ => unreachable!("Invalid oprand!"),
             },
             SPCOpcode::NOT1 { oprand } => match oprand {
                 SPCOprand::AbsoluteBit { address_bit } => {
@@ -548,7 +548,7 @@ where
                     self.write_ram_u8(address, memval ^ (1 << bit_pos));
                     5
                 }
-                _ => panic!("Invalid oprand!"),
+                _ => unreachable!("Invalid oprand!"),
             },
             SPCOpcode::SET1 { bit, oprand } => match oprand {
                 SPCOprand::DirectPageBit { direct_page } => {
@@ -557,7 +557,7 @@ where
                     self.write_ram_u8(address, memval | (1 << (*bit)));
                     4
                 }
-                _ => panic!("Invalid oprand!"),
+                _ => unreachable!("Invalid oprand!"),
             },
             SPCOpcode::TSET1 { oprand } => match oprand {
                 SPCOprand::Absolute { address } => {
@@ -569,7 +569,7 @@ where
                     self.set_psw_flag(PSW_FLAG_Z, cmp == 0);
                     6
                 }
-                _ => panic!("Invalid oprand!"),
+                _ => unreachable!("Invalid oprand!"),
             },
             SPCOpcode::TCLR1 { oprand } => match oprand {
                 SPCOprand::Absolute { address } => {
@@ -581,7 +581,7 @@ where
                     self.set_psw_flag(PSW_FLAG_Z, cmp == 0);
                     6
                 }
-                _ => panic!("Invalid oprand!"),
+                _ => unreachable!("Invalid oprand!"),
             },
             // 比較命令
             SPCOpcode::CMP { oprand } => self.execute_cmp(oprand),
@@ -597,7 +597,7 @@ where
                     self.set_psw_flag(PSW_FLAG_C, !nc);
                     4
                 }
-                _ => panic!("Invalid oprand!"),
+                _ => unreachable!("Invalid oprand!"),
             },
             // フラグ操作命令
             SPCOpcode::CLRC => {
@@ -640,7 +640,7 @@ where
                         5
                     }
                 }
-                _ => panic!("Invalid oprand!"),
+                _ => unreachable!("Invalid oprand!"),
             },
             SPCOpcode::BBS { bit, oprand } => match oprand {
                 SPCOprand::DirectPageBitPCRelative {
@@ -656,7 +656,7 @@ where
                         5
                     }
                 }
-                _ => panic!("Invalid oprand!"),
+                _ => unreachable!("Invalid oprand!"),
             },
             SPCOpcode::BCC { oprand } => match oprand {
                 SPCOprand::PCRelative { pc_relative } => {
@@ -667,7 +667,7 @@ where
                         2
                     }
                 }
-                _ => panic!("Invalid oprand!"),
+                _ => unreachable!("Invalid oprand!"),
             },
             SPCOpcode::BCS { oprand } => match oprand {
                 SPCOprand::PCRelative { pc_relative } => {
@@ -678,7 +678,7 @@ where
                         2
                     }
                 }
-                _ => panic!("Invalid oprand!"),
+                _ => unreachable!("Invalid oprand!"),
             },
             SPCOpcode::BEQ { oprand } => match oprand {
                 SPCOprand::PCRelative { pc_relative } => {
@@ -689,7 +689,7 @@ where
                         2
                     }
                 }
-                _ => panic!("Invalid oprand!"),
+                _ => unreachable!("Invalid oprand!"),
             },
             SPCOpcode::BMI { oprand } => match oprand {
                 SPCOprand::PCRelative { pc_relative } => {
@@ -700,7 +700,7 @@ where
                         2
                     }
                 }
-                _ => panic!("Invalid oprand!"),
+                _ => unreachable!("Invalid oprand!"),
             },
             SPCOpcode::BNE { oprand } => match oprand {
                 SPCOprand::PCRelative { pc_relative } => {
@@ -711,7 +711,7 @@ where
                         2
                     }
                 }
-                _ => panic!("Invalid oprand!"),
+                _ => unreachable!("Invalid oprand!"),
             },
             SPCOpcode::BPL { oprand } => match oprand {
                 SPCOprand::PCRelative { pc_relative } => {
@@ -722,14 +722,14 @@ where
                         2
                     }
                 }
-                _ => panic!("Invalid oprand!"),
+                _ => unreachable!("Invalid oprand!"),
             },
             SPCOpcode::BRA { oprand } => match oprand {
                 SPCOprand::PCRelative { pc_relative } => {
                     self.reg.pc = (self.reg.pc as i32 + *pc_relative as i32) as u16;
                     4
                 }
-                _ => panic!("Invalid oprand!"),
+                _ => unreachable!("Invalid oprand!"),
             },
             SPCOpcode::BVC { oprand } => match oprand {
                 SPCOprand::PCRelative { pc_relative } => {
@@ -740,7 +740,7 @@ where
                         2
                     }
                 }
-                _ => panic!("Invalid oprand!"),
+                _ => unreachable!("Invalid oprand!"),
             },
             SPCOpcode::BVS { oprand } => match oprand {
                 SPCOprand::PCRelative { pc_relative } => {
@@ -751,7 +751,7 @@ where
                         2
                     }
                 }
-                _ => panic!("Invalid oprand!"),
+                _ => unreachable!("Invalid oprand!"),
             },
             SPCOpcode::CBNE { oprand } => match oprand {
                 SPCOprand::DirectPagePCRelative {
@@ -780,7 +780,7 @@ where
                         6
                     }
                 }
-                _ => panic!("Invalid oprand!"),
+                _ => unreachable!("Invalid oprand!"),
             },
             SPCOpcode::DBNZ { oprand } => match oprand {
                 SPCOprand::DirectPagePCRelative {
@@ -807,7 +807,7 @@ where
                         4
                     }
                 }
-                _ => panic!("Invalid oprand!"),
+                _ => unreachable!("Invalid oprand!"),
             },
             // ジャンプ命令
             SPCOpcode::CALL { oprand } => match oprand {
@@ -817,7 +817,7 @@ where
                     self.reg.pc = *address;
                     8
                 }
-                _ => panic!("Invalid oprand!"),
+                _ => unreachable!("Invalid oprand!"),
             },
             SPCOpcode::JMP { oprand } => match oprand {
                 SPCOprand::Absolute { address } => {
@@ -830,7 +830,7 @@ where
                     self.reg.pc = jmp_pc;
                     6
                 }
-                _ => panic!("Invalid oprand!"),
+                _ => unreachable!("Invalid oprand!"),
             },
             SPCOpcode::PCALL { oprand } => match oprand {
                 SPCOprand::PageAddress { address } => {
@@ -839,7 +839,7 @@ where
                     self.reg.pc = 0xFF00u16 | (*address as u16);
                     6
                 }
-                _ => panic!("Invalid oprand!"),
+                _ => unreachable!("Invalid oprand!"),
             },
             SPCOpcode::TCALL { table_index } => {
                 let address = 0xFFDEusize - (*table_index * 2) as usize;
@@ -880,7 +880,7 @@ where
                     self.set_psw_flag(PSW_FLAG_C, carry);
                     3
                 }
-                _ => panic!("Invalid oprand!"),
+                _ => unreachable!("Invalid oprand!"),
             },
             SPCOpcode::DAS { oprand } => match oprand {
                 SPCOprand::Accumulator => {
@@ -906,7 +906,7 @@ where
                     self.set_psw_flag(PSW_FLAG_C, carry);
                     3
                 }
-                _ => panic!("Invalid oprand!"),
+                _ => unreachable!("Invalid oprand!"),
             },
             // 割り込み命令
             SPCOpcode::EI => {
@@ -1174,7 +1174,7 @@ where
                 self.write_ram_u8(address, val);
                 cycle = 5;
             }
-            _ => panic!("Invalid oprand!"),
+            _ => unreachable!("Invalid oprand!"),
         }
 
         // フラグ更新
@@ -1326,7 +1326,7 @@ where
                 self.write_ram_u8(address, ret);
                 cycle = 5;
             }
-            _ => panic!("Invalid oprand!"),
+            _ => unreachable!("Invalid oprand!"),
         }
 
         // フラグ更新
@@ -1408,7 +1408,7 @@ where
                 self.write_ram_u8(addr, ret);
                 cycle = 5;
             }
-            _ => panic!("Invalid oprand!"),
+            _ => unreachable!("Invalid oprand!"),
         }
 
         // フラグ更新
@@ -1452,7 +1452,7 @@ where
                 let memval = self.read_ram_u8(address);
                 ret = op(self.reg.psw & PSW_FLAG_C, !((memval >> bit_pos) & 0x1));
             }
-            _ => panic!("Invalid oprand!"),
+            _ => unreachable!("Invalid oprand!"),
         }
 
         // フラグ更新
@@ -1516,7 +1516,7 @@ where
                 self.reg.y = ret;
                 cycle = 2;
             }
-            _ => panic!("Invalid oprand!"),
+            _ => unreachable!("Invalid oprand!"),
         }
 
         // フラグ更新
@@ -1648,7 +1648,7 @@ where
                 (ret, nc) = cmpsub!(self.reg.y, memval);
                 cycle = 4;
             }
-            _ => panic!("Invalid oprand!"),
+            _ => unreachable!("Invalid oprand!"),
         }
 
         // フラグ更新
@@ -1808,7 +1808,7 @@ where
                 self.write_ram_u8(address, ret);
                 cycle = 5;
             }
-            _ => panic!("Invalid oprand!"),
+            _ => unreachable!("Invalid oprand!"),
         }
 
         // フラグ更新

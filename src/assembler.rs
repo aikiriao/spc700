@@ -3,9 +3,11 @@ use crate::types::*;
 /// オペコード長チェック付き命令生成マクロ
 macro_rules! create_opcode_with_length_check {
     ($ram:expr, $opcode:expr, $length:expr) => {{
-        if $ram.len() < $length {
-            panic!("Insufficient instruction length: {}", $ram[0]);
-        }
+        debug_assert!(
+            $ram.len() >= $length,
+            "Insufficient instruction length: {}",
+            $ram[0]
+        );
         ($opcode, $length)
     }};
 }
