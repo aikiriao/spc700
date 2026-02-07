@@ -193,14 +193,9 @@ fn pitch_to_note(center_note: u16, pitch: u16) -> u8 {
 }
 
 /// ゲインをMIDIのボリューム設定値に変換
-/// f(x) = A log10(gain / 127) + Bとして、f(0) = 0, f(1) = 1, f(127) = 127となるように設定
+/// MIDIのボリューム値の2乗がSPCの振幅に比例するよう(GMの推奨値)に変換
 fn gain_to_midi_volume(gain: u8) -> u8 {
-    const GAINTOMIDI_CONST: f32 = 59.89151875002212; // = 126 / log10(127)
-    if gain == 0 {
-        0
-    } else {
-        libm::roundf(GAINTOMIDI_CONST * libm::log10f(gain as f32) + 1.0).clamp(0.0, 127.0) as u8
-    }
+    libm::roundf(libm::sqrtf(gain as f32 * 127.0)).clamp(0.0, 127.0) as u8
 }
 
 /// LRボリュームをボリュームとパンの組に変換
