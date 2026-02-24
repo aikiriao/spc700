@@ -168,6 +168,9 @@ pub struct MIDIDSP {
     playback_parameter_update_period: u16,
     /// 最後に出力したチャンネルメッセージのステータスバイト
     status_byte: u8,
+    /// レジスタ値 
+    /// SDSPとして動いている際にレジスタが読みだされることがあるため保持
+    dsp_register: [u8; 128],
 }
 
 /// ステータスバイト情報付きMIDIメッセージ
@@ -553,6 +556,7 @@ impl SPCDSP for MIDIDSP {
             playback_parameter_count: 0,
             playback_parameter_update_period: 160,
             status_byte: 0,
+            dsp_register: [0u8; 128],
         }
     }
 
@@ -570,6 +574,8 @@ impl SPCDSP for MIDIDSP {
     /// DSPレジスタの書き込み処理
     fn write_register(&mut self, _ram: &[u8], address: u8, value: u8) {
         trace!("DSPW: {:02X} <- {:02X}", address, value);
+        // 保持しているレジスタに書き込み
+        self.dsp_register[address as usize] = value;
         match address & 0x7F {
             DSP_ADDRESS_MVOLL => {
                 self.volume[0] = value as i8;
@@ -779,8 +785,8 @@ impl SPCDSP for MIDIDSP {
                 ret
             }
             DSP_ADDRESS_FLG => self.flag,
-            DSP_ADDRESS_ENDX => 0, // 0を返す
-            DSP_ADDRESS_EFB => 0,  // 0を返す
+            DSP_ADDRESS_ENDX => 0, // !! 0を返す !!
+            DSP_ADDRESS_EFB => self.dsp_register[DSP_ADDRESS_EFB as usize], // 保持していた値を返す
             DSP_ADDRESS_PMON => {
                 let mut ret = 0;
                 let mut bit = 1;
@@ -816,10 +822,14 @@ impl SPCDSP for MIDIDSP {
                 ret
             }
             DSP_ADDRESS_DIR => self.brr_dir_page,
-            DSP_ADDRESS_ESA => 0, // 0を返す
-            DSP_ADDRESS_EDL => 0, // 0を返す
+            DSP_ADDRESS_ESA => self.dsp_register[DSP_ADDRESS_ESA as usize], // 保持していた値を返す
+            DSP_ADDRESS_EDL => self.dsp_register[DSP_ADDRESS_EDL as usize], // 保持していた値を返す
             DSP_ADDRESS_FIR0 | DSP_ADDRESS_FIR1 | DSP_ADDRESS_FIR2 | DSP_ADDRESS_FIR3
-            | DSP_ADDRESS_FIR4 | DSP_ADDRESS_FIR5 | DSP_ADDRESS_FIR6 | DSP_ADDRESS_FIR7 => 0, // 0を返す
+            | DSP_ADDRESS_FIR4 | DSP_ADDRESS_FIR5 | DSP_ADDRESS_FIR6 | DSP_ADDRESS_FIR7 => {
+                let index = address >> 4;
+                // 保持していた値を返す
+                self.dsp_register[(DSP_ADDRESS_FIR0 + index) as usize]
+            }
             DSP_ADDRESS_SRN_TARGET => self.sample_source_target as u8,
             DSP_ADDRESS_SRN_FLAG => {
                 let mut value = 0;
