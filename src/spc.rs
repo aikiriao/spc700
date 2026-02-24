@@ -1,6 +1,6 @@
 use crate::assembler::*;
 use crate::types::*;
-use log::trace;
+use log::{trace, warn};
 
 /// ネガティブフラグ
 const PSW_FLAG_N: u8 = 1 << 7;
@@ -192,7 +192,7 @@ where
         if (address >= SPC_ADDRESS_TEST) && (address <= SPC_ADDRESS_T2OUT) {
             match address {
                 SPC_ADDRESS_TEST => {
-                    panic!("CANNOT write to test register!!");
+                    warn!("WARNING: CANNOT write to test register!!");
                 }
                 SPC_ADDRESS_CONTROL => {
                     self.write_timer_register(value);
@@ -212,7 +212,7 @@ where
                     self.cpu_port_out[address - SPC_ADDRESS_CPUIO0] = value;
                 }
                 SPC_ADDRESS_T0OUT | SPC_ADDRESS_T1OUT | SPC_ADDRESS_T2OUT => {
-                    panic!("CANNOT write to TxOUT register!!");
+                    warn!("WARNING: CANNOT write to TxOUT register!!");
                 }
                 _ => {}
             }
