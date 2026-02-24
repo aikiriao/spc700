@@ -303,12 +303,12 @@ where
     /// スタックにデータをPUSH
     fn push_stack(&mut self, value: u8) {
         self.write_ram_u8(STACK_BASE + self.reg.sp as usize, value);
-        self.reg.sp -= 1;
+        self.reg.sp = self.reg.sp.wrapping_sub(1);
     }
 
     /// スタックからデータをPOP
     fn pop_stack(&mut self) -> u8 {
-        self.reg.sp += 1;
+        self.reg.sp = self.reg.sp.wrapping_add(1);
         self.read_ram_u8(STACK_BASE + self.reg.sp as usize)
     }
 
