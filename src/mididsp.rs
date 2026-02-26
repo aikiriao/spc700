@@ -58,10 +58,26 @@ pub const DSP_ADDRESS_SRN_VOLUME: u8 = 0x3A;
 pub const DSP_ADDRESS_SRN_PAN: u8 = 0x3B;
 /// SRNのピッチベンドセンシティビティ（1bitフラグ + 下位ビットで半音単位で幅を指定）
 pub const DSP_ADDRESS_SRN_PITCHBEND_SENSITIVITY: u8 = 0x4A;
+/// 全体設定フラグ VV000000
+/// V: ボリュームカーブ（00: 平方根、01: 対数、10: 線形）
+pub const DSP_ADDRESS_CONFIGURE_FLAG: u8 = 0x5A;
 /// ノートオンフラグ
-pub const DSP_ADDRESS_NOTEON: u8 = 0x5A;
+pub const DSP_ADDRESS_NOTEON: u8 = 0x5B;
 /// エンベロープ・ボリューム・ピッチベンド更新間隔(ms)
-pub const DSP_ADDRESS_PLAYBACK_PARAMETER_UPDATE_PERIOD: u8 = 0x5B;
+pub const DSP_ADDRESS_PLAYBACK_PARAMETER_UPDATE_PERIOD: u8 = 0x6A;
+
+/// ボリュームカーブ
+#[derive(Copy, Clone, Debug)]
+pub enum MIDIVolumeCurve {
+    /// 平方根
+    /// MIDIのボリューム値の2乗がSPCの振幅に比例するよう(GMの推奨値)に変換
+    SquareRoot,
+    /// 対数
+    Log,
+    /// 線形
+    /// ゲインをそのままボリューム値に変換。ほとんどの場合音圧が小さくなるため非推奨だがデバッグに有効
+    Linear,
+}
 
 /// ボイス
 #[derive(Copy, Clone, Debug)]
@@ -168,7 +184,9 @@ pub struct MIDIDSP {
     playback_parameter_update_period: u16,
     /// 最後に出力したチャンネルメッセージのステータスバイト
     status_byte: u8,
-    /// レジスタ値 
+    /// ボリュームカーブ
+    volume_curve: MIDIVolumeCurve,
+    /// レジスタ値
     /// SDSPとして動いている際にレジスタが読みだされることがあるため保持
     dsp_register: [u8; 128],
 }
@@ -196,17 +214,29 @@ fn pitch_to_note(center_note: u16, pitch: u16) -> u8 {
 }
 
 /// ゲイン[0,127]をMIDIのボリューム設定値に変換
-/// MIDIのボリューム値の2乗がSPCの振幅に比例するよう(GMの推奨値)に変換
-fn gain_to_midi_volume(gain: f32) -> u8 {
-    libm::roundf(libm::sqrtf(gain * 127.0)).clamp(0.0, 127.0) as u8
+fn gain_to_midi_volume(volume_curve: MIDIVolumeCurve, gain: f32) -> u8 {
+    let volume = match volume_curve {
+        MIDIVolumeCurve::SquareRoot => libm::sqrtf(gain * 127.0),
+        MIDIVolumeCurve::Log => {
+            const NORMALIZE_FACTOR: f32 = 59.89151875002212; // 126 / log10(127)
+            if gain > 0.0 {
+                NORMALIZE_FACTOR * libm::log10f(gain) + 1.0
+            } else {
+                0.0
+            }
+        }
+        MIDIVolumeCurve::Linear => gain,
+    };
+
+    libm::roundf(volume).clamp(0.0, 127.0) as u8
 }
 
 /// LRボリュームをボリュームとパンの組に変換
 /// LRボリュームは負値がありうるが、絶対値を取って前方パン・非負ボリュームに変換する
 /// MIDIは前方のパンのみ考えるため
-fn lrvolume_to_volume_and_pan(lrvolume: &[i8; 2]) -> (u8, u8) {
+fn lrvolume_to_volume_and_pan(volume_curve: MIDIVolumeCurve, lrvolume: &[i8; 2]) -> (u8, u8) {
     let abs_lrvolume = [lrvolume[0].unsigned_abs(), lrvolume[1].unsigned_abs()];
-    let volume = gain_to_midi_volume(abs_lrvolume[0].max(abs_lrvolume[1]) as f32);
+    let volume = gain_to_midi_volume(volume_curve, abs_lrvolume[0].max(abs_lrvolume[1]) as f32);
     let pan = if abs_lrvolume[0] == abs_lrvolume[1] {
         64
     } else if abs_lrvolume[0] == 0 {
@@ -282,6 +312,7 @@ impl MIDIVoiceRegister {
         echo_volume: u8,
         global_counter: u16,
         playback_parameter_update: bool,
+        volume_curve: MIDIVolumeCurve,
         srn_map: &mut SampleSourceMap,
         out: &mut MIDIOutputWithStatusByte,
     ) {
@@ -330,7 +361,7 @@ impl MIDIVoiceRegister {
                 }
             }
             // ボリューム・パン
-            let (volume, pan) = lrvolume_to_volume_and_pan(&self.volume);
+            let (volume, pan) = lrvolume_to_volume_and_pan(volume_curve, &self.volume);
             out.push_channel_message(
                 mute,
                 &[
@@ -372,7 +403,7 @@ impl MIDIVoiceRegister {
             );
             // エクスプレッション
             let initial_expression = if srn_map.output_envelope[self.sample_source as usize] {
-                gain_to_midi_volume(self.eg.gain as f32 / 16.0)
+                gain_to_midi_volume(volume_curve, self.eg.gain as f32 / 16.0)
             } else {
                 0x7F
             };
@@ -444,13 +475,13 @@ impl MIDIVoiceRegister {
                     &[
                         MIDIMSG_CONTROL_CHANGE | channel,
                         MIDICC_EXPRESSION,
-                        gain_to_midi_volume(self.eg.gain as f32 / 16.0),
+                        gain_to_midi_volume(volume_curve, self.eg.gain as f32 / 16.0),
                     ],
                 );
                 self.envelope_updated = false;
             }
             // ボリューム・パン
-            let (volume, pan) = lrvolume_to_volume_and_pan(&self.volume);
+            let (volume, pan) = lrvolume_to_volume_and_pan(volume_curve, &self.volume);
             if self.last_volume != volume && srn_map.auto_volume[self.sample_source as usize] {
                 out.push_channel_message(
                     mute,
@@ -556,6 +587,7 @@ impl SPCDSP for MIDIDSP {
             playback_parameter_count: 0,
             playback_parameter_update_period: 160,
             status_byte: 0,
+            volume_curve: MIDIVolumeCurve::SquareRoot,
             dsp_register: [0u8; 128],
         }
     }
@@ -690,6 +722,14 @@ impl SPCDSP for MIDIDSP {
                     value & 0x7F;
                 self.sample_source_map.pitch_bend_sensitibity_updated[self.sample_source_target] =
                     true;
+            }
+            DSP_ADDRESS_CONFIGURE_FLAG => {
+                self.volume_curve = match (value >> 6) & 0x3 {
+                    0 => MIDIVolumeCurve::SquareRoot,
+                    1 => MIDIVolumeCurve::Log,
+                    2 => MIDIVolumeCurve::Linear,
+                    _ => panic!("Invalid MIDI Curve Type!"),
+                };
             }
             DSP_ADDRESS_NOTEON => {
                 for ch in 0..8 {
@@ -876,6 +916,15 @@ impl SPCDSP for MIDIDSP {
                 }
                 value
             }
+            DSP_ADDRESS_CONFIGURE_FLAG => {
+                let mut ret = 0;
+                ret |= match self.volume_curve {
+                    MIDIVolumeCurve::SquareRoot => 0x00,
+                    MIDIVolumeCurve::Log => 0x40,
+                    MIDIVolumeCurve::Linear => 0x80,
+                };
+                ret
+            }
             DSP_ADDRESS_NOTEON => {
                 let mut ret = 0;
                 let mut bit = 1;
@@ -958,6 +1007,7 @@ impl SPCDSP for MIDIDSP {
                 effect1_depth,
                 self.global_counter,
                 playback_parameter_update,
+                self.volume_curve,
                 &mut self.sample_source_map,
                 &mut out,
             );
