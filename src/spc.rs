@@ -40,7 +40,7 @@ pub const SPC_ADDRESS_T2OUT: usize = 0x00FF;
 
 /// SPCエミュレータ
 pub struct SPC<T>
-where 
+where
     T: SPCDSP,
 {
     /// レジスタ
@@ -71,13 +71,20 @@ fn get_address_bit(address_bit: u16) -> (u8, usize) {
 }
 
 impl<T> SPC<T>
-where 
+where
     T: SPCDSP,
 {
     /// コンストラクタ
-    pub fn new(reg: &SPCRegister, ram: &[u8], dsp_register: &[u8; 128]) -> SPC<T> {
-        let mut emu = Self {
-            reg: reg.clone(),
+    pub fn new() -> SPC<T> {
+        Self {
+            reg: SPCRegister {
+                a: 0,
+                x: 0,
+                y: 0,
+                sp: 0,
+                pc: 0,
+                psw: 0,
+            },
             dsp: T::new(),
             ram: [0; 65536],
             cpu_port_in: [0; 4],
@@ -86,21 +93,27 @@ where
             timer_enable: [false; 3],
             timer_internal_count: [0; 3],
             ipl_rom: false,
-        };
-        emu.ram.copy_from_slice(ram);
+        }
+    }
+
+    /// 初期化
+    pub fn initialize(&mut self, reg: &SPCRegister, ram: &[u8], dsp_register: &[u8; 128]) {
+        // レジスタコピー
+        self.reg = reg.clone();
+
+        // RAMの内容をコピー
+        self.ram.copy_from_slice(ram);
 
         // ramの内容からエミュレータをセットアップ
-        emu.write_ram_u8(SPC_ADDRESS_CONTROL, ram[SPC_ADDRESS_CONTROL]);
+        self.write_ram_u8(SPC_ADDRESS_CONTROL, ram[SPC_ADDRESS_CONTROL]);
 
         // CPU PORTの入力は初期状態を維持
         for i in 0..4 {
-            emu.cpu_port_in[i] = ram[SPC_ADDRESS_CPUIO0 + i];
+            self.cpu_port_in[i] = ram[SPC_ADDRESS_CPUIO0 + i];
         }
 
         // DSPレジスタのセットアップ
-        emu.dsp.initialize(&mut emu.ram, dsp_register);
-
-        emu
+        self.dsp.initialize(&mut self.ram, dsp_register);
     }
 
     /// ステップ実行
@@ -208,7 +221,8 @@ where
                     self.dsp
                         .write_register(&self.ram, self.ram[SPC_ADDRESS_DSPADDR], value);
                 }
-                SPC_ADDRESS_CPUIO0 | SPC_ADDRESS_CPUIO1 | SPC_ADDRESS_CPUIO2 | SPC_ADDRESS_CPUIO3 => {
+                SPC_ADDRESS_CPUIO0 | SPC_ADDRESS_CPUIO1 | SPC_ADDRESS_CPUIO2
+                | SPC_ADDRESS_CPUIO3 => {
                     self.cpu_port_out[address - SPC_ADDRESS_CPUIO0] = value;
                 }
                 SPC_ADDRESS_T0OUT | SPC_ADDRESS_T1OUT | SPC_ADDRESS_T2OUT => {
@@ -237,9 +251,12 @@ where
                     // 何もしないがアドレスをラッチすべき？
                 }
                 SPC_ADDRESS_DSPDATA => {
-                    return self.dsp.read_register(&self.ram, self.ram[SPC_ADDRESS_DSPADDR]);
+                    return self
+                        .dsp
+                        .read_register(&self.ram, self.ram[SPC_ADDRESS_DSPADDR]);
                 }
-                SPC_ADDRESS_CPUIO0 | SPC_ADDRESS_CPUIO1 | SPC_ADDRESS_CPUIO2 | SPC_ADDRESS_CPUIO3 => {
+                SPC_ADDRESS_CPUIO0 | SPC_ADDRESS_CPUIO1 | SPC_ADDRESS_CPUIO2
+                | SPC_ADDRESS_CPUIO3 => {
                     return self.cpu_port_in[address - SPC_ADDRESS_CPUIO0];
                 }
                 SPC_ADDRESS_T0OUT | SPC_ADDRESS_T1OUT | SPC_ADDRESS_T2OUT => {
