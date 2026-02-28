@@ -184,7 +184,7 @@ fn determine_data_format_is_binary(data: &[u8]) -> bool {
 }
 
 /// SPCファイルヘッダのパース
-fn parse_spc_header(data: &[u8]) -> Option<SPCFileHeader> {
+pub fn parse_spc_header(data: &[u8]) -> Option<SPCFileHeader> {
     // サイズチェック
     if data.len() < 256 {
         return None;
