@@ -199,6 +199,23 @@ struct MIDIOutputWithStatusByte {
     status_byte: u8,
 }
 
+/// デフォルトのサンプル対応マップ
+const DEFAULT_SAMPLE_SOUCE_MAP: SampleSourceMap = SampleSourceMap {
+    mute: [false; 256],
+    program: [0; 256],
+    center_note: [64 << 9; 256], // 中心ノートは64で仮置き
+    noteon_velocity: [0x7F; 256],
+    pitch_bend_sensitibity: [12; 256],
+    output_envelope: [true; 256],
+    auto_pan: [true; 256],
+    fixed_pan: [64; 256],
+    auto_volume: [false; 256],
+    fixed_volume: [100; 256],
+    output_pitch_bend: [true; 256],
+    echo_as_effect1_depth: [true; 256],
+    pitch_bend_sensitibity_updated: [false; 256],
+};
+
 /// ピッチをMIDIノート番号に変換
 fn pitch_to_note(center_note: u16, pitch: u16) -> u8 {
     // pitch(2^12を基準とする再生速度)から半音単位でのずれを計算
@@ -568,21 +585,7 @@ impl SPCDSP for MIDIDSP {
                 MIDIVoiceRegister::new(7),
             ],
             global_counter: 0,
-            sample_source_map: SampleSourceMap {
-                mute: [false; 256],
-                program: [0; 256],
-                center_note: [64 << 9; 256], // 中心ノートは64で仮置き
-                noteon_velocity: [0x7F; 256],
-                pitch_bend_sensitibity: [12; 256],
-                output_envelope: [true; 256],
-                auto_pan: [true; 256],
-                fixed_pan: [64; 256],
-                auto_volume: [false; 256],
-                fixed_volume: [100; 256],
-                output_pitch_bend: [true; 256],
-                echo_as_effect1_depth: [true; 256],
-                pitch_bend_sensitibity_updated: [false; 256],
-            },
+            sample_source_map: DEFAULT_SAMPLE_SOUCE_MAP,
             sample_source_target: 0,
             playback_parameter_count: 0,
             playback_parameter_update_period: 160,
@@ -594,6 +597,14 @@ impl SPCDSP for MIDIDSP {
 
     /// 128バイトメモリから初期化
     fn initialize(&mut self, ram: &mut [u8], dsp_register: &[u8; 128]) {
+        // メンバ初期化
+        for ch in 0..8 {
+            self.voice[ch].channel = ch as u8;
+        }
+        self.playback_parameter_update_period = 160;
+        self.volume_curve = MIDIVolumeCurve::SquareRoot;
+        self.sample_source_map = DEFAULT_SAMPLE_SOUCE_MAP;
+
         // DIRは先に設定（初期状態でKONがある場合にアドレスを正しくするため）
         self.write_register(ram, DSP_ADDRESS_DIR, dsp_register[DSP_ADDRESS_DIR as usize]);
 
