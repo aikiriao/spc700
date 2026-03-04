@@ -51,18 +51,20 @@ pub struct EnvelopeGenerator {
     pub gain: i32,
 }
 
-/// グローバルカウンタイベントが発生するまでのサンプル数
-const COUNTER_RATES: [u16; 32] = [
-    0, /* Inf */
-    2048, 1536, 1280, 1024, 768, 640, 512, 384, 320, 256, 192, 160, 128, 96, 80, 64, 48, 40, 32,
-    24, 20, 16, 12, 10, 8, 6, 5, 4, 3, 2, 1,
+/// グローバルカウンタのマスク
+/// Anomie's S-DSP Docから引用
+const GLOBAL_COUNTER_MASKS: [u16; 32] = [
+    0x0000, 0xFFE0, 0x3FF8, 0x1FE7, 0x7FE0, 0x1FF8, 0x0FE7, 0x3FE0, 0x0FF8, 0x07E7, 0x1FE0, 0x07F8,
+    0x03E7, 0x0FE0, 0x03F8, 0x01E7, 0x07E0, 0x01F8, 0x00E7, 0x03E0, 0x00F8, 0x0067, 0x01E0, 0x0078,
+    0x0027, 0x00E0, 0x0038, 0x0007, 0x0060, 0x0018, 0x0020, 0x0000,
 ];
 
-/// グローバルカウンタのオフセット
-const COUNTER_OFFSETS: [u16; 32] = [
-    0, /* N/A */
-    0, 1040, 536, 0, 1040, 536, 0, 1040, 536, 0, 1040, 536, 0, 1040, 536, 0, 1040, 536, 0, 1040,
-    536, 0, 1040, 536, 0, 1040, 536, 0, 1040, 0, 0,
+/// グローバルカウンタのXORマスク
+/// Anomie's S-DSP Docから引用
+const GLOBAL_COUNTER_XORS: [u16; 32] = [
+    0xFFFF, 0x0000, 0x3E08, 0x1D04, 0x0000, 0x1E08, 0x0D04, 0x0000, 0x0E08, 0x0504, 0x0000, 0x0608,
+    0x0104, 0x0000, 0x0208, 0x0104, 0x0000, 0x0008, 0x0004, 0x0000, 0x0008, 0x0004, 0x0000, 0x0008,
+    0x0004, 0x0000, 0x0008, 0x0004, 0x0000, 0x0008, 0x0000, 0x0000,
 ];
 
 impl EnvelopeGenerator {
@@ -215,7 +217,9 @@ impl EnvelopeGenerator {
     /// エンベロープ状態更新
     pub fn update(&mut self, global_counter: u16) -> bool {
         // アクション発生判定
-        let updated = (self.rate > 0) && ((global_counter + COUNTER_OFFSETS[self.rate as usize]) % COUNTER_RATES[self.rate as usize] == 0);
+        let updated = (global_counter & GLOBAL_COUNTER_MASKS[self.rate as usize])
+            ^ GLOBAL_COUNTER_XORS[self.rate as usize]
+            == 0;
         if updated {
             // エンベロープゲイン更新
             if self.state == EnvelopeState::Release {
