@@ -58,6 +58,8 @@ pub const DSP_ADDRESS_SRN_VOLUME: u8 = 0x3A;
 pub const DSP_ADDRESS_SRN_PAN: u8 = 0x3B;
 /// SRNのピッチベンドセンシティビティ（1bitフラグ + 下位ビットで半音単位で幅を指定）
 pub const DSP_ADDRESS_SRN_PITCHBEND_SENSITIVITY: u8 = 0x4A;
+/// SRNの出力チャンネル（1bitフラグ + 下位ビットで出力チャンネル）
+pub const DSP_ADDRESS_SRN_OUTPUT_CHANNEL: u8 = 0x4B;
 /// 全体設定フラグ VV000000
 /// V: ボリュームカーブ（00: 平方根、01: 対数、10: 線形）
 pub const DSP_ADDRESS_CONFIGURE_FLAG: u8 = 0x5A;
@@ -152,6 +154,10 @@ struct SampleSourceMap {
     echo_as_effect1_depth: [bool; 256],
     /// ピッチベンドセンシティビティが更新されたか
     pitch_bend_sensitibity_updated: [bool; 256],
+    /// 出力先チャンネルをVoiceRegisterのチャンネルと同じにするか
+    auto_output_channel: [bool; 256],
+    /// 出力先チャンネル
+    fixed_output_channel: [u8; 256],
 }
 
 /// MIDI-DSP
@@ -214,6 +220,8 @@ const DEFAULT_SAMPLE_SOUCE_MAP: SampleSourceMap = SampleSourceMap {
     output_pitch_bend: [true; 256],
     echo_as_effect1_depth: [true; 256],
     pitch_bend_sensitibity_updated: [false; 256],
+    auto_output_channel: [true; 256],
+    fixed_output_channel: [0; 256],
 };
 
 /// ピッチをMIDIノート番号に変換
@@ -341,19 +349,27 @@ impl MIDIVoiceRegister {
             self.keyon = false;
             // キーオフが漏れていた場合はノートオフを送信
             if self.noteon {
-                let first_byte = if self.noteon_drum {
-                    MIDIMSG_NOTE_OFF | MIDI_PERCUSSION_CHANNEL
+                let channel = if self.noteon_drum {
+                    MIDI_PERCUSSION_CHANNEL
                 } else {
-                    MIDIMSG_NOTE_OFF | self.channel
+                    if srn_map.auto_output_channel[self.sample_source as usize] {
+                        self.channel
+                    } else {
+                        srn_map.fixed_output_channel[self.sample_source as usize]
+                    }
                 };
-                out.push_channel_message(mute, &[first_byte, self.last_note, 0]);
+                out.push_channel_message(mute, &[MIDIMSG_NOTE_OFF | channel, self.last_note, 0]);
             }
             // エンベロープ設定
             self.eg.keyon();
             // ノートオン
             let program = srn_map.program[self.sample_source as usize];
             let channel = if program <= 0x7F {
-                self.channel
+                if srn_map.auto_output_channel[self.sample_source as usize] {
+                    self.channel
+                } else {
+                    srn_map.fixed_output_channel[self.sample_source as usize]
+                }
             } else {
                 MIDI_PERCUSSION_CHANNEL
             };
@@ -463,12 +479,16 @@ impl MIDIVoiceRegister {
             self.keyoff = false;
             // ノートオフ
             if self.noteon {
-                let first_byte = if self.noteon_drum {
-                    MIDIMSG_NOTE_OFF | MIDI_PERCUSSION_CHANNEL
+                let channel = if self.noteon_drum {
+                    MIDI_PERCUSSION_CHANNEL
                 } else {
-                    MIDIMSG_NOTE_OFF | self.channel
+                    if srn_map.auto_output_channel[self.sample_source as usize] {
+                        self.channel
+                    } else {
+                        srn_map.fixed_output_channel[self.sample_source as usize]
+                    }
                 };
-                out.push_channel_message(mute, &[first_byte, self.last_note, 0]);
+                out.push_channel_message(mute, &[MIDIMSG_NOTE_OFF | channel, self.last_note, 0]);
                 self.noteon = false;
             }
         }
@@ -483,7 +503,11 @@ impl MIDIVoiceRegister {
             let channel = if self.noteon_drum {
                 MIDI_PERCUSSION_CHANNEL
             } else {
-                self.channel
+                if srn_map.auto_output_channel[self.sample_source as usize] {
+                    self.channel
+                } else {
+                    srn_map.fixed_output_channel[self.sample_source as usize]
+                }
             };
             // エクスプレッション（エンベロープ）
             if self.envelope_updated && srn_map.output_envelope[self.sample_source as usize] {
@@ -751,6 +775,12 @@ impl SPCDSP for MIDIDSP {
                 self.sample_source_map.pitch_bend_sensitibity_updated[self.sample_source_target] =
                     true;
             }
+            DSP_ADDRESS_SRN_OUTPUT_CHANNEL => {
+                self.sample_source_map.auto_output_channel[self.sample_source_target] =
+                    (value & 0x80) != 0;
+                self.sample_source_map.fixed_output_channel[self.sample_source_target] =
+                    value & 0x7F;
+            }
             DSP_ADDRESS_CONFIGURE_FLAG => {
                 self.volume_curve = match (value >> 6) & 0x3 {
                     0 => MIDIVolumeCurve::SquareRoot,
@@ -940,6 +970,14 @@ impl SPCDSP for MIDIDSP {
                 let mut value =
                     self.sample_source_map.pitch_bend_sensitibity[self.sample_source_target];
                 if self.sample_source_map.output_pitch_bend[self.sample_source_target] {
+                    value |= 0x80;
+                }
+                value
+            }
+            DSP_ADDRESS_SRN_OUTPUT_CHANNEL => {
+                let mut value =
+                    self.sample_source_map.fixed_output_channel[self.sample_source_target];
+                if self.sample_source_map.auto_output_channel[self.sample_source_target] {
                     value |= 0x80;
                 }
                 value
