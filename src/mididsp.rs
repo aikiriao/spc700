@@ -562,6 +562,22 @@ impl MIDIVoiceRegister {
     }
 }
 
+impl MIDIDSP {
+    /// グローバルカウンタの更新
+    /// Anomie's S-DSP Docから引用
+    fn update_global_counter(&mut self) {
+        if (self.global_counter & 0x7) == 0 {
+            self.global_counter ^= 0x5;
+        }
+
+        if (self.global_counter & 0x18) == 0 {
+            self.global_counter ^= 0x18;
+        }
+
+        self.global_counter = self.global_counter.wrapping_sub(0x29);
+    }
+}
+
 impl SPCDSP for MIDIDSP {
     type Output = MIDIOutput;
 
@@ -1023,12 +1039,8 @@ impl SPCDSP for MIDIDSP {
                 &mut out,
             );
         }
-
         // グローバルカウンタの更新
-        if self.global_counter == 0 {
-            self.global_counter = 0x77FF;
-        }
-        self.global_counter -= 1;
+        self.update_global_counter();
 
         // ステータスバイト更新
         self.status_byte = out.status_byte;
