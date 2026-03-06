@@ -120,8 +120,6 @@ struct MIDIVoiceRegister {
     pitch_bend_base: u16,
     /// 最後に設定したピッチベンド値
     last_pitch: u16,
-    /// 最後に設定したプログラム番号
-    last_program: u8,
     /// ミュートフラグ
     ch_mute: bool,
 }
@@ -174,6 +172,8 @@ pub struct MIDIDSP {
     global_counter: u16,
     /// 各チャンネルのボイス
     voice: [MIDIVoiceRegister; 8],
+    /// 各チャンネルに割り当てられたプログラム番号
+    current_program: [u8; 16],
     /// 各サンプル番号に対応するマップ
     sample_source_map: SampleSourceMap,
     /// 設定対象のサンプル番号
@@ -318,7 +318,6 @@ impl MIDIVoiceRegister {
             last_note: 0,
             pitch_bend_base: 0,
             last_pitch: 0,
-            last_program: 0,
             ch_mute: false,
         }
     }
@@ -330,6 +329,7 @@ impl MIDIVoiceRegister {
         global_counter: u16,
         playback_parameter_update: bool,
         volume_curve: MIDIVolumeCurve,
+        current_program: &mut [u8; 16],
         srn_map: &mut SampleSourceMap,
         out: &mut MIDIOutputWithStatusByte,
     ) {
@@ -359,7 +359,7 @@ impl MIDIVoiceRegister {
             };
             if program <= 0x7F {
                 // 音色が変わっていたらプログラムチェンジを送信
-                if program != self.last_program {
+                if program != current_program[channel as usize] {
                     out.push_channel_message(mute, &[MIDIMSG_PROGRAM_CHANGE | channel, program]);
                     // ピッチベンドセンシティビティ設定
                     let first_byte = MIDIMSG_CONTROL_CHANGE | channel;
@@ -374,7 +374,7 @@ impl MIDIVoiceRegister {
                         ],
                     );
                     out.push_channel_message(mute, &[first_byte, MIDICC_RPN_DATA_ENTRY_MSB, 0]);
-                    self.last_program = program;
+                    current_program[channel as usize] = program;
                 }
             }
             // ボリューム・パン
@@ -600,6 +600,7 @@ impl SPCDSP for MIDIDSP {
                 MIDIVoiceRegister::new(6),
                 MIDIVoiceRegister::new(7),
             ],
+            current_program: [0; 16],
             global_counter: 0,
             sample_source_map: DEFAULT_SAMPLE_SOUCE_MAP,
             sample_source_target: 0,
@@ -1035,6 +1036,7 @@ impl SPCDSP for MIDIDSP {
                 self.global_counter,
                 playback_parameter_update,
                 self.volume_curve,
+                &mut self.current_program,
                 &mut self.sample_source_map,
                 &mut out,
             );
