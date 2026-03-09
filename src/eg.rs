@@ -67,6 +67,20 @@ const GLOBAL_COUNTER_XORS: [u16; 32] = [
     0x0004, 0x0000, 0x0008, 0x0004, 0x0000, 0x0008, 0x0000, 0x0000,
 ];
 
+/// グローバルカウンタの更新
+/// Anomie's S-DSP Docから引用
+pub fn update_global_counter(global_counter: &mut u16) {
+    if (*global_counter & 0x7) == 0 {
+        *global_counter ^= 0x5;
+    }
+
+    if (*global_counter & 0x18) == 0 {
+        *global_counter ^= 0x18;
+    }
+
+    *global_counter = global_counter.wrapping_sub(0x29);
+}
+
 impl EnvelopeGenerator {
     pub fn new() -> Self {
         Self {
