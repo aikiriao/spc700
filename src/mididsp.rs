@@ -543,22 +543,6 @@ impl MIDIVoiceRegister {
                 );
                 self.status.pan = pan;
             }
-            // ピッチベンドセンシティビティ
-            if srn_map.output_pitch_bend[self.status.sample_source]
-            {
-                let first_byte = MIDIMSG_CONTROL_CHANGE | self.status.channel;
-                out.push_channel_message(mute, &[first_byte, MIDICC_RPN_MSB, 0x00]);
-                out.push_channel_message(mute, &[first_byte, MIDICC_RPN_LSB, 0x00]);
-                out.push_channel_message(
-                    mute,
-                    &[
-                        first_byte,
-                        MIDICC_RPN_DATA_ENTRY_LSB,
-                        srn_map.pitch_bend_sensitibity[self.status.sample_source],
-                    ],
-                );
-                out.push_channel_message(mute, &[first_byte, MIDICC_RPN_DATA_ENTRY_MSB, 0]);
-            }
             // ピッチベンド
             if self.status.pitch != self.pitch
                 && srn_map.output_pitch_bend[self.status.sample_source]
