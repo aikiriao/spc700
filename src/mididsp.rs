@@ -163,8 +163,6 @@ struct SampleSourceMap {
     output_pitch_bend: [bool; 256],
     /// エコーをエフェクト1デプス（リバーブ）として出力するか
     echo_as_effect1_depth: [bool; 256],
-    /// ピッチベンドセンシティビティが更新されたか
-    pitch_bend_sensitibity_updated: [bool; 256],
     /// 出力先チャンネルをVoiceRegisterのチャンネルと同じにするか
     auto_output_channel: [bool; 256],
     /// 出力先チャンネル
@@ -230,7 +228,6 @@ const DEFAULT_SAMPLE_SOUCE_MAP: SampleSourceMap = SampleSourceMap {
     fixed_volume: [100; 256],
     output_pitch_bend: [true; 256],
     echo_as_effect1_depth: [true; 256],
-    pitch_bend_sensitibity_updated: [false; 256],
     auto_output_channel: [true; 256],
     fixed_output_channel: [0; 256],
 };
@@ -352,8 +349,8 @@ impl MIDIVoiceRegister {
         global_counter: u16,
         playback_parameter_update: bool,
         volume_curve: MIDIVolumeCurve,
+        srn_map: &SampleSourceMap,
         current_program: &mut [u8; 16],
-        srn_map: &mut SampleSourceMap,
         out: &mut MIDIOutputWithStatusByte,
     ) {
         // キーオンが入ったとき
@@ -547,8 +544,7 @@ impl MIDIVoiceRegister {
                 self.status.pan = pan;
             }
             // ピッチベンドセンシティビティ
-            if srn_map.pitch_bend_sensitibity_updated[self.status.sample_source]
-                && srn_map.output_pitch_bend[self.status.sample_source]
+            if srn_map.output_pitch_bend[self.status.sample_source]
             {
                 let first_byte = MIDIMSG_CONTROL_CHANGE | self.status.channel;
                 out.push_channel_message(mute, &[first_byte, MIDICC_RPN_MSB, 0x00]);
@@ -562,7 +558,6 @@ impl MIDIVoiceRegister {
                     ],
                 );
                 out.push_channel_message(mute, &[first_byte, MIDICC_RPN_DATA_ENTRY_MSB, 0]);
-                srn_map.pitch_bend_sensitibity_updated[self.status.sample_source] = false;
             }
             // ピッチベンド
             if self.status.pitch != self.pitch
@@ -760,8 +755,6 @@ impl SPCDSP for MIDIDSP {
                     (value & 0x80) != 0;
                 self.sample_source_map.pitch_bend_sensitibity[self.sample_source_target] =
                     value & 0x7F;
-                self.sample_source_map.pitch_bend_sensitibity_updated[self.sample_source_target] =
-                    true;
             }
             DSP_ADDRESS_SRN_OUTPUT_CHANNEL => {
                 self.sample_source_map.auto_output_channel[self.sample_source_target] =
@@ -1059,8 +1052,8 @@ impl SPCDSP for MIDIDSP {
                 self.global_counter,
                 playback_parameter_update,
                 self.volume_curve,
+                &self.sample_source_map,
                 &mut self.current_program,
-                &mut self.sample_source_map,
                 &mut out,
             );
         }
