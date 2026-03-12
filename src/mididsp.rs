@@ -88,6 +88,8 @@ struct PlaybackStatus {
     volume: u8,
     /// パン設定値
     pan: u8,
+    /// エクスプレッション
+    expression: u8,
     /// 発声した音のノート番号
     note: u8,
     /// 設定したピッチベンド値
@@ -127,8 +129,6 @@ struct MIDIVoiceRegister {
     noise: bool,
     /// エコー有効か
     echo: bool,
-    /// エンベロープが更新されたか
-    envelope_updated: bool,
     /// ピッチベンドの基準ピッチ（最後に発声した音のピッチ）
     pitch_bend_base: u16,
     /// ミュートフラグ
@@ -331,12 +331,12 @@ impl MIDIVoiceRegister {
             pitch_mod: false,
             noise: false,
             echo: false,
-            envelope_updated: false,
             pitch_bend_base: 0,
             ch_mute: false,
             status: PlaybackStatus {
                 volume: 0,
                 pan: 0,
+                expression: 0,
                 note: 0,
                 pitch: 0,
                 sample_source: 0,
@@ -403,30 +403,32 @@ impl MIDIVoiceRegister {
             }
             // ボリューム・パン
             let (volume, pan) = lrvolume_to_volume_and_pan(volume_curve, &self.volume);
-            out.push_channel_message(
-                mute,
-                &[
-                    MIDIMSG_CONTROL_CHANGE | channel,
-                    MIDICC_CHANNEL_VOLUME,
-                    if srn_map.auto_volume[self.sample_source] {
-                        volume
-                    } else {
-                        srn_map.fixed_volume[self.sample_source]
-                    },
-                ],
-            );
-            out.push_channel_message(
-                mute,
-                &[
-                    MIDIMSG_CONTROL_CHANGE | channel,
-                    MIDICC_PANPOT,
-                    if srn_map.auto_pan[self.sample_source] {
-                        pan
-                    } else {
-                        srn_map.fixed_pan[self.sample_source]
-                    },
-                ],
-            );
+            let noteon_volume = if srn_map.auto_volume[self.sample_source] {
+                volume
+            } else {
+                srn_map.fixed_volume[self.sample_source]
+            };
+            if noteon_volume != self.status.volume {
+                out.push_channel_message(
+                    mute,
+                    &[
+                        MIDIMSG_CONTROL_CHANGE | channel,
+                        MIDICC_CHANNEL_VOLUME,
+                        noteon_volume,
+                    ],
+                );
+            }
+            let noteon_pan = if srn_map.auto_pan[self.sample_source] {
+                pan
+            } else {
+                srn_map.fixed_pan[self.sample_source]
+            };
+            if noteon_pan != self.status.pan {
+                out.push_channel_message(
+                    mute,
+                    &[MIDIMSG_CONTROL_CHANGE | channel, MIDICC_PANPOT, noteon_pan],
+                );
+            }
             // エフェクト1デプス
             let effect1_depth = if self.echo && srn_map.echo_as_effect1_depth[self.sample_source] {
                 echo_volume
@@ -442,19 +444,21 @@ impl MIDIVoiceRegister {
                 ],
             );
             // エクスプレッション
-            let initial_expression = if srn_map.output_envelope[self.sample_source] {
+            let noteon_expression = if srn_map.output_envelope[self.sample_source] {
                 gain_to_midi_volume(volume_curve, self.eg.gain as f32 / 16.0)
             } else {
                 0x7F
             };
-            out.push_channel_message(
-                mute,
-                &[
-                    MIDIMSG_CONTROL_CHANGE | channel,
-                    MIDICC_EXPRESSION,
-                    initial_expression,
-                ],
-            );
+            if noteon_expression != self.status.expression {
+                out.push_channel_message(
+                    mute,
+                    &[
+                        MIDIMSG_CONTROL_CHANGE | channel,
+                        MIDICC_EXPRESSION,
+                        noteon_expression,
+                    ],
+                );
+            }
             // ピッチベンドの設定値を中心(8192)に戻す
             out.push_channel_message(mute, &[MIDIMSG_PITCH_BEND | channel, 0, 0x40]);
             // ノートオン発行
@@ -471,13 +475,13 @@ impl MIDIVoiceRegister {
                     srn_map.noteon_velocity[self.sample_source],
                 ],
             );
-            self.status.volume = volume;
-            self.status.pan = pan;
+            self.status.volume = noteon_volume;
+            self.status.pan = noteon_pan;
+            self.status.expression = noteon_expression;
             self.status.note = note;
             self.status.pitch = self.pitch;
             self.status.sample_source = self.sample_source;
             self.status.channel = channel;
-            self.envelope_updated = false;
             self.noteon_drum = program >= 0x80;
             self.pitch_bend_base = self.pitch;
             self.noteon = true;
@@ -498,24 +502,25 @@ impl MIDIVoiceRegister {
         }
 
         // エンベロープ内部状態更新
-        if self.eg.update(global_counter) && !self.envelope_updated {
-            self.envelope_updated = true;
-        }
+        self.eg.update(global_counter);
 
         // 再生パラメータ更新（過剰に送ると遅延するので間引く）
         if self.noteon && playback_parameter_update {
             let mute = self.ch_mute || srn_map.mute[self.status.sample_source];
             // エクスプレッション（エンベロープ）
-            if self.envelope_updated && srn_map.output_envelope[self.status.sample_source] {
+            let expression = gain_to_midi_volume(volume_curve, self.eg.gain as f32 / 16.0);
+            if self.status.expression != expression
+                && srn_map.output_envelope[self.status.sample_source]
+            {
                 out.push_channel_message(
                     mute,
                     &[
                         MIDIMSG_CONTROL_CHANGE | self.status.channel,
                         MIDICC_EXPRESSION,
-                        gain_to_midi_volume(volume_curve, self.eg.gain as f32 / 16.0),
+                        expression,
                     ],
                 );
-                self.envelope_updated = false;
+                self.status.expression = expression;
             }
             // ボリューム・パン
             let (volume, pan) = lrvolume_to_volume_and_pan(volume_curve, &self.volume);
@@ -806,15 +811,12 @@ impl SPCDSP for MIDIDSP {
                     }
                     DSP_ADDRESS_V0ADSR1 => {
                         self.voice[ch].eg.set_adsr1(value);
-                        self.voice[ch].envelope_updated = true;
                     }
                     DSP_ADDRESS_V0ADSR2 => {
                         self.voice[ch].eg.set_adsr2(value);
-                        self.voice[ch].envelope_updated = true;
                     }
                     DSP_ADDRESS_V0GAIN => {
                         self.voice[ch].eg.set_gain(value);
-                        self.voice[ch].envelope_updated = true;
                     }
                     DSP_ADDRESS_V0ENVX => {
                         // 書き込みは無視される（読み取り用レジスタ）
