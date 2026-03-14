@@ -81,9 +81,9 @@ pub enum MIDIVolumeCurve {
     Linear,
 }
 
-/// 再生ステータス
+/// ボイス再生ステータス
 #[derive(Copy, Clone, Debug)]
-struct PlaybackStatus {
+struct VoicePlaybackStatus {
     /// ボリューム設定値
     volume: u8,
     /// パン設定値
@@ -98,6 +98,21 @@ struct PlaybackStatus {
     sample_source: usize,
     /// 発声したチャンネル
     channel: u8,
+}
+
+/// チャンネル再生ステータス
+#[derive(Copy, Clone, Debug)]
+struct ChannelPlaybackStatus {
+    /// ボリューム設定値
+    volume: u8,
+    /// パン設定値
+    pan: u8,
+    /// エクスプレッション
+    expression: u8,
+    /// ピッチ
+    pitch: u16,
+    /// プログラム番号
+    program: u8,
 }
 
 /// ボイス
@@ -134,7 +149,7 @@ struct MIDIVoiceRegister {
     /// ミュートフラグ
     ch_mute: bool,
     /// 再生中のステータス
-    status: PlaybackStatus,
+    status: VoicePlaybackStatus,
 }
 
 /// 各サンプルに対応するマップ
@@ -187,8 +202,8 @@ pub struct MIDIDSP {
     global_counter: u16,
     /// 各チャンネルのボイス
     voice: [MIDIVoiceRegister; 8],
-    /// 各チャンネルに割り当てられたプログラム番号
-    current_program: [u8; 16],
+    /// 各チャンネルの再生状態
+    channel_status: [ChannelPlaybackStatus; 16],
     /// 各サンプル番号に対応するマップ
     sample_source_map: SampleSourceMap,
     /// 設定対象のサンプル番号
@@ -330,7 +345,7 @@ impl MIDIVoiceRegister {
             echo: false,
             pitch_bend_base: 0,
             ch_mute: false,
-            status: PlaybackStatus {
+            status: VoicePlaybackStatus {
                 volume: 0,
                 pan: 0,
                 expression: 0,
@@ -350,7 +365,7 @@ impl MIDIVoiceRegister {
         playback_parameter_update: bool,
         volume_curve: MIDIVolumeCurve,
         srn_map: &SampleSourceMap,
-        current_program: &mut [u8; 16],
+        channel_status: &mut [ChannelPlaybackStatus; 16],
         out: &mut MIDIOutputWithStatusByte,
     ) {
         // キーオンが入ったとき
@@ -380,7 +395,7 @@ impl MIDIVoiceRegister {
             };
             if program <= 0x7F {
                 // 音色が変わっていたらプログラムチェンジを送信
-                if program != current_program[channel as usize] {
+                if program != channel_status[channel as usize].program {
                     out.push_channel_message(mute, &[MIDIMSG_PROGRAM_CHANGE | channel, program]);
                     // ピッチベンドセンシティビティ設定
                     let first_byte = MIDIMSG_CONTROL_CHANGE | channel;
@@ -395,7 +410,7 @@ impl MIDIVoiceRegister {
                         ],
                     );
                     out.push_channel_message(mute, &[first_byte, MIDICC_RPN_DATA_ENTRY_MSB, 0]);
-                    current_program[channel as usize] = program;
+                    channel_status[channel as usize].program = program;
                 }
             }
             // ボリューム・パン
@@ -591,7 +606,13 @@ impl SPCDSP for MIDIDSP {
                 MIDIVoiceRegister::new(6),
                 MIDIVoiceRegister::new(7),
             ],
-            current_program: [0; 16],
+            channel_status: [ChannelPlaybackStatus {
+                volume: 0,
+                pan: 0,
+                expression: 0,
+                pitch: 0,
+                program: 0,
+            }; 16],
             global_counter: 0,
             sample_source_map: DEFAULT_SAMPLE_SOUCE_MAP,
             sample_source_target: 0,
@@ -1037,7 +1058,7 @@ impl SPCDSP for MIDIDSP {
                 playback_parameter_update,
                 self.volume_curve,
                 &self.sample_source_map,
-                &mut self.current_program,
+                &mut self.channel_status,
                 &mut out,
             );
         }
