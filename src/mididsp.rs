@@ -84,20 +84,14 @@ pub enum MIDIVolumeCurve {
 /// ボイス再生ステータス
 #[derive(Copy, Clone, Debug)]
 struct VoicePlaybackStatus {
-    /// ボリューム設定値
-    volume: u8,
-    /// パン設定値
-    pan: u8,
-    /// エクスプレッション
-    expression: u8,
     /// 発声した音のノート番号
     note: u8,
-    /// 設定したピッチベンド値
-    pitch: u16,
     /// 発声した音源サンプル
     sample_source: usize,
     /// 発声したチャンネル
     channel: u8,
+    /// ピッチベンドの基準ピッチ（最後に発声した音のピッチ）
+    pitch_bend_base: u16,
 }
 
 /// チャンネル再生ステータス
@@ -144,8 +138,6 @@ struct MIDIVoiceRegister {
     noise: bool,
     /// エコー有効か
     echo: bool,
-    /// ピッチベンドの基準ピッチ（最後に発声した音のピッチ）
-    pitch_bend_base: u16,
     /// ミュートフラグ
     ch_mute: bool,
     /// 再生中のステータス
@@ -343,16 +335,12 @@ impl MIDIVoiceRegister {
             pitch_mod: false,
             noise: false,
             echo: false,
-            pitch_bend_base: 0,
             ch_mute: false,
             status: VoicePlaybackStatus {
-                volume: 0,
-                pan: 0,
-                expression: 0,
                 note: 0,
-                pitch: 0,
                 sample_source: 0,
                 channel: 0,
+                pitch_bend_base: 0,
             },
         }
     }
@@ -393,9 +381,10 @@ impl MIDIVoiceRegister {
             } else {
                 MIDI_PERCUSSION_CHANNEL
             };
+            let ch_status = &mut channel_status[channel as usize];
             if program <= 0x7F {
                 // 音色が変わっていたらプログラムチェンジを送信
-                if program != channel_status[channel as usize].program {
+                if program != ch_status.program {
                     out.push_channel_message(mute, &[MIDIMSG_PROGRAM_CHANGE | channel, program]);
                     // ピッチベンドセンシティビティ設定
                     let first_byte = MIDIMSG_CONTROL_CHANGE | channel;
@@ -410,7 +399,7 @@ impl MIDIVoiceRegister {
                         ],
                     );
                     out.push_channel_message(mute, &[first_byte, MIDICC_RPN_DATA_ENTRY_MSB, 0]);
-                    channel_status[channel as usize].program = program;
+                    ch_status.program = program;
                 }
             }
             // ボリューム・パン
@@ -420,7 +409,7 @@ impl MIDIVoiceRegister {
             } else {
                 srn_map.fixed_volume[self.sample_source]
             };
-            if noteon_volume != self.status.volume {
+            if noteon_volume != ch_status.volume {
                 out.push_channel_message(
                     mute,
                     &[
@@ -435,7 +424,7 @@ impl MIDIVoiceRegister {
             } else {
                 srn_map.fixed_pan[self.sample_source]
             };
-            if noteon_pan != self.status.pan {
+            if noteon_pan != ch_status.pan {
                 out.push_channel_message(
                     mute,
                     &[MIDIMSG_CONTROL_CHANGE | channel, MIDICC_PANPOT, noteon_pan],
@@ -461,7 +450,7 @@ impl MIDIVoiceRegister {
             } else {
                 0x7F
             };
-            if noteon_expression != self.status.expression {
+            if noteon_expression != ch_status.expression {
                 out.push_channel_message(
                     mute,
                     &[
@@ -487,15 +476,15 @@ impl MIDIVoiceRegister {
                     srn_map.noteon_velocity[self.sample_source],
                 ],
             );
-            self.status.volume = noteon_volume;
-            self.status.pan = noteon_pan;
-            self.status.expression = noteon_expression;
+            ch_status.volume = noteon_volume;
+            ch_status.pan = noteon_pan;
+            ch_status.expression = noteon_expression;
+            ch_status.pitch = self.pitch;
             self.status.note = note;
-            self.status.pitch = self.pitch;
             self.status.sample_source = self.sample_source;
             self.status.channel = channel;
+            self.status.pitch_bend_base = self.pitch;
             self.noteon_drum = program >= 0x80;
-            self.pitch_bend_base = self.pitch;
             self.noteon = true;
         }
 
@@ -518,10 +507,11 @@ impl MIDIVoiceRegister {
 
         // 再生パラメータ更新（過剰に送ると遅延するので間引く）
         if self.noteon && playback_parameter_update {
+            let ch_status = &mut channel_status[self.status.channel as usize];
             let mute = self.ch_mute || srn_map.mute[self.status.sample_source];
             // エクスプレッション（エンベロープ）
             let expression = gain_to_midi_volume(volume_curve, self.eg.gain as f32 / 16.0);
-            if self.status.expression != expression
+            if ch_status.expression != expression
                 && srn_map.output_envelope[self.status.sample_source]
             {
                 out.push_channel_message(
@@ -532,11 +522,11 @@ impl MIDIVoiceRegister {
                         expression,
                     ],
                 );
-                self.status.expression = expression;
+                ch_status.expression = expression;
             }
             // ボリューム・パン
             let (volume, pan) = lrvolume_to_volume_and_pan(volume_curve, &self.volume);
-            if self.status.volume != volume && srn_map.auto_volume[self.status.sample_source] {
+            if ch_status.volume != volume && srn_map.auto_volume[self.status.sample_source] {
                 out.push_channel_message(
                     mute,
                     &[
@@ -545,9 +535,9 @@ impl MIDIVoiceRegister {
                         volume,
                     ],
                 );
-                self.status.volume = volume;
+                ch_status.volume = volume;
             }
-            if self.status.pan != pan && srn_map.auto_pan[self.status.sample_source] {
+            if ch_status.pan != pan && srn_map.auto_pan[self.status.sample_source] {
                 out.push_channel_message(
                     mute,
                     &[
@@ -556,16 +546,16 @@ impl MIDIVoiceRegister {
                         pan,
                     ],
                 );
-                self.status.pan = pan;
+                ch_status.pan = pan;
             }
             // ピッチベンド
-            if self.status.pitch != self.pitch
+            if ch_status.pitch != self.pitch
                 && srn_map.output_pitch_bend[self.status.sample_source]
             {
                 let max_semitone = srn_map.pitch_bend_sensitibity[self.status.sample_source] as f32;
                 // [-max_semitone,max_semitone]半音を[-8192,8192]に対応付ける
                 let pitchbend_ratio =
-                    libm::log2f((self.pitch as f32) / (self.pitch_bend_base as f32)) * 12.0
+                    libm::log2f((self.pitch as f32) / (self.status.pitch_bend_base as f32)) * 12.0
                         / max_semitone;
                 let pitch_bend =
                     libm::roundf((pitchbend_ratio * 8192.0).clamp(-8192.0, 8191.0)) as i16 + 8192;
@@ -578,7 +568,7 @@ impl MIDIVoiceRegister {
                         ((pitch_bend >> 7) & 0x7F) as u8, // MSB
                     ],
                 );
-                self.status.pitch = self.pitch;
+                ch_status.pitch = self.pitch;
             }
         }
     }
