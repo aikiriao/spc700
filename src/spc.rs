@@ -75,8 +75,8 @@ where
     T: SPCDSP,
 {
     /// コンストラクタ
-    pub fn new(reg: &SPCRegister, ram: &[u8], dsp_register: &[u8; 128]) -> SPC<T> {
-        let mut emu = Self {
+    pub fn new() -> SPC<T> {
+        Self {
             reg: SPCRegister {
                 a: 0,
                 x: 0,
@@ -93,9 +93,7 @@ where
             timer_enable: [false; 3],
             timer_internal_count: [0; 3],
             ipl_rom: false,
-        };
-        emu.initialize(reg, ram, dsp_register);
-        emu
+        }
     }
 
     /// 初期化

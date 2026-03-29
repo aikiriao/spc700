@@ -35,7 +35,8 @@ fn naive_play(
     );
 
     // SPCエミュレータ初期化
-    let mut emu: spc700::spc::SPC<spc700::sdsp::SDSP> = SPC::new(&register, ram, dsp_register);
+    let mut emu: spc700::spc::SPC<spc700::sdsp::SDSP> = SPC::new();
+    emu.initialize(&register, ram, dsp_register);
     let mut cycle_count = 0;
 
     // 再生ストリーム作成
