@@ -147,34 +147,34 @@ struct MIDIVoiceRegister {
     status: VoicePlaybackStatus,
 }
 
-/// 各サンプルに対応するマップ
-struct SampleSourceMap {
+/// 各サンプルに対応するMIDI再生パラメータ
+struct SRNMIDIParameter {
     /// ミュートするか
-    mute: [bool; 256],
+    mute: bool,
     /// プログラム番号（音色）
-    program: [u8; 256],
+    program: u8,
     /// 基準ノート（ピッチ） 整数部7bit, 小数部9bit
-    center_note: [u16; 256],
+    center_note: u16,
     /// ノートオンベロシティ
-    noteon_velocity: [u8; 256],
+    noteon_velocity: u8,
     /// ピッチベンドセンシティビティ
-    pitch_bend_sensitibity: [u8; 256],
+    pitch_bend_sensitibity: u8,
     /// エンベロープ出力有効か
-    output_envelope: [bool; 256],
+    output_envelope: bool,
     /// パンを自動更新するか
-    auto_pan: [bool; 256],
+    auto_pan: bool,
     /// パン
-    fixed_pan: [u8; 256],
+    fixed_pan: u8,
     /// ボリュームを自動更新するか
-    auto_volume: [bool; 256],
+    auto_volume: bool,
     /// ボリューム
-    fixed_volume: [u8; 256],
+    fixed_volume: u8,
     /// ピッチベンド出力有効か
-    output_pitch_bend: [bool; 256],
+    output_pitch_bend: bool,
     /// エコーをエフェクト1デプス（リバーブ）として出力するか
-    echo_as_effect1_depth: [bool; 256],
+    echo_as_effect1_depth: bool,
     /// 出力先チャンネルルーティング 最上位ビットはミュートフラグ
-    channel_routing: [[u8; 8]; 256],
+    channel_routing: [u8; 8],
 }
 
 /// MIDI-DSP
@@ -198,7 +198,7 @@ pub struct MIDIDSP {
     /// 各チャンネルの再生状態
     channel_status: [ChannelPlaybackStatus; 16],
     /// 各サンプル番号に対応するマップ
-    sample_source_map: SampleSourceMap,
+    sample_source_map: [SRNMIDIParameter; 256],
     /// 設定対象のサンプル番号
     sample_source_target: usize,
     /// エンベロープ・ボリューム・ピッチベンド更新間隔カウンタ
@@ -223,20 +223,20 @@ struct MIDIOutputWithStatusByte {
 }
 
 /// デフォルトのサンプル対応マップ
-const DEFAULT_SAMPLE_SOUCE_MAP: SampleSourceMap = SampleSourceMap {
-    mute: [false; 256],
-    program: [0; 256],
-    center_note: [64 << 9; 256], // 中心ノートは64で仮置き
-    noteon_velocity: [0x7F; 256],
-    pitch_bend_sensitibity: [12; 256],
-    output_envelope: [true; 256],
-    auto_pan: [true; 256],
-    fixed_pan: [64; 256],
-    auto_volume: [false; 256],
-    fixed_volume: [100; 256],
-    output_pitch_bend: [true; 256],
-    echo_as_effect1_depth: [true; 256],
-    channel_routing: [[0, 1, 2, 3, 4, 5, 6, 7]; 256], // SPCの出力チャンネルに合わせる
+const DEFAULT_SRN_MIDI_PARAMETER: SRNMIDIParameter = SRNMIDIParameter {
+    mute: false,
+    program: 0,
+    center_note: 64 << 9, // 中心ノートは64で仮置き
+    noteon_velocity: 0x7F,
+    pitch_bend_sensitibity: 12,
+    output_envelope: true,
+    auto_pan: true,
+    fixed_pan: 64,
+    auto_volume: false,
+    fixed_volume: 100,
+    output_pitch_bend: true,
+    echo_as_effect1_depth: true,
+    channel_routing: [0, 1, 2, 3, 4, 5, 6, 7], // SPCの出力チャンネルに合わせる
 };
 
 /// ピッチをMIDIノート番号に変換
@@ -352,7 +352,7 @@ impl MIDIVoiceRegister {
         global_counter: u16,
         playback_parameter_update: bool,
         volume_curve: MIDIVolumeCurve,
-        srn_map: &SampleSourceMap,
+        srn_map: &[SRNMIDIParameter],
         channel_status: &mut [ChannelPlaybackStatus; 16],
         out: &mut MIDIOutputWithStatusByte,
     ) {
@@ -361,10 +361,10 @@ impl MIDIVoiceRegister {
             self.keyon = false;
             // キーオフが漏れていた場合はノートオフを送信
             if self.noteon {
-                let srn = self.status.sample_source;
+                let param = &srn_map[self.status.sample_source];
                 let mute = self.ch_mute
-                    || srn_map.mute[srn]
-                    || (srn_map.channel_routing[srn][self.channel as usize] & 0x80) != 0;
+                    || param.mute
+                    || (param.channel_routing[self.channel as usize] & 0x80) != 0;
                 out.push_channel_message(
                     mute,
                     &[MIDIMSG_NOTE_OFF | self.status.channel, self.status.note, 0],
@@ -373,14 +373,15 @@ impl MIDIVoiceRegister {
             // エンベロープ設定
             self.eg.keyon();
             // ノートオン
-            let program = srn_map.program[self.sample_source];
-            let ch_routing = srn_map.channel_routing[self.sample_source][self.channel as usize];
+            let param = &srn_map[self.sample_source];
+            let program = param.program;
+            let ch_routing = param.channel_routing[self.channel as usize];
             let channel = if program <= 0x7F {
                 ch_routing & 0x7F
             } else {
                 MIDI_PERCUSSION_CHANNEL
             };
-            let mute = self.ch_mute || srn_map.mute[self.sample_source] || (ch_routing & 0x80) != 0;
+            let mute = self.ch_mute || param.mute || (ch_routing & 0x80) != 0;
             let ch_status = &mut channel_status[channel as usize];
             if program <= 0x7F {
                 // 音色が変わっていたらプログラムチェンジを送信
@@ -395,7 +396,7 @@ impl MIDIVoiceRegister {
                         &[
                             first_byte,
                             MIDICC_RPN_DATA_ENTRY_LSB,
-                            srn_map.pitch_bend_sensitibity[self.sample_source],
+                            param.pitch_bend_sensitibity,
                         ],
                     );
                     out.push_channel_message(mute, &[first_byte, MIDICC_RPN_DATA_ENTRY_MSB, 0]);
@@ -404,10 +405,10 @@ impl MIDIVoiceRegister {
             }
             // ボリューム・パン
             let (volume, pan) = lrvolume_to_volume_and_pan(volume_curve, &self.volume);
-            let noteon_volume = if srn_map.auto_volume[self.sample_source] {
+            let noteon_volume = if param.auto_volume {
                 volume
             } else {
-                srn_map.fixed_volume[self.sample_source]
+                param.fixed_volume
             };
             if noteon_volume != ch_status.volume {
                 out.push_channel_message(
@@ -419,11 +420,7 @@ impl MIDIVoiceRegister {
                     ],
                 );
             }
-            let noteon_pan = if srn_map.auto_pan[self.sample_source] {
-                pan
-            } else {
-                srn_map.fixed_pan[self.sample_source]
-            };
+            let noteon_pan = if param.auto_pan { pan } else { param.fixed_pan };
             if noteon_pan != ch_status.pan {
                 out.push_channel_message(
                     mute,
@@ -431,7 +428,7 @@ impl MIDIVoiceRegister {
                 );
             }
             // エフェクト1デプス
-            let effect1_depth = if self.echo && srn_map.echo_as_effect1_depth[self.sample_source] {
+            let effect1_depth = if self.echo && param.echo_as_effect1_depth {
                 echo_volume
             } else {
                 0
@@ -445,7 +442,7 @@ impl MIDIVoiceRegister {
                 ],
             );
             // エクスプレッション
-            let noteon_expression = if srn_map.output_envelope[self.sample_source] {
+            let noteon_expression = if param.output_envelope {
                 gain_to_midi_volume(volume_curve, self.eg.gain as f32 / 16.0)
             } else {
                 0x7F
@@ -464,17 +461,13 @@ impl MIDIVoiceRegister {
             out.push_channel_message(mute, &[MIDIMSG_PITCH_BEND | channel, 0, 0x40]);
             // ノートオン発行
             let note = if program < 0x80 {
-                pitch_to_note(srn_map.center_note[self.sample_source], self.pitch)
+                pitch_to_note(param.center_note, self.pitch)
             } else {
                 program - 0x80
             };
             out.push_channel_message(
                 mute,
-                &[
-                    MIDIMSG_NOTE_ON | channel,
-                    note,
-                    srn_map.noteon_velocity[self.sample_source],
-                ],
+                &[MIDIMSG_NOTE_ON | channel, note, param.noteon_velocity],
             );
             ch_status.volume = noteon_volume;
             ch_status.pan = noteon_pan;
@@ -493,10 +486,10 @@ impl MIDIVoiceRegister {
             self.keyoff = false;
             // ノートオフ
             if self.noteon {
-                let srn = self.status.sample_source;
+                let param = &srn_map[self.status.sample_source];
                 let mute = self.ch_mute
-                    || srn_map.mute[srn]
-                    || (srn_map.channel_routing[srn][self.channel as usize] & 0x80) != 0;
+                    || param.mute
+                    || (param.channel_routing[self.channel as usize] & 0x80) != 0;
                 out.push_channel_message(
                     mute,
                     &[MIDIMSG_NOTE_OFF | self.status.channel, self.status.note, 0],
@@ -510,14 +503,14 @@ impl MIDIVoiceRegister {
 
         // 再生パラメータ更新（過剰に送ると遅延するので間引く）
         if self.noteon && playback_parameter_update {
-            let srn = self.status.sample_source;
+            let param = &srn_map[self.status.sample_source];
             let ch_status = &mut channel_status[self.status.channel as usize];
             let mute = self.ch_mute
-                || srn_map.mute[srn]
-                || (srn_map.channel_routing[srn][self.channel as usize] & 0x80) != 0;
+                || param.mute
+                || (param.channel_routing[self.channel as usize] & 0x80) != 0;
             // エクスプレッション（エンベロープ）
             let expression = gain_to_midi_volume(volume_curve, self.eg.gain as f32 / 16.0);
-            if ch_status.expression != expression && srn_map.output_envelope[srn] {
+            if ch_status.expression != expression && param.output_envelope {
                 out.push_channel_message(
                     mute,
                     &[
@@ -530,7 +523,7 @@ impl MIDIVoiceRegister {
             }
             // ボリューム・パン
             let (volume, pan) = lrvolume_to_volume_and_pan(volume_curve, &self.volume);
-            if ch_status.volume != volume && srn_map.auto_volume[srn] {
+            if ch_status.volume != volume && param.auto_volume {
                 out.push_channel_message(
                     mute,
                     &[
@@ -541,7 +534,7 @@ impl MIDIVoiceRegister {
                 );
                 ch_status.volume = volume;
             }
-            if ch_status.pan != pan && srn_map.auto_pan[srn] {
+            if ch_status.pan != pan && param.auto_pan {
                 out.push_channel_message(
                     mute,
                     &[
@@ -553,8 +546,8 @@ impl MIDIVoiceRegister {
                 ch_status.pan = pan;
             }
             // ピッチベンド
-            if ch_status.pitch != self.pitch && srn_map.output_pitch_bend[srn] {
-                let max_semitone = srn_map.pitch_bend_sensitibity[srn] as f32;
+            if ch_status.pitch != self.pitch && param.output_pitch_bend {
+                let max_semitone = param.pitch_bend_sensitibity as f32;
                 // [-max_semitone,max_semitone]半音を[-8192,8192]に対応付ける
                 let pitchbend_ratio =
                     libm::log2f((self.pitch as f32) / (self.status.pitch_bend_base as f32)) * 12.0
@@ -606,7 +599,7 @@ impl SPCDSP for MIDIDSP {
                 program: 0,
             }; 16],
             global_counter: 0,
-            sample_source_map: DEFAULT_SAMPLE_SOUCE_MAP,
+            sample_source_map: [DEFAULT_SRN_MIDI_PARAMETER; 256],
             sample_source_target: 0,
             playback_parameter_count: 0,
             playback_parameter_update_period: 160,
@@ -622,7 +615,7 @@ impl SPCDSP for MIDIDSP {
         *self = Self::new();
         self.playback_parameter_update_period = 160;
         self.volume_curve = MIDIVolumeCurve::SquareRoot;
-        self.sample_source_map = DEFAULT_SAMPLE_SOUCE_MAP;
+        self.sample_source_map = [DEFAULT_SRN_MIDI_PARAMETER; 256];
 
         // DIRは先に設定（初期状態でKONがある場合にアドレスを正しくするため）
         self.write_register(ram, DSP_ADDRESS_DIR, dsp_register[DSP_ADDRESS_DIR as usize]);
@@ -715,47 +708,47 @@ impl SPCDSP for MIDIDSP {
                 self.sample_source_target = value as usize;
             }
             DSP_ADDRESS_SRN_FLAG => {
-                self.sample_source_map.mute[self.sample_source_target] = (value & 0x80) != 0;
-                self.sample_source_map.output_envelope[self.sample_source_target] =
+                self.sample_source_map[self.sample_source_target].mute = (value & 0x80) != 0;
+                self.sample_source_map[self.sample_source_target].output_envelope =
                     (value & 0x40) != 0;
-                self.sample_source_map.echo_as_effect1_depth[self.sample_source_target] =
+                self.sample_source_map[self.sample_source_target].echo_as_effect1_depth =
                     (value & 0x20) != 0;
             }
             DSP_ADDRESS_SRN_PROGRAM => {
-                self.sample_source_map.program[self.sample_source_target] = value;
+                self.sample_source_map[self.sample_source_target].program = value;
             }
             DSP_ADDRESS_SRN_CENTER_NOTE_HIGH => {
-                let note = self.sample_source_map.center_note[self.sample_source_target];
-                self.sample_source_map.center_note[self.sample_source_target] =
+                let note = self.sample_source_map[self.sample_source_target].center_note;
+                self.sample_source_map[self.sample_source_target].center_note =
                     ((value as u16) << 8) | (note & 0x00FF);
             }
             DSP_ADDRESS_SRN_CENTER_NOTE_LOW => {
-                let note = self.sample_source_map.center_note[self.sample_source_target];
-                self.sample_source_map.center_note[self.sample_source_target] =
+                let note = self.sample_source_map[self.sample_source_target].center_note;
+                self.sample_source_map[self.sample_source_target].center_note =
                     ((value as u16) << 0) | (note & 0xFF00);
             }
             DSP_ADDRESS_SRN_VOLUME => {
-                self.sample_source_map.auto_volume[self.sample_source_target] = (value & 0x80) != 0;
-                self.sample_source_map.fixed_volume[self.sample_source_target] = value & 0x7F;
+                self.sample_source_map[self.sample_source_target].auto_volume = (value & 0x80) != 0;
+                self.sample_source_map[self.sample_source_target].fixed_volume = value & 0x7F;
             }
             DSP_ADDRESS_SRN_PAN => {
-                self.sample_source_map.auto_pan[self.sample_source_target] = (value & 0x80) != 0;
-                self.sample_source_map.fixed_pan[self.sample_source_target] = value & 0x7F;
+                self.sample_source_map[self.sample_source_target].auto_pan = (value & 0x80) != 0;
+                self.sample_source_map[self.sample_source_target].fixed_pan = value & 0x7F;
             }
             DSP_ADDRESS_SRN_NOTEON_VELOCITY => {
-                self.sample_source_map.noteon_velocity[self.sample_source_target] = value;
+                self.sample_source_map[self.sample_source_target].noteon_velocity = value;
             }
             DSP_ADDRESS_SRN_PITCHBEND_SENSITIVITY => {
-                self.sample_source_map.output_pitch_bend[self.sample_source_target] =
+                self.sample_source_map[self.sample_source_target].output_pitch_bend =
                     (value & 0x80) != 0;
-                self.sample_source_map.pitch_bend_sensitibity[self.sample_source_target] =
+                self.sample_source_map[self.sample_source_target].pitch_bend_sensitibity =
                     value & 0x7F;
             }
             DSP_ADDRESS_SRN_CHANNEL_ROUTING => {
                 let ch_mute = value & 0x80;
                 let src_ch = (value >> 4) & 0x7;
                 let dst_ch = (value >> 0) & 0xF;
-                self.sample_source_map.channel_routing[self.sample_source_target]
+                self.sample_source_map[self.sample_source_target].channel_routing
                     [src_ch as usize] = ch_mute | dst_ch;
             }
             DSP_ADDRESS_CONFIGURE_FLAG => {
@@ -905,45 +898,45 @@ impl SPCDSP for MIDIDSP {
             DSP_ADDRESS_SRN_TARGET => self.sample_source_target as u8,
             DSP_ADDRESS_SRN_FLAG => {
                 let mut value = 0;
-                if self.sample_source_map.mute[self.sample_source_target] {
+                if self.sample_source_map[self.sample_source_target].mute {
                     value |= 0x80;
                 }
-                if self.sample_source_map.output_envelope[self.sample_source_target] {
+                if self.sample_source_map[self.sample_source_target].output_envelope {
                     value |= 0x40;
                 }
-                if self.sample_source_map.echo_as_effect1_depth[self.sample_source_target] {
+                if self.sample_source_map[self.sample_source_target].echo_as_effect1_depth {
                     value |= 0x20;
                 }
                 value
             }
-            DSP_ADDRESS_SRN_PROGRAM => self.sample_source_map.program[self.sample_source_target],
+            DSP_ADDRESS_SRN_PROGRAM => self.sample_source_map[self.sample_source_target].program,
             DSP_ADDRESS_SRN_CENTER_NOTE_HIGH => {
-                ((self.sample_source_map.center_note[self.sample_source_target] >> 8) & 0xFF) as u8
+                ((self.sample_source_map[self.sample_source_target].center_note >> 8) & 0xFF) as u8
             }
             DSP_ADDRESS_SRN_CENTER_NOTE_LOW => {
-                ((self.sample_source_map.center_note[self.sample_source_target] >> 0) & 0xFF) as u8
+                ((self.sample_source_map[self.sample_source_target].center_note >> 0) & 0xFF) as u8
             }
             DSP_ADDRESS_SRN_VOLUME => {
-                let mut value = self.sample_source_map.fixed_volume[self.sample_source_target];
-                if self.sample_source_map.auto_volume[self.sample_source_target] {
+                let mut value = self.sample_source_map[self.sample_source_target].fixed_volume;
+                if self.sample_source_map[self.sample_source_target].auto_volume {
                     value |= 0x80;
                 }
                 value
             }
             DSP_ADDRESS_SRN_PAN => {
-                let mut value = self.sample_source_map.fixed_pan[self.sample_source_target];
-                if self.sample_source_map.auto_pan[self.sample_source_target] {
+                let mut value = self.sample_source_map[self.sample_source_target].fixed_pan;
+                if self.sample_source_map[self.sample_source_target].auto_pan {
                     value |= 0x80;
                 }
                 value
             }
             DSP_ADDRESS_SRN_NOTEON_VELOCITY => {
-                self.sample_source_map.noteon_velocity[self.sample_source_target]
+                self.sample_source_map[self.sample_source_target].noteon_velocity
             }
             DSP_ADDRESS_SRN_PITCHBEND_SENSITIVITY => {
                 let mut value =
-                    self.sample_source_map.pitch_bend_sensitibity[self.sample_source_target];
-                if self.sample_source_map.output_pitch_bend[self.sample_source_target] {
+                    self.sample_source_map[self.sample_source_target].pitch_bend_sensitibity;
+                if self.sample_source_map[self.sample_source_target].output_pitch_bend {
                     value |= 0x80;
                 }
                 value
