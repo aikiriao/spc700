@@ -215,6 +215,9 @@ impl SPCDSP for SDSP {
 
     /// 128バイトメモリから初期化
     fn initialize(&mut self, ram: &mut [u8], dsp_register: &[u8; 128]) {
+        // メンバ初期化
+        *self = Self::new();
+
         // DIRは先に設定（初期状態でKONがある場合にアドレスを正しくするため）
         self.write_register(ram, DSP_ADDRESS_DIR, dsp_register[DSP_ADDRESS_DIR as usize]);
 

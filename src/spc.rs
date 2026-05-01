@@ -98,6 +98,9 @@ where
 
     /// 初期化
     pub fn initialize(&mut self, reg: &SPCRegister, ram: &[u8], dsp_register: &[u8; 128]) {
+        // メンバ初期化
+        *self = Self::new();
+
         // レジスタコピー
         self.reg = reg.clone();
 

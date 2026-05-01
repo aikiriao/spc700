@@ -619,9 +619,7 @@ impl SPCDSP for MIDIDSP {
     /// 128バイトメモリから初期化
     fn initialize(&mut self, ram: &mut [u8], dsp_register: &[u8; 128]) {
         // メンバ初期化
-        for ch in 0..8 {
-            self.voice[ch].channel = ch as u8;
-        }
+        *self = Self::new();
         self.playback_parameter_update_period = 160;
         self.volume_curve = MIDIVolumeCurve::SquareRoot;
         self.sample_source_map = DEFAULT_SAMPLE_SOUCE_MAP;
