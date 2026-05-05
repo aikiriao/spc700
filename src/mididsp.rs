@@ -71,6 +71,9 @@ pub const DSP_ADDRESS_NOTEON: u8 = 0x5B;
 /// エンベロープ・ボリューム・ピッチベンド更新間隔(ms)
 pub const DSP_ADDRESS_PLAYBACK_PARAMETER_UPDATE_PERIOD: u8 = 0x6A;
 
+/// ノートオン時のピッチベンド設定値
+const NOTEON_PITCH_BEND: u16 = 8192;
+
 /// ボリュームカーブ
 #[derive(Copy, Clone, Debug)]
 pub enum MIDIVolumeCurve {
@@ -108,8 +111,8 @@ struct ChannelPlaybackStatus {
     effect1_depth: u8,
     /// エクスプレッション
     expression: u8,
-    /// ピッチ
-    pitch: u16,
+    /// ピッチベンド
+    pitch_bend: u16,
     /// プログラム番号
     program: u8,
 }
@@ -297,6 +300,14 @@ fn echovolume_to_effect1_depth(echo_volume: &[i8; 2]) -> u8 {
     (echo_volume[0].unsigned_abs() as u16 + echo_volume[1].unsigned_abs() as u16) as u8 / 2
 }
 
+/// ピッチ・ピッチ基準値からピッチベンド設定値の計算
+fn pitch_to_pitch_bend(pitch: u16, pitch_base: u16, sensitivity: u8) -> u16 {
+    let max_semitone = sensitivity as f32;
+    // [-max_semitone,max_semitone]半音を[-8192,8192]に対応付ける
+    let pitchbend_ratio = libm::log2f((pitch as f32) / (pitch_base as f32)) * 12.0 / max_semitone;
+    (libm::roundf((pitchbend_ratio * 8192.0).clamp(-8192.0, 8191.0)) as i16 + 8192) as u16
+}
+
 impl MIDIOutputWithStatusByte {
     /// チャンネルメッセージを追加
     fn push_channel_message(&mut self, mute: bool, data: &[u8]) {
@@ -461,8 +472,17 @@ impl MIDIVoiceRegister {
                     ],
                 );
             }
-            // ピッチベンドの設定値を中心(8192)に戻す
-            out.push_channel_message(mute, &[MIDIMSG_PITCH_BEND | channel, 0, 0x40]);
+            // ピッチベンド（基準ピッチベンド値から変わっていれば）
+            if NOTEON_PITCH_BEND != ch_status.pitch_bend {
+                out.push_channel_message(
+                    mute,
+                    &[
+                        MIDIMSG_PITCH_BEND | channel,
+                        (NOTEON_PITCH_BEND & 0x7F) as u8, // LSB
+                        ((NOTEON_PITCH_BEND >> 7) & 0x7F) as u8, // MSB
+                    ],
+                );
+            }
             // ノートオン発行
             let note = if program < 0x80 {
                 pitch_to_note(param.center_note, self.pitch)
@@ -477,7 +497,7 @@ impl MIDIVoiceRegister {
             ch_status.pan = noteon_pan;
             ch_status.effect1_depth = noteon_effect1_depth;
             ch_status.expression = noteon_expression;
-            ch_status.pitch = self.pitch;
+            ch_status.pitch_bend = NOTEON_PITCH_BEND;
             self.status.note = note;
             self.status.sample_source = self.sample_source;
             self.status.channel = channel;
@@ -551,14 +571,12 @@ impl MIDIVoiceRegister {
                 ch_status.pan = pan;
             }
             // ピッチベンド
-            if ch_status.pitch != self.pitch && param.output_pitch_bend {
-                let max_semitone = param.pitch_bend_sensitibity as f32;
-                // [-max_semitone,max_semitone]半音を[-8192,8192]に対応付ける
-                let pitchbend_ratio =
-                    libm::log2f((self.pitch as f32) / (self.status.pitch_bend_base as f32)) * 12.0
-                        / max_semitone;
-                let pitch_bend =
-                    libm::roundf((pitchbend_ratio * 8192.0).clamp(-8192.0, 8191.0)) as i16 + 8192;
+            let pitch_bend = pitch_to_pitch_bend(
+                self.pitch,
+                self.status.pitch_bend_base,
+                param.pitch_bend_sensitibity,
+            );
+            if ch_status.pitch_bend != pitch_bend && param.output_pitch_bend {
                 // 7bitを2分割
                 out.push_channel_message(
                     mute,
@@ -568,7 +586,7 @@ impl MIDIVoiceRegister {
                         ((pitch_bend >> 7) & 0x7F) as u8, // MSB
                     ],
                 );
-                ch_status.pitch = self.pitch;
+                ch_status.pitch_bend = pitch_bend;
             }
         }
     }
@@ -601,7 +619,7 @@ impl SPCDSP for MIDIDSP {
                 pan: 0,
                 effect1_depth: 0,
                 expression: 0,
-                pitch: 0,
+                pitch_bend: NOTEON_PITCH_BEND,
                 program: 0,
             }; 16],
             global_counter: 0,
