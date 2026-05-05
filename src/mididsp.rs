@@ -104,6 +104,8 @@ struct ChannelPlaybackStatus {
     volume: u8,
     /// パン設定値
     pan: u8,
+    /// エフェクト1デプス
+    effect1_depth: u8,
     /// エクスプレッション
     expression: u8,
     /// ピッチ
@@ -428,19 +430,21 @@ impl MIDIVoiceRegister {
                 );
             }
             // エフェクト1デプス
-            let effect1_depth = if self.echo && param.echo_as_effect1_depth {
+            let noteon_effect1_depth = if self.echo && param.echo_as_effect1_depth {
                 echo_volume
             } else {
                 0
             };
-            out.push_channel_message(
-                mute,
-                &[
-                    MIDIMSG_CONTROL_CHANGE | channel,
-                    MIDICC_EFFECT1_DEPTH,
-                    effect1_depth,
-                ],
-            );
+            if noteon_effect1_depth != ch_status.effect1_depth {
+                out.push_channel_message(
+                    mute,
+                    &[
+                        MIDIMSG_CONTROL_CHANGE | channel,
+                        MIDICC_EFFECT1_DEPTH,
+                        noteon_effect1_depth,
+                    ],
+                );
+            }
             // エクスプレッション
             let noteon_expression = if param.output_envelope {
                 gain_to_midi_volume(volume_curve, self.eg.gain as f32 / 16.0)
@@ -471,6 +475,7 @@ impl MIDIVoiceRegister {
             );
             ch_status.volume = noteon_volume;
             ch_status.pan = noteon_pan;
+            ch_status.effect1_depth = noteon_effect1_depth;
             ch_status.expression = noteon_expression;
             ch_status.pitch = self.pitch;
             self.status.note = note;
@@ -594,6 +599,7 @@ impl SPCDSP for MIDIDSP {
             channel_status: [ChannelPlaybackStatus {
                 volume: 0,
                 pan: 0,
+                effect1_depth: 0,
                 expression: 0,
                 pitch: 0,
                 program: 0,
