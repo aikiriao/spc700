@@ -136,11 +136,11 @@ where
     /// クロックカウンタの更新
     fn countup_clock(&mut self, id: usize) {
         let target = self.ram[SPC_ADDRESS_T0TARGET + id];
-        self.timer_internal_count[id] = self.timer_internal_count[id].wrapping_add(1);
-        if self.timer_internal_count[id] >= target {
-            let mut counter = self.ram[SPC_ADDRESS_T0OUT + id];
+        let next = self.timer_internal_count[id].wrapping_add(1);
+        self.timer_internal_count[id] = next;
+        if next == target {
             self.timer_internal_count[id] = 0;
-            counter = counter.wrapping_add(1);
+            let counter = self.ram[SPC_ADDRESS_T0OUT + id].wrapping_add(1);
             self.ram[SPC_ADDRESS_T0OUT + id] = counter & 0x0F;
         }
     }
