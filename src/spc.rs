@@ -33,6 +33,8 @@ pub const SPC_ADDRESS_CPUIO2: usize = 0x00F6;
 pub const SPC_ADDRESS_CPUIO3: usize = 0x00F7;
 /// タイマーターゲットのベースアドレス
 pub const SPC_ADDRESS_T0TARGET: usize = 0x00FA;
+pub const SPC_ADDRESS_T1TARGET: usize = 0x00FB;
+pub const SPC_ADDRESS_T2TARGET: usize = 0x00FC;
 /// タイマーカウントのベースアドレス
 pub const SPC_ADDRESS_T0OUT: usize = 0x00FD;
 pub const SPC_ADDRESS_T1OUT: usize = 0x00FE;
@@ -230,6 +232,7 @@ where
                 }
                 SPC_ADDRESS_T0OUT | SPC_ADDRESS_T1OUT | SPC_ADDRESS_T2OUT => {
                     warn!("WARNING: CANNOT write to TxOUT register!!");
+                    return;
                 }
                 _ => {}
             }
@@ -261,6 +264,10 @@ where
                 SPC_ADDRESS_CPUIO0 | SPC_ADDRESS_CPUIO1 | SPC_ADDRESS_CPUIO2
                 | SPC_ADDRESS_CPUIO3 => {
                     return self.cpu_port_in[address - SPC_ADDRESS_CPUIO0];
+                }
+                SPC_ADDRESS_T0TARGET | SPC_ADDRESS_T1TARGET | SPC_ADDRESS_T2TARGET => {
+                    // 書き込み専用のため常に0を返す
+                    return 0;
                 }
                 SPC_ADDRESS_T0OUT | SPC_ADDRESS_T1OUT | SPC_ADDRESS_T2OUT => {
                     // 注意：読み出しによってタイマーの値はクリアされる
