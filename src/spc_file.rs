@@ -407,7 +407,6 @@ fn parse_xid6_format(data: &[u8]) -> Option<ExtendedID666Format> {
     let chunk_size = make_u32_from_u8(&data[4..8]) as usize;
     let chunk_data = &data[8..];
     let mut read_pos = 0usize;
-    println!("{}", chunk_size);
     while read_pos < chunk_size {
         let chunk_id = chunk_data[read_pos + 0];
         let chunk_type = chunk_data[read_pos + 1];
@@ -416,10 +415,6 @@ fn parse_xid6_format(data: &[u8]) -> Option<ExtendedID666Format> {
         } else {
             0
         };
-        println!(
-            "{:2X} {} {} {}",
-            chunk_id, chunk_type, data_length, read_pos
-        );
         read_pos += 4;
         match chunk_id {
             0x01 => {
