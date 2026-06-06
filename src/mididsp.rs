@@ -39,10 +39,11 @@ const MIDICC_EFFECT1_DEPTH: u8 = 0x5B;
 
 /// 設定・取得対象のサンプル番号(SRN)
 pub const DSP_ADDRESS_SRN_TARGET: u8 = 0x0A;
-/// SRNのフラグ MED00000
+/// SRNのフラグ MEDU0000
 /// M: ミュートフラグ（1ならばメッセージを出力しない）
 /// E: エンベロープをエクスプレッションとして出力
 /// D: エコーをエフェクト1デプスとして出力
+/// U: ノートオンの後にパン・ボリューム・エクスプレッション・ピッチベンドを変えるか
 pub const DSP_ADDRESS_SRN_FLAG: u8 = 0x0B;
 /// SRNのプログラム番号 0x00 - 0x7FはGMと同等、0x80-0xFFはドラムキット音色+0x80
 pub const DSP_ADDRESS_SRN_PROGRAM: u8 = 0x1A;
@@ -178,6 +179,8 @@ struct SRNMIDIParameter {
     output_pitch_bend: bool,
     /// エコーをエフェクト1デプス（リバーブ）として出力するか
     echo_as_effect1_depth: bool,
+    /// ノートオン後に再生パラメータを更新するか
+    update_parameter_after_noteon: bool,
     /// 出力先チャンネルルーティング 最上位ビットはミュートフラグ
     channel_routing: [u8; 8],
 }
@@ -241,6 +244,7 @@ const DEFAULT_SRN_MIDI_PARAMETER: SRNMIDIParameter = SRNMIDIParameter {
     fixed_volume: 100,
     output_pitch_bend: true,
     echo_as_effect1_depth: true,
+    update_parameter_after_noteon: true,
     channel_routing: [0, 1, 2, 3, 4, 5, 6, 7], // SPCの出力チャンネルに合わせる
 };
 
@@ -527,8 +531,8 @@ impl MIDIVoiceRegister {
         self.eg.update(global_counter);
 
         // 再生パラメータ更新（過剰に送ると遅延するので間引く）
-        if self.noteon && playback_parameter_update {
-            let param = &srn_map[self.status.sample_source];
+        let param = &srn_map[self.status.sample_source];
+        if self.noteon && param.update_parameter_after_noteon && playback_parameter_update {
             let ch_status = &mut channel_status[self.status.channel as usize];
             let mute = self.ch_mute
                 || param.mute
@@ -732,11 +736,11 @@ impl SPCDSP for MIDIDSP {
                 self.sample_source_target = value as usize;
             }
             DSP_ADDRESS_SRN_FLAG => {
-                self.sample_source_map[self.sample_source_target].mute = (value & 0x80) != 0;
-                self.sample_source_map[self.sample_source_target].output_envelope =
-                    (value & 0x40) != 0;
-                self.sample_source_map[self.sample_source_target].echo_as_effect1_depth =
-                    (value & 0x20) != 0;
+                let param = &mut self.sample_source_map[self.sample_source_target];
+                param.mute = (value & 0x80) != 0;
+                param.output_envelope = (value & 0x40) != 0;
+                param.echo_as_effect1_depth = (value & 0x20) != 0;
+                param.update_parameter_after_noteon = (value & 0x10) != 0;
             }
             DSP_ADDRESS_SRN_PROGRAM => {
                 self.sample_source_map[self.sample_source_target].program = value;
@@ -752,21 +756,22 @@ impl SPCDSP for MIDIDSP {
                     ((value as u16) << 0) | (note & 0xFF00);
             }
             DSP_ADDRESS_SRN_VOLUME => {
-                self.sample_source_map[self.sample_source_target].auto_volume = (value & 0x80) != 0;
-                self.sample_source_map[self.sample_source_target].fixed_volume = value & 0x7F;
+                let map = &mut self.sample_source_map[self.sample_source_target];
+                map.auto_volume = (value & 0x80) != 0;
+                map.fixed_volume = value & 0x7F;
             }
             DSP_ADDRESS_SRN_PAN => {
-                self.sample_source_map[self.sample_source_target].auto_pan = (value & 0x80) != 0;
-                self.sample_source_map[self.sample_source_target].fixed_pan = value & 0x7F;
+                let map = &mut self.sample_source_map[self.sample_source_target];
+                map.auto_pan = (value & 0x80) != 0;
+                map.fixed_pan = value & 0x7F;
             }
             DSP_ADDRESS_SRN_NOTEON_VELOCITY => {
                 self.sample_source_map[self.sample_source_target].noteon_velocity = value;
             }
             DSP_ADDRESS_SRN_PITCHBEND_SENSITIVITY => {
-                self.sample_source_map[self.sample_source_target].output_pitch_bend =
-                    (value & 0x80) != 0;
-                self.sample_source_map[self.sample_source_target].pitch_bend_sensitibity =
-                    value & 0x7F;
+                let map = &mut self.sample_source_map[self.sample_source_target];
+                map.output_pitch_bend = (value & 0x80) != 0;
+                map.pitch_bend_sensitibity = value & 0x7F;
             }
             DSP_ADDRESS_SRN_CHANNEL_ROUTING => {
                 let ch_mute = value & 0x80;
@@ -922,14 +927,18 @@ impl SPCDSP for MIDIDSP {
             DSP_ADDRESS_SRN_TARGET => self.sample_source_target as u8,
             DSP_ADDRESS_SRN_FLAG => {
                 let mut value = 0;
-                if self.sample_source_map[self.sample_source_target].mute {
+                let param = &self.sample_source_map[self.sample_source_target];
+                if param.mute {
                     value |= 0x80;
                 }
-                if self.sample_source_map[self.sample_source_target].output_envelope {
+                if param.output_envelope {
                     value |= 0x40;
                 }
-                if self.sample_source_map[self.sample_source_target].echo_as_effect1_depth {
+                if param.echo_as_effect1_depth {
                     value |= 0x20;
+                }
+                if param.update_parameter_after_noteon {
+                    value |= 0x10;
                 }
                 value
             }
