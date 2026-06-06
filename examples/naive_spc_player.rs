@@ -112,7 +112,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             Generate Date: {}/{}/{} \n\
             Music Duration: {} (sec) \n\
             Fadeout Time: {} (msec) \n\
-            Composer: {}",
+            Composer: {} \n\
+            Extended ID666: {:?} \n\
+            ",
             std::str::from_utf8(&spcfile.header.info).unwrap(),
             spcfile.header.spc_register.pc,
             spcfile.header.spc_register.a,
@@ -140,6 +142,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             std::str::from_utf8(&spcfile.header.composer)
                 .unwrap()
                 .trim_end_matches('\0'),
+            spcfile.extended_id666,
         );
         let _ = naive_play(
             &spcfile.header.spc_register,

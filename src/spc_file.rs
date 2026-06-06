@@ -69,17 +69,71 @@ pub struct SPCFileHeader {
     pub emurator_type: EmuratorType,
 }
 
+/// Extended ID666 フォーマット
+#[derive(Debug, Clone)]
+pub struct ExtendedID666Format {
+    /// 曲名
+    pub song_name: Option<[u8; 256]>,
+    /// ゲーム名
+    pub game_name: Option<[u8; 256]>,
+    /// アーティスト名
+    pub artist_name: Option<[u8; 256]>,
+    /// ダンパー名
+    pub dumper_name: Option<[u8; 256]>,
+    /// ダンプした日yyyymmdd
+    pub dump_date: Option<u32>,
+    /// エミュレータ種別
+    pub emulator_used: Option<u8>,
+    /// コメント
+    pub comments: Option<[u8; 256]>,
+    /// オフィシャルサウンドトラック(OST)タイトル
+    pub ost_title: Option<[u8; 256]>,
+    /// OSTディスク
+    pub ost_disc: Option<u8>,
+    /// OSTトラック
+    pub ost_track: Option<u16>,
+    /// パブリッシャー名
+    pub publisher_name: Option<[u8; 256]>,
+    /// コピーライト年
+    pub copyright_year: Option<u16>,
+    /// イントロの長さ（1/64000秒単位）
+    pub introduction_length: Option<u32>,
+    /// ループの長さ（1/64000秒単位）
+    pub loop_length: Option<u32>,
+    /// ループの長さ（1/64000秒単位）負数のときがある
+    pub end_length: Option<i32>,
+    /// ループの長さ（1/64000秒単位）
+    pub fade_length: Option<u32>,
+    /// ミュートチャンネル（各チャンネルのミュートフラグ）
+    pub mute_channels: Option<u8>,
+    /// ループを何回繰り返すか
+    pub number_of_loops: Option<u8>,
+    /// 出力に適用するゲイン（65536で通常再生）
+    pub amplification_value: Option<u32>,
+}
+
 /// SPCファイル
 #[derive(Debug, Clone)]
 pub struct SPCFile {
     /// SPCファイルヘッダ
     pub header: SPCFileHeader,
+    /// 拡張ID666
+    pub extended_id666: Option<ExtendedID666Format>,
     /// 64KB RAM
     pub ram: [u8; 65536],
     /// DSPレジスタ
     pub dsp_register: [u8; 128],
     /// XRAMバッファ
     pub xram_buffer: [u8; 64],
+}
+
+/// メモリ上にあるデータから32bitデータを読みだす
+fn make_u32_from_u8(data: &[u8]) -> u32 {
+    assert_eq!(data.len(), 4);
+    ((data[3] as u32) << 24)
+        | ((data[2] as u32) << 16)
+        | ((data[1] as u32) << 8)
+        | ((data[0] as u32) << 0)
 }
 
 // 10進文字列からu64を生成
@@ -302,6 +356,154 @@ pub fn parse_spc_header(data: &[u8]) -> Option<SPCFileHeader> {
     }
 }
 
+// 最大長さ256の文字列を生成
+fn make_fixedstring_from_slice(data: &[u8]) -> Option<[u8; 256]> {
+    if data.len() > 256 {
+        return None;
+    }
+
+    let mut buf = [0u8; 256];
+    buf[..data.len()].copy_from_slice(data);
+
+    Some(buf)
+}
+
+/// Extended ID666 Formatのパース
+fn parse_xid6_format(data: &[u8]) -> Option<ExtendedID666Format> {
+    // サイズチェック
+    if data.len() <= 8 {
+        return None;
+    }
+
+    // チャンクタイプチェック
+    if data[0] != b'x' || data[1] != b'i' || data[2] != b'd' || data[3] != b'6' {
+        return None;
+    }
+
+    // 初期化
+    let mut xid6 = ExtendedID666Format {
+        song_name: None,
+        game_name: None,
+        artist_name: None,
+        dumper_name: None,
+        dump_date: None,
+        emulator_used: None,
+        comments: None,
+        ost_title: None,
+        ost_disc: None,
+        ost_track: None,
+        publisher_name: None,
+        copyright_year: None,
+        introduction_length: None,
+        loop_length: None,
+        end_length: None,
+        fade_length: None,
+        mute_channels: None,
+        number_of_loops: None,
+        amplification_value: None,
+    };
+
+    // チャンクの大きさ
+    let chunk_size = make_u32_from_u8(&data[4..8]) as usize;
+    let chunk_data = &data[8..];
+    let mut read_pos = 0usize;
+    println!("{}", chunk_size);
+    while read_pos < chunk_size {
+        let chunk_id = chunk_data[read_pos + 0];
+        let chunk_type = chunk_data[read_pos + 1];
+        let data_length = if chunk_type != 0 {
+            make_u16_from_u8(&chunk_data[read_pos + 2..read_pos + 4]) as usize
+        } else {
+            0
+        };
+        println!(
+            "{:2X} {} {} {}",
+            chunk_id, chunk_type, data_length, read_pos
+        );
+        read_pos += 4;
+        match chunk_id {
+            0x01 => {
+                xid6.song_name =
+                    make_fixedstring_from_slice(&chunk_data[read_pos..read_pos + data_length]);
+            }
+            0x02 => {
+                xid6.game_name =
+                    make_fixedstring_from_slice(&chunk_data[read_pos..read_pos + data_length]);
+            }
+            0x03 => {
+                xid6.artist_name =
+                    make_fixedstring_from_slice(&chunk_data[read_pos..read_pos + data_length]);
+            }
+            0x04 => {
+                xid6.dumper_name =
+                    make_fixedstring_from_slice(&chunk_data[read_pos..read_pos + data_length]);
+            }
+            0x05 => {
+                xid6.dump_date = Some(make_u32_from_u8(&chunk_data[read_pos..read_pos + 4]));
+            }
+            0x06 => {
+                // ヘッダ内のデータのため前方参照
+                xid6.emulator_used = Some(chunk_data[read_pos - 2]);
+            }
+            0x07 => {
+                xid6.comments =
+                    make_fixedstring_from_slice(&chunk_data[read_pos..read_pos + data_length]);
+            }
+            0x10 => {
+                xid6.ost_title =
+                    make_fixedstring_from_slice(&chunk_data[read_pos..read_pos + data_length]);
+            }
+            0x11 => {
+                xid6.ost_disc = Some(chunk_data[read_pos]);
+            }
+            0x12 => {
+                xid6.ost_track = Some(make_u16_from_u8(&chunk_data[read_pos..read_pos + 2]));
+            }
+            0x13 => {
+                xid6.publisher_name =
+                    make_fixedstring_from_slice(&chunk_data[read_pos..read_pos + data_length]);
+            }
+            0x14 => {
+                // ヘッダ内のデータのため前方参照
+                xid6.copyright_year = Some(make_u16_from_u8(&chunk_data[read_pos - 2..read_pos]));
+            }
+            0x30 => {
+                xid6.introduction_length =
+                    Some(make_u32_from_u8(&chunk_data[read_pos..read_pos + 4]));
+            }
+            0x31 => {
+                xid6.loop_length = Some(make_u32_from_u8(&chunk_data[read_pos..read_pos + 4]));
+            }
+            0x32 => {
+                xid6.end_length =
+                    Some(make_u32_from_u8(&chunk_data[read_pos..read_pos + 4]) as i32);
+            }
+            0x33 => {
+                xid6.fade_length = Some(make_u32_from_u8(&chunk_data[read_pos..read_pos + 4]));
+            }
+            0x34 => {
+                // ヘッダ内のデータのため前方参照
+                xid6.mute_channels = Some(chunk_data[read_pos - 2]);
+            }
+            0x35 => {
+                // ヘッダ内のデータのため前方参照
+                xid6.number_of_loops = Some(chunk_data[read_pos - 2]);
+            }
+            0x36 => {
+                xid6.amplification_value =
+                    Some(make_u32_from_u8(&chunk_data[read_pos..read_pos + 4]));
+            }
+            _ => {
+                return None;
+            }
+        }
+        // 32bit境界に合わせて移動
+        read_pos += ((data_length as usize + 3) / 4) * 4;
+    }
+
+    Some(xid6)
+}
+
 /// SPCファイルのパース
 pub fn parse_spc_file(data: &[u8]) -> Option<SPCFile> {
     // サイズチェック
@@ -315,6 +517,7 @@ pub fn parse_spc_file(data: &[u8]) -> Option<SPCFile> {
             ram: data[0x100..0x100 + 65536].try_into().unwrap(),
             dsp_register: data[0x10100..0x10100 + 128].try_into().unwrap(),
             xram_buffer: data[0x101C0..0x101C0 + 64].try_into().unwrap(),
+            extended_id666: parse_xid6_format(&data[0x10200..]),
         });
     }
 
