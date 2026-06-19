@@ -462,7 +462,13 @@ impl MIDIVoiceRegister {
             }
             // エクスプレッション
             let noteon_expression = if param.output_envelope {
-                gain_to_midi_volume(volume_curve, self.eg.gain as f32 / 16.0)
+                // ADSR使用かつAttack Rateが31だったらexpressionを最大とする（SPC700では2サンプルでゲインが最大に達するが、MIDIでそのような挙動は再現しにくいため）
+                let adsr1 = self.eg.get_adsr1();
+                if (adsr1 & 0x80 != 0) && (adsr1 & 0x0F == 0x0F) {
+                    0x7F
+                } else {
+                    gain_to_midi_volume(volume_curve, self.eg.gain as f32 / 16.0)
+                }
             } else {
                 0x7F
             };
