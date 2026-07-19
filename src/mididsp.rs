@@ -32,17 +32,18 @@ const MIDICC_RPN_MSB: u8 = 0x65;
 const MIDICC_RPN_DATA_ENTRY_LSB: u8 = 0x06;
 /// MIDIコントロールチェンジ：RPN データエントリーMSB
 const MIDICC_RPN_DATA_ENTRY_MSB: u8 = 0x26;
-/// MIDIコントロールチェンジ：エフェクト1デプス
-const MIDICC_EFFECT1_DEPTH: u8 = 0x5B;
+/// MIDIコントロールチェンジ：リバーブデプス
+const MIDICC_REVERB_DEPTH: u8 = 0x5B;
+/// MIDIコントロールチェンジ：コーラスデプス
+const MIDICC_CHORUS_DEPTH: u8 = 0x5D;
 
 /// MIDI出力のための独自追加アドレス
 
 /// 設定・取得対象のサンプル番号(SRN)
 pub const DSP_ADDRESS_SRN_TARGET: u8 = 0x0A;
-/// SRNのフラグ MEDU0000
+/// SRNのフラグ MEU00000
 /// M: ミュートフラグ（1ならばメッセージを出力しない）
 /// E: エンベロープをエクスプレッションとして出力
-/// D: エコーをエフェクト1デプスとして出力
 /// U: ノートオンの後にパン・ボリューム・エクスプレッション・ピッチベンドを変えるか
 pub const DSP_ADDRESS_SRN_FLAG: u8 = 0x0B;
 /// SRNのプログラム番号 0x00 - 0x7FはGMと同等、0x80-0xFFはドラムキット音色+0x80
@@ -59,16 +60,20 @@ pub const DSP_ADDRESS_SRN_VOLUME: u8 = 0x3A;
 pub const DSP_ADDRESS_SRN_PAN: u8 = 0x3B;
 /// SRNのピッチベンドセンシティビティ（1bitフラグ + 下位ビットで半音単位で幅を指定）
 pub const DSP_ADDRESS_SRN_PITCHBEND_SENSITIVITY: u8 = 0x4A;
+/// SRNのリバーブセンド（1bitフラグ + 下位ビットでセンド量を指定）
+pub const DSP_ADDRESS_SRN_REVERB_SEND: u8 = 0x4B;
+/// SRNのコーラスセンド（下位ビットでセンド量を指定）
+pub const DSP_ADDRESS_SRN_CHORUS_SEND: u8 = 0x5A;
 /// SRNの出力チャンネル MSSSDDDD
 /// M: 送信元チャンネルのミュートフラグ
 /// S: 送信元SPCチャンネル
 /// D: 送信先MIDIチャンネル
-pub const DSP_ADDRESS_SRN_CHANNEL_ROUTING: u8 = 0x4B;
+pub const DSP_ADDRESS_SRN_CHANNEL_ROUTING: u8 = 0x5B;
 /// 全体設定フラグ VV000000
 /// V: ボリュームカーブ（00: 平方根、01: 対数、10: 線形）
-pub const DSP_ADDRESS_CONFIGURE_FLAG: u8 = 0x5A;
+pub const DSP_ADDRESS_CONFIGURE_FLAG: u8 = 0x6B;
 /// ノートオンフラグ
-pub const DSP_ADDRESS_NOTEON: u8 = 0x5B;
+pub const DSP_ADDRESS_NOTEON: u8 = 0x7A;
 /// エンベロープ・ボリューム・ピッチベンド更新間隔(ms)
 pub const DSP_ADDRESS_PLAYBACK_PARAMETER_UPDATE_PERIOD: u8 = 0x6A;
 
@@ -108,8 +113,10 @@ struct ChannelPlaybackStatus {
     volume: u8,
     /// パン設定値
     pan: u8,
-    /// エフェクト1デプス
-    effect1_depth: u8,
+    /// リバーブセンド
+    reverb_send: u8,
+    /// コーラスセンド
+    chorus_send: u8,
     /// エクスプレッション
     expression: u8,
     /// ピッチベンド
@@ -175,10 +182,14 @@ struct SRNMIDIParameter {
     auto_volume: bool,
     /// ボリューム
     fixed_volume: u8,
+    /// リバーブセンド
+    fixed_reverb_send: u8,
+    /// コーラスセンド
+    chorus_send: u8,
     /// ピッチベンド出力有効か
     output_pitch_bend: bool,
-    /// エコーをエフェクト1デプス（リバーブ）として出力するか
-    echo_as_effect1_depth: bool,
+    /// エコーをリバーブセンドとして出力するか
+    echo_as_reverb_send: bool,
     /// ノートオン後に再生パラメータを更新するか
     update_parameter_after_noteon: bool,
     /// 出力先チャンネルルーティング 最上位ビットはミュートフラグ
@@ -242,8 +253,10 @@ const DEFAULT_SRN_MIDI_PARAMETER: SRNMIDIParameter = SRNMIDIParameter {
     fixed_pan: 64,
     auto_volume: false,
     fixed_volume: 100,
+    fixed_reverb_send: 40, // GM/GS/XGのよくある初期設定値
+    chorus_send: 0,
     output_pitch_bend: true,
-    echo_as_effect1_depth: true,
+    echo_as_reverb_send: true,
     update_parameter_after_noteon: true,
     channel_routing: [0, 1, 2, 3, 4, 5, 6, 7], // SPCの出力チャンネルに合わせる
 };
@@ -299,8 +312,8 @@ fn lrvolume_to_volume_and_pan(volume_curve: MIDIVolumeCurve, lrvolume: &[i8; 2])
     (volume, pan)
 }
 
-/// エコーボリュームをエフェクト1デプスに変換
-fn echovolume_to_effect1_depth(echo_volume: &[i8; 2]) -> u8 {
+/// エコーボリュームをリバーブセンドに変換
+fn echovolume_to_reverb_send(echo_volume: &[i8; 2]) -> u8 {
     (echo_volume[0].unsigned_abs() as u16 + echo_volume[1].unsigned_abs() as u16) as u8 / 2
 }
 
@@ -444,19 +457,35 @@ impl MIDIVoiceRegister {
                     &[MIDIMSG_CONTROL_CHANGE | channel, MIDICC_PANPOT, noteon_pan],
                 );
             }
-            // エフェクト1デプス
-            let noteon_effect1_depth = if self.echo && param.echo_as_effect1_depth {
-                echo_volume
+            // リバーブセンド
+            let noteon_reverb_send = if param.echo_as_reverb_send {
+                if self.echo {
+                    echo_volume
+                } else {
+                    0
+                }
             } else {
-                0
+                param.fixed_reverb_send
             };
-            if noteon_effect1_depth != ch_status.effect1_depth {
+            if noteon_reverb_send != ch_status.reverb_send {
                 out.push_channel_message(
                     mute,
                     &[
                         MIDIMSG_CONTROL_CHANGE | channel,
-                        MIDICC_EFFECT1_DEPTH,
-                        noteon_effect1_depth,
+                        MIDICC_REVERB_DEPTH,
+                        noteon_reverb_send,
+                    ],
+                );
+            }
+            // コーラスセンド
+            let noteon_chorus_send = param.chorus_send;
+            if noteon_chorus_send != ch_status.chorus_send {
+                out.push_channel_message(
+                    mute,
+                    &[
+                        MIDIMSG_CONTROL_CHANGE | channel,
+                        MIDICC_CHORUS_DEPTH,
+                        noteon_chorus_send,
                     ],
                 );
             }
@@ -505,7 +534,8 @@ impl MIDIVoiceRegister {
             );
             ch_status.volume = noteon_volume;
             ch_status.pan = noteon_pan;
-            ch_status.effect1_depth = noteon_effect1_depth;
+            ch_status.reverb_send = noteon_reverb_send;
+            ch_status.chorus_send = noteon_chorus_send;
             ch_status.expression = noteon_expression;
             ch_status.pitch_bend = NOTEON_PITCH_BEND;
             self.status.note = note;
@@ -627,7 +657,8 @@ impl SPCDSP for MIDIDSP {
             channel_status: [ChannelPlaybackStatus {
                 volume: 0,
                 pan: 0,
-                effect1_depth: 0,
+                reverb_send: 40, // GM/GS/XGのよくある初期設定値
+                chorus_send: 0,
                 expression: 0,
                 pitch_bend: NOTEON_PITCH_BEND,
                 program: 0,
@@ -745,8 +776,7 @@ impl SPCDSP for MIDIDSP {
                 let param = &mut self.sample_source_map[self.sample_source_target];
                 param.mute = (value & 0x80) != 0;
                 param.output_envelope = (value & 0x40) != 0;
-                param.echo_as_effect1_depth = (value & 0x20) != 0;
-                param.update_parameter_after_noteon = (value & 0x10) != 0;
+                param.update_parameter_after_noteon = (value & 0x20) != 0;
             }
             DSP_ADDRESS_SRN_PROGRAM => {
                 self.sample_source_map[self.sample_source_target].program = value;
@@ -778,6 +808,15 @@ impl SPCDSP for MIDIDSP {
                 let map = &mut self.sample_source_map[self.sample_source_target];
                 map.output_pitch_bend = (value & 0x80) != 0;
                 map.pitch_bend_sensitibity = value & 0x7F;
+            }
+            DSP_ADDRESS_SRN_REVERB_SEND => {
+                let map = &mut self.sample_source_map[self.sample_source_target];
+                map.echo_as_reverb_send = (value & 0x80) != 0;
+                map.fixed_reverb_send = value & 0x7F;
+            }
+            DSP_ADDRESS_SRN_CHORUS_SEND => {
+                let map = &mut self.sample_source_map[self.sample_source_target];
+                map.chorus_send = value & 0x7F;
             }
             DSP_ADDRESS_SRN_CHANNEL_ROUTING => {
                 let ch_mute = value & 0x80;
@@ -940,11 +979,8 @@ impl SPCDSP for MIDIDSP {
                 if param.output_envelope {
                     value |= 0x40;
                 }
-                if param.echo_as_effect1_depth {
-                    value |= 0x20;
-                }
                 if param.update_parameter_after_noteon {
-                    value |= 0x10;
+                    value |= 0x20;
                 }
                 value
             }
@@ -979,6 +1015,16 @@ impl SPCDSP for MIDIDSP {
                     value |= 0x80;
                 }
                 value
+            }
+            DSP_ADDRESS_SRN_REVERB_SEND => {
+                let mut value = self.sample_source_map[self.sample_source_target].fixed_reverb_send;
+                if self.sample_source_map[self.sample_source_target].echo_as_reverb_send {
+                    value |= 0x80;
+                }
+                value
+            }
+            DSP_ADDRESS_SRN_CHORUS_SEND => {
+                self.sample_source_map[self.sample_source_target].chorus_send
             }
             DSP_ADDRESS_SRN_CHANNEL_ROUTING => {
                 // 書き込み専用レジスタのため0を返す。どのチャンネルを設定したか不定のため
@@ -1069,10 +1115,10 @@ impl SPCDSP for MIDIDSP {
         };
 
         // 全チャンネルの周期処理を実行
-        let effect1_depth = echovolume_to_effect1_depth(&self.echo_volume);
+        let reverb_depth = echovolume_to_reverb_send(&self.echo_volume);
         for ch in 0..8 {
             self.voice[ch].tick(
-                effect1_depth,
+                reverb_depth,
                 self.global_counter,
                 playback_parameter_update,
                 self.volume_curve,
