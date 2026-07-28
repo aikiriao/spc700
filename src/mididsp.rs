@@ -39,36 +39,36 @@ const MIDICC_CHORUS_DEPTH: u8 = 0x5D;
 
 /// MIDI出力のための独自追加アドレス
 
-/// 設定・取得対象のサンプル番号(SRN)
-pub const DSP_ADDRESS_SRN_TARGET: u8 = 0x0A;
-/// SRNのフラグ MEU00000
+/// 設定・取得対象のサンプル番号(SRCN)
+pub const DSP_ADDRESS_SRCN_TARGET: u8 = 0x0A;
+/// SRCNのフラグ MEU00000
 /// M: ミュートフラグ（1ならばメッセージを出力しない）
 /// E: エンベロープをエクスプレッションとして出力
 /// U: ノートオンの後にパン・ボリューム・エクスプレッション・ピッチベンドを変えるか
-pub const DSP_ADDRESS_SRN_FLAG: u8 = 0x0B;
-/// SRNのプログラム番号 0x00 - 0x7FはGMと同等、0x80-0xFFはドラムキット音色+0x80
-pub const DSP_ADDRESS_SRN_PROGRAM: u8 = 0x1A;
-/// SRNのノートオンのベロシティ値
-pub const DSP_ADDRESS_SRN_NOTEON_VELOCITY: u8 = 0x1B;
-/// SRNの中央に該当するノート（基準ピッチ）の上位8bit
-pub const DSP_ADDRESS_SRN_CENTER_NOTE_HIGH: u8 = 0x2A;
-/// SRNの中央に該当するノート（基準ピッチ）の下位8bit
-pub const DSP_ADDRESS_SRN_CENTER_NOTE_LOW: u8 = 0x2B;
-/// SRNのボリューム値（1bitフラグ + 7bit固定ボリューム値）
-pub const DSP_ADDRESS_SRN_VOLUME: u8 = 0x3A;
-/// SRNのパン値（1bitフラグ + 7bit固定パン値）
-pub const DSP_ADDRESS_SRN_PAN: u8 = 0x3B;
-/// SRNのピッチベンドセンシティビティ（1bitフラグ + 下位ビットで半音単位で幅を指定）
-pub const DSP_ADDRESS_SRN_PITCHBEND_SENSITIVITY: u8 = 0x4A;
-/// SRNのリバーブセンド（1bitフラグ + 下位ビットでセンド量を指定）
-pub const DSP_ADDRESS_SRN_REVERB_SEND: u8 = 0x4B;
-/// SRNのコーラスセンド（下位ビットでセンド量を指定）
-pub const DSP_ADDRESS_SRN_CHORUS_SEND: u8 = 0x5A;
-/// SRNの出力チャンネル MSSSDDDD
+pub const DSP_ADDRESS_SRCN_FLAG: u8 = 0x0B;
+/// SRCNのプログラム番号 0x00 - 0x7FはGMと同等、0x80-0xFFはドラムキット音色+0x80
+pub const DSP_ADDRESS_SRCN_PROGRAM: u8 = 0x1A;
+/// SRCNのノートオンのベロシティ値
+pub const DSP_ADDRESS_SRCN_NOTEON_VELOCITY: u8 = 0x1B;
+/// SRCNの中央に該当するノート（基準ピッチ）の上位8bit
+pub const DSP_ADDRESS_SRCN_CENTER_NOTE_HIGH: u8 = 0x2A;
+/// SRCNの中央に該当するノート（基準ピッチ）の下位8bit
+pub const DSP_ADDRESS_SRCN_CENTER_NOTE_LOW: u8 = 0x2B;
+/// SRCNのボリューム値（1bitフラグ + 7bit固定ボリューム値）
+pub const DSP_ADDRESS_SRCN_VOLUME: u8 = 0x3A;
+/// SRCNのパン値（1bitフラグ + 7bit固定パン値）
+pub const DSP_ADDRESS_SRCN_PAN: u8 = 0x3B;
+/// SRCNのピッチベンドセンシティビティ（1bitフラグ + 下位ビットで半音単位で幅を指定）
+pub const DSP_ADDRESS_SRCN_PITCHBEND_SENSITIVITY: u8 = 0x4A;
+/// SRCNのリバーブセンド（1bitフラグ + 下位ビットでセンド量を指定）
+pub const DSP_ADDRESS_SRCN_REVERB_SEND: u8 = 0x4B;
+/// SRCNのコーラスセンド（下位ビットでセンド量を指定）
+pub const DSP_ADDRESS_SRCN_CHORUS_SEND: u8 = 0x5A;
+/// SRCNの出力チャンネル MSSSDDDD
 /// M: 送信元チャンネルのミュートフラグ
 /// S: 送信元SPCチャンネル
 /// D: 送信先MIDIチャンネル
-pub const DSP_ADDRESS_SRN_CHANNEL_ROUTING: u8 = 0x5B;
+pub const DSP_ADDRESS_SRCN_CHANNEL_ROUTING: u8 = 0x5B;
 /// 全体設定フラグ VV000000
 /// V: ボリュームカーブ（00: 平方根、01: 対数、10: 線形）
 pub const DSP_ADDRESS_CONFIGURE_FLAG: u8 = 0x6B;
@@ -161,7 +161,7 @@ struct MIDIVoiceRegister {
 }
 
 /// 各サンプルに対応するMIDI再生パラメータ
-struct SRNMIDIParameter {
+struct SRCNMIDIParameter {
     /// ミュートするか
     mute: bool,
     /// プログラム番号（音色）
@@ -217,7 +217,7 @@ pub struct MIDIDSP {
     /// 各チャンネルの再生状態
     channel_status: [ChannelPlaybackStatus; 16],
     /// 各サンプル番号に対応するマップ
-    sample_source_map: [SRNMIDIParameter; 256],
+    sample_source_map: [SRCNMIDIParameter; 256],
     /// 設定対象のサンプル番号
     sample_source_target: usize,
     /// エンベロープ・ボリューム・ピッチベンド更新間隔カウンタ
@@ -242,7 +242,7 @@ struct MIDIOutputWithStatusByte {
 }
 
 /// デフォルトのサンプル対応マップ
-const DEFAULT_SRN_MIDI_PARAMETER: SRNMIDIParameter = SRNMIDIParameter {
+const DEFAULT_SRCN_MIDI_PARAMETER: SRCNMIDIParameter = SRCNMIDIParameter {
     mute: false,
     program: 0,
     center_note: 64 << 9, // 中心ノートは64で仮置き
@@ -382,7 +382,7 @@ impl MIDIVoiceRegister {
         global_counter: u16,
         playback_parameter_update: bool,
         volume_curve: MIDIVolumeCurve,
-        srn_map: &[SRNMIDIParameter],
+        srn_map: &[SRCNMIDIParameter],
         channel_status: &mut [ChannelPlaybackStatus; 16],
         out: &mut MIDIOutputWithStatusByte,
     ) {
@@ -664,7 +664,7 @@ impl SPCDSP for MIDIDSP {
                 program: 0,
             }; 16],
             global_counter: 0,
-            sample_source_map: [DEFAULT_SRN_MIDI_PARAMETER; 256],
+            sample_source_map: [DEFAULT_SRCN_MIDI_PARAMETER; 256],
             sample_source_target: 0,
             playback_parameter_count: 0,
             playback_parameter_update_period: 160,
@@ -680,7 +680,7 @@ impl SPCDSP for MIDIDSP {
         *self = Self::new();
         self.playback_parameter_update_period = 160;
         self.volume_curve = MIDIVolumeCurve::SquareRoot;
-        self.sample_source_map = [DEFAULT_SRN_MIDI_PARAMETER; 256];
+        self.sample_source_map = [DEFAULT_SRCN_MIDI_PARAMETER; 256];
 
         // DIRは先に設定（初期状態でKONがある場合にアドレスを正しくするため）
         self.write_register(ram, DSP_ADDRESS_DIR, dsp_register[DSP_ADDRESS_DIR as usize]);
@@ -769,56 +769,56 @@ impl SPCDSP for MIDIDSP {
             | DSP_ADDRESS_FIR4 | DSP_ADDRESS_FIR5 | DSP_ADDRESS_FIR6 | DSP_ADDRESS_FIR7 => {
                 // 何もしない
             }
-            DSP_ADDRESS_SRN_TARGET => {
+            DSP_ADDRESS_SRCN_TARGET => {
                 self.sample_source_target = value as usize;
             }
-            DSP_ADDRESS_SRN_FLAG => {
+            DSP_ADDRESS_SRCN_FLAG => {
                 let param = &mut self.sample_source_map[self.sample_source_target];
                 param.mute = (value & 0x80) != 0;
                 param.output_envelope = (value & 0x40) != 0;
                 param.update_parameter_after_noteon = (value & 0x20) != 0;
             }
-            DSP_ADDRESS_SRN_PROGRAM => {
+            DSP_ADDRESS_SRCN_PROGRAM => {
                 self.sample_source_map[self.sample_source_target].program = value;
             }
-            DSP_ADDRESS_SRN_CENTER_NOTE_HIGH => {
+            DSP_ADDRESS_SRCN_CENTER_NOTE_HIGH => {
                 let note = self.sample_source_map[self.sample_source_target].center_note;
                 self.sample_source_map[self.sample_source_target].center_note =
                     ((value as u16) << 8) | (note & 0x00FF);
             }
-            DSP_ADDRESS_SRN_CENTER_NOTE_LOW => {
+            DSP_ADDRESS_SRCN_CENTER_NOTE_LOW => {
                 let note = self.sample_source_map[self.sample_source_target].center_note;
                 self.sample_source_map[self.sample_source_target].center_note =
                     ((value as u16) << 0) | (note & 0xFF00);
             }
-            DSP_ADDRESS_SRN_VOLUME => {
+            DSP_ADDRESS_SRCN_VOLUME => {
                 let map = &mut self.sample_source_map[self.sample_source_target];
                 map.auto_volume = (value & 0x80) != 0;
                 map.fixed_volume = value & 0x7F;
             }
-            DSP_ADDRESS_SRN_PAN => {
+            DSP_ADDRESS_SRCN_PAN => {
                 let map = &mut self.sample_source_map[self.sample_source_target];
                 map.auto_pan = (value & 0x80) != 0;
                 map.fixed_pan = value & 0x7F;
             }
-            DSP_ADDRESS_SRN_NOTEON_VELOCITY => {
+            DSP_ADDRESS_SRCN_NOTEON_VELOCITY => {
                 self.sample_source_map[self.sample_source_target].noteon_velocity = value;
             }
-            DSP_ADDRESS_SRN_PITCHBEND_SENSITIVITY => {
+            DSP_ADDRESS_SRCN_PITCHBEND_SENSITIVITY => {
                 let map = &mut self.sample_source_map[self.sample_source_target];
                 map.output_pitch_bend = (value & 0x80) != 0;
                 map.pitch_bend_sensitibity = value & 0x7F;
             }
-            DSP_ADDRESS_SRN_REVERB_SEND => {
+            DSP_ADDRESS_SRCN_REVERB_SEND => {
                 let map = &mut self.sample_source_map[self.sample_source_target];
                 map.echo_as_reverb_send = (value & 0x80) != 0;
                 map.fixed_reverb_send = value & 0x7F;
             }
-            DSP_ADDRESS_SRN_CHORUS_SEND => {
+            DSP_ADDRESS_SRCN_CHORUS_SEND => {
                 let map = &mut self.sample_source_map[self.sample_source_target];
                 map.chorus_send = value & 0x7F;
             }
-            DSP_ADDRESS_SRN_CHANNEL_ROUTING => {
+            DSP_ADDRESS_SRCN_CHANNEL_ROUTING => {
                 let ch_mute = value & 0x80;
                 let src_ch = (value >> 4) & 0x7;
                 let dst_ch = (value >> 0) & 0xF;
@@ -969,8 +969,8 @@ impl SPCDSP for MIDIDSP {
                 // 保持していた値を返す
                 self.dsp_register[(DSP_ADDRESS_FIR0 + index) as usize]
             }
-            DSP_ADDRESS_SRN_TARGET => self.sample_source_target as u8,
-            DSP_ADDRESS_SRN_FLAG => {
+            DSP_ADDRESS_SRCN_TARGET => self.sample_source_target as u8,
+            DSP_ADDRESS_SRCN_FLAG => {
                 let mut value = 0;
                 let param = &self.sample_source_map[self.sample_source_target];
                 if param.mute {
@@ -984,31 +984,31 @@ impl SPCDSP for MIDIDSP {
                 }
                 value
             }
-            DSP_ADDRESS_SRN_PROGRAM => self.sample_source_map[self.sample_source_target].program,
-            DSP_ADDRESS_SRN_CENTER_NOTE_HIGH => {
+            DSP_ADDRESS_SRCN_PROGRAM => self.sample_source_map[self.sample_source_target].program,
+            DSP_ADDRESS_SRCN_CENTER_NOTE_HIGH => {
                 ((self.sample_source_map[self.sample_source_target].center_note >> 8) & 0xFF) as u8
             }
-            DSP_ADDRESS_SRN_CENTER_NOTE_LOW => {
+            DSP_ADDRESS_SRCN_CENTER_NOTE_LOW => {
                 ((self.sample_source_map[self.sample_source_target].center_note >> 0) & 0xFF) as u8
             }
-            DSP_ADDRESS_SRN_VOLUME => {
+            DSP_ADDRESS_SRCN_VOLUME => {
                 let mut value = self.sample_source_map[self.sample_source_target].fixed_volume;
                 if self.sample_source_map[self.sample_source_target].auto_volume {
                     value |= 0x80;
                 }
                 value
             }
-            DSP_ADDRESS_SRN_PAN => {
+            DSP_ADDRESS_SRCN_PAN => {
                 let mut value = self.sample_source_map[self.sample_source_target].fixed_pan;
                 if self.sample_source_map[self.sample_source_target].auto_pan {
                     value |= 0x80;
                 }
                 value
             }
-            DSP_ADDRESS_SRN_NOTEON_VELOCITY => {
+            DSP_ADDRESS_SRCN_NOTEON_VELOCITY => {
                 self.sample_source_map[self.sample_source_target].noteon_velocity
             }
-            DSP_ADDRESS_SRN_PITCHBEND_SENSITIVITY => {
+            DSP_ADDRESS_SRCN_PITCHBEND_SENSITIVITY => {
                 let mut value =
                     self.sample_source_map[self.sample_source_target].pitch_bend_sensitibity;
                 if self.sample_source_map[self.sample_source_target].output_pitch_bend {
@@ -1016,17 +1016,17 @@ impl SPCDSP for MIDIDSP {
                 }
                 value
             }
-            DSP_ADDRESS_SRN_REVERB_SEND => {
+            DSP_ADDRESS_SRCN_REVERB_SEND => {
                 let mut value = self.sample_source_map[self.sample_source_target].fixed_reverb_send;
                 if self.sample_source_map[self.sample_source_target].echo_as_reverb_send {
                     value |= 0x80;
                 }
                 value
             }
-            DSP_ADDRESS_SRN_CHORUS_SEND => {
+            DSP_ADDRESS_SRCN_CHORUS_SEND => {
                 self.sample_source_map[self.sample_source_target].chorus_send
             }
-            DSP_ADDRESS_SRN_CHANNEL_ROUTING => {
+            DSP_ADDRESS_SRCN_CHANNEL_ROUTING => {
                 // 書き込み専用レジスタのため0を返す。どのチャンネルを設定したか不定のため
                 0
             }
