@@ -338,18 +338,22 @@ pub fn parse_spc_header(data: &[u8]) -> Option<SPCFileHeader> {
             },
             composer: data[0xB1..0xB1 + 32].try_into().unwrap(),
             initial_channel_invalid: data[0xD1],
-            emurator_type: match data[0xD2] - b'0' {
-                0x00 => EmuratorType::Unknown,
-                0x01 => EmuratorType::ZSNES,
-                0x02 => EmuratorType::Snes9x,
-                0x03 => EmuratorType::ZST2SPC,
-                0x04 => EmuratorType::Other,
-                0x05 => EmuratorType::SNEShout,
-                0x06 => EmuratorType::ZSNESW,
-                0x07 => EmuratorType::Snes9xpp,
-                0x08 => EmuratorType::SNESGT,
-                _ => {
-                    return None;
+            emurator_type: if data[0xD2] == 0 {
+                EmuratorType::Unknown
+            } else {
+                match data[0xD2] - b'0' {
+                    0x00 => EmuratorType::Unknown,
+                    0x01 => EmuratorType::ZSNES,
+                    0x02 => EmuratorType::Snes9x,
+                    0x03 => EmuratorType::ZST2SPC,
+                    0x04 => EmuratorType::Other,
+                    0x05 => EmuratorType::SNEShout,
+                    0x06 => EmuratorType::ZSNESW,
+                    0x07 => EmuratorType::Snes9xpp,
+                    0x08 => EmuratorType::SNESGT,
+                    _ => {
+                        return None;
+                    }
                 }
             },
         })
