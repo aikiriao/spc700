@@ -687,7 +687,31 @@ impl SPCDSP for MIDIDSP {
 
         // すべてのレジスタを設定
         for i in 0..128 {
-            self.write_register(ram, i, dsp_register[i as usize]);
+            match i {
+                DSP_ADDRESS_SRCN_TARGET
+                | DSP_ADDRESS_SRCN_FLAG
+                | DSP_ADDRESS_SRCN_PROGRAM
+                | DSP_ADDRESS_SRCN_CENTER_NOTE_HIGH
+                | DSP_ADDRESS_SRCN_CENTER_NOTE_LOW
+                | DSP_ADDRESS_SRCN_VOLUME
+                | DSP_ADDRESS_SRCN_PAN
+                | DSP_ADDRESS_SRCN_NOTEON_VELOCITY
+                | DSP_ADDRESS_SRCN_PITCHBEND_SENSITIVITY
+                | DSP_ADDRESS_SRCN_REVERB_SEND
+                | DSP_ADDRESS_SRCN_CHORUS_SEND
+                | DSP_ADDRESS_SRCN_CHANNEL_ROUTING
+                | DSP_ADDRESS_CONFIGURE_FLAG
+                | DSP_ADDRESS_NOTEON
+                | DSP_ADDRESS_CHANNEL_MUTE
+                | DSP_ADDRESS_PLAYBACK_PARAMETER_UPDATE_PERIOD => {
+                    // 独自追加アドレスに書き込まれると不定動作となるためメンバには書き込まない
+                    // メモリには保持
+                    self.dsp_register[i as usize] = dsp_register[i as usize];
+                }
+                _ => {
+                    self.write_register(ram, i, dsp_register[i as usize]);
+                }
+            }
         }
     }
 
