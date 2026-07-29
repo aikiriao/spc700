@@ -655,7 +655,7 @@ impl SPCDSP for MIDIDSP {
                 MIDIVoiceRegister::new(7),
             ],
             channel_status: [ChannelPlaybackStatus {
-                volume: 0,
+                volume: 100, // GM/GS/XGのよくある初期設定値
                 pan: 0,
                 reverb_send: 40, // GM/GS/XGのよくある初期設定値
                 chorus_send: 0,
