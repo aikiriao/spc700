@@ -233,7 +233,7 @@ impl SPCDSP for SDSP {
         }
 
         // エコーバッファの内容をクリア（初期のRAMに信号が残っている場合がある）
-        if self.echo_buffer_address != 0 && self.echo_buffer_size != 0 {
+        if self.echo_buffer_write_enable && self.echo_buffer_address != 0 && self.echo_buffer_size != 0 {
             for i in 0..self.echo_buffer_size {
                 ram[self.echo_buffer_address + i] = 0;
             }
