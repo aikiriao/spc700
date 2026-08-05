@@ -115,7 +115,6 @@ impl VoiceRegister {
             let factor = (prev_voice_out >> 4) as i32 + 0x400;
             pitch = (factor * pitch) >> 10;
         };
-        pitch &= 0x3FFF;
 
         // デコード
         let mut out = self.decoder.process(ram, pitch as u16);
@@ -340,11 +339,11 @@ impl SPCDSP for SDSP {
                         self.voice[ch].volume[1] = value as i8;
                     }
                     DSP_ADDRESS_V0PITCHL => {
-                        self.voice[ch].pitch = (self.voice[ch].pitch & 0xFF00) | (value as u16);
+                        self.voice[ch].pitch = ((self.voice[ch].pitch & 0xFF00) | (value as u16)) & 0x3FFF;
                     }
                     DSP_ADDRESS_V0PITCHH => {
                         self.voice[ch].pitch =
-                            ((value as u16) << 8) | (self.voice[ch].pitch & 0x00FF);
+                            (((value as u16) << 8) | (self.voice[ch].pitch & 0x00FF)) & 0x3FFF;
                     }
                     DSP_ADDRESS_V0SRCN => {
                         // デコードアドレスを更新
