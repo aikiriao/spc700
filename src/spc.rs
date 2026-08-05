@@ -973,12 +973,14 @@ where
                 cycle = 2;
             }
             SPCOprand::IndirectToA => {
-                val = self.read_ram_u8(self.reg.x as usize);
+                let address = self.get_direct_page_address(self.reg.x);
+                val = self.read_ram_u8(address);
                 self.reg.a = val;
                 cycle = 3;
             }
             SPCOprand::IndirectAutoIncrementToA => {
-                val = self.read_ram_u8(self.reg.x as usize);
+                let address = self.get_direct_page_address(self.reg.x);
+                val = self.read_ram_u8(address);
                 self.reg.a = val;
                 self.reg.x = self.reg.x.wrapping_add(1);
                 cycle = 4;
@@ -1271,7 +1273,8 @@ where
                 cycle = 2;
             }
             SPCOprand::IndirectPage => {
-                let memval = self.read_ram_u8(self.reg.x as usize);
+                let address = self.get_direct_page_address(self.reg.x);
+                let memval = self.read_ram_u8(address);
                 ret = op(self.reg.a, memval);
                 self.reg.a = ret;
                 cycle = 3;
@@ -1572,7 +1575,8 @@ where
                 cycle = 2;
             }
             SPCOprand::IndirectPage => {
-                let memval = self.read_ram_u8(self.reg.x as usize);
+                let address = self.get_direct_page_address(self.reg.x);
+                let memval = self.read_ram_u8(address);
                 (ret, nc) = cmpsub!(self.reg.a, memval);
                 cycle = 3;
             }
@@ -1740,7 +1744,8 @@ where
                 cycle = 2;
             }
             SPCOprand::IndirectPage => {
-                let memval = self.read_ram_u8(self.reg.x as usize);
+                let address = self.get_direct_page_address(self.reg.x);
+                let memval = self.read_ram_u8(address);
                 (ret, overflow, carry, half_carry) =
                     op(self.reg.a, memval, self.test_psw_flag(PSW_FLAG_C));
                 self.reg.a = ret;
