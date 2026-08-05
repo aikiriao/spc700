@@ -115,6 +115,7 @@ impl VoiceRegister {
             let factor = (prev_voice_out >> 4) as i32 + 0x400;
             pitch = (factor * pitch) >> 10;
         };
+        pitch &= 0x3FFF;
 
         // デコード
         let mut out = self.decoder.process(ram, pitch as u16);
