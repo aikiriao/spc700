@@ -339,11 +339,11 @@ impl SPCDSP for SDSP {
                         self.voice[ch].volume[1] = value as i8;
                     }
                     DSP_ADDRESS_V0PITCHL => {
-                        self.voice[ch].pitch = (self.voice[ch].pitch & 0xFF00) | (value as u16);
+                        self.voice[ch].pitch = ((self.voice[ch].pitch & 0xFF00) | (value as u16)) & 0x3FFF;
                     }
                     DSP_ADDRESS_V0PITCHH => {
                         self.voice[ch].pitch =
-                            ((value as u16) << 8) | (self.voice[ch].pitch & 0x00FF);
+                            (((value as u16) << 8) | (self.voice[ch].pitch & 0x00FF)) & 0x3FFF;
                     }
                     DSP_ADDRESS_V0SRCN => {
                         // デコードアドレスを更新
