@@ -45,6 +45,7 @@ pub const DSP_ADDRESS_SRCN_TARGET: u8 = 0x0A;
 /// M: ミュートフラグ（1ならばメッセージを出力しない）
 /// E: エンベロープをエクスプレッションとして出力
 /// U: ノートオンの後にパン・ボリューム・エクスプレッション・ピッチベンドを変えるか
+/// P: ピッチベンドがピッチベンド幅を越えたときにノートオフ・ノートオンするかどうか
 pub const DSP_ADDRESS_SRCN_FLAG: u8 = 0x0B;
 /// SRCNのプログラム番号 0x00 - 0x7FはGMと同等、0x80-0xFFはドラムキット音色+0x80
 pub const DSP_ADDRESS_SRCN_PROGRAM: u8 = 0x1A;
@@ -192,6 +193,8 @@ struct SRCNMIDIParameter {
     echo_as_reverb_send: bool,
     /// ノートオン後に再生パラメータを更新するか
     update_parameter_after_noteon: bool,
+    /// ピッチベンドがピッチベンド幅を越えたときにノートオフ・ノートオンするかどうか
+    retrigger_noteon_on_exceed_pitch_bend_width: bool,
     /// 出力先チャンネルルーティング 最上位ビットはミュートフラグ
     channel_routing: [u8; 8],
 }
@@ -258,6 +261,7 @@ const DEFAULT_SRCN_MIDI_PARAMETER: SRCNMIDIParameter = SRCNMIDIParameter {
     output_pitch_bend: true,
     echo_as_reverb_send: true,
     update_parameter_after_noteon: true,
+    retrigger_noteon_on_exceed_pitch_bend_width: true,
     channel_routing: [0, 1, 2, 3, 4, 5, 6, 7], // SPCの出力チャンネルに合わせる
 };
 
@@ -317,12 +321,15 @@ fn echovolume_to_reverb_send(echo_volume: &[i8; 2]) -> u8 {
     (echo_volume[0].unsigned_abs() as u16 + echo_volume[1].unsigned_abs() as u16) as u8 / 2
 }
 
-/// ピッチ・ピッチ基準値からピッチベンド設定値の計算
-fn pitch_to_pitch_bend(pitch: u16, pitch_base: u16, sensitivity: u8) -> u16 {
-    let max_semitone = sensitivity as f32;
-    // [-max_semitone,max_semitone]半音を[-8192,8192]に対応付ける
-    let pitchbend_ratio = libm::log2f((pitch as f32) / (pitch_base as f32)) * 12.0 / max_semitone;
-    (libm::roundf((pitchbend_ratio * 8192.0).clamp(-8192.0, 8191.0)) as i16 + 8192) as u16
+/// ピッチ・ピッチ基準値からピッチベンド比率[-1.0,1.0]を計算
+fn pitch_to_pitch_bend_ratio(pitch: u16, pitch_base: u16, sensitivity: f32) -> f32 {
+    libm::log2f((pitch as f32) / (pitch_base as f32)) * 12.0 / sensitivity
+}
+
+/// ピッチベンド比率から設定値の計算
+/// [-最大半音幅,最大半音幅]を[-8192,8192]に対応付ける
+fn pitch_bend_ratio_to_pitch_bend(pitch_bend_ratio: f32) -> u16 {
+    (libm::roundf((pitch_bend_ratio * 8192.0).clamp(-8192.0, 8191.0)) as i16 + 8192) as u16
 }
 
 impl MIDIOutputWithStatusByte {
@@ -611,22 +618,56 @@ impl MIDIVoiceRegister {
                 ch_status.pan = pan;
             }
             // ピッチベンド
-            let pitch_bend = pitch_to_pitch_bend(
-                self.pitch,
-                self.status.pitch_bend_base,
-                param.pitch_bend_sensitibity,
-            );
-            if ch_status.pitch_bend != pitch_bend && param.output_pitch_bend {
-                // 7bitを2分割
-                out.push_channel_message(
-                    mute,
-                    &[
-                        MIDIMSG_PITCH_BEND | self.status.channel,
-                        (pitch_bend & 0x7F) as u8,        // LSB
-                        ((pitch_bend >> 7) & 0x7F) as u8, // MSB
-                    ],
+            if param.output_pitch_bend {
+                let pitch_bend_ratio = pitch_to_pitch_bend_ratio(
+                    self.pitch,
+                    self.status.pitch_bend_base,
+                    param.pitch_bend_sensitibity as f32,
                 );
-                ch_status.pitch_bend = pitch_bend;
+                if param.retrigger_noteon_on_exceed_pitch_bend_width && pitch_bend_ratio.abs() > 1.0
+                {
+                    // ピッチベンドがピッチベンド幅を越えていたらノートオンを打ちなおす
+                    out.push_channel_message(
+                        mute,
+                        &[MIDIMSG_NOTE_OFF | self.status.channel, self.status.note, 0],
+                    );
+                    // ノートオン時のピッチに設定し直す
+                    out.push_channel_message(
+                        mute,
+                        &[
+                            MIDIMSG_PITCH_BEND | self.status.channel,
+                            (NOTEON_PITCH_BEND & 0x7F) as u8, // LSB
+                            ((NOTEON_PITCH_BEND >> 7) & 0x7F) as u8, // MSB
+                        ],
+                    );
+                    let note = pitch_to_note(param.center_note, self.pitch);
+                    out.push_channel_message(
+                        mute,
+                        &[
+                            MIDIMSG_NOTE_ON | self.status.channel,
+                            note,
+                            param.noteon_velocity,
+                        ],
+                    );
+                    ch_status.pitch_bend = NOTEON_PITCH_BEND;
+                    self.status.note = note;
+                    self.status.pitch_bend_base = self.pitch;
+                } else {
+                    // ピッチベンド
+                    let pitch_bend = pitch_bend_ratio_to_pitch_bend(pitch_bend_ratio);
+                    if ch_status.pitch_bend != pitch_bend {
+                        // 7bitを2分割
+                        out.push_channel_message(
+                            mute,
+                            &[
+                                MIDIMSG_PITCH_BEND | self.status.channel,
+                                (pitch_bend & 0x7F) as u8,        // LSB
+                                ((pitch_bend >> 7) & 0x7F) as u8, // MSB
+                            ],
+                        );
+                        ch_status.pitch_bend = pitch_bend;
+                    }
+                }
             }
         }
     }
@@ -801,6 +842,7 @@ impl SPCDSP for MIDIDSP {
                 param.mute = (value & 0x80) != 0;
                 param.output_envelope = (value & 0x40) != 0;
                 param.update_parameter_after_noteon = (value & 0x20) != 0;
+                param.retrigger_noteon_on_exceed_pitch_bend_width = (value & 0x10) != 0;
             }
             DSP_ADDRESS_SRCN_PROGRAM => {
                 self.sample_source_map[self.sample_source_target].program = value;
@@ -1005,6 +1047,9 @@ impl SPCDSP for MIDIDSP {
                 }
                 if param.update_parameter_after_noteon {
                     value |= 0x20;
+                }
+                if param.retrigger_noteon_on_exceed_pitch_bend_width {
+                    value |= 0x10;
                 }
                 value
             }
