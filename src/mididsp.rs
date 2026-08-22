@@ -122,6 +122,8 @@ struct ChannelPlaybackStatus {
     expression: u8,
     /// ピッチベンド
     pitch_bend: u16,
+    /// ピッチベンドセンシティビティ
+    pitch_bend_sensitibity: u8,
     /// プログラム番号
     program: u8,
 }
@@ -424,7 +426,10 @@ impl MIDIVoiceRegister {
                 // 音色が変わっていたらプログラムチェンジを送信
                 if program != ch_status.program {
                     out.push_channel_message(mute, &[MIDIMSG_PROGRAM_CHANGE | channel, program]);
-                    // ピッチベンドセンシティビティ設定
+                    ch_status.program = program;
+                }
+                // ピッチベンドセンシティビティ設定
+                if param.pitch_bend_sensitibity != ch_status.pitch_bend_sensitibity {
                     let first_byte = MIDIMSG_CONTROL_CHANGE | channel;
                     out.push_channel_message(mute, &[first_byte, MIDICC_RPN_MSB, 0x00]);
                     out.push_channel_message(mute, &[first_byte, MIDICC_RPN_LSB, 0x00]);
@@ -437,7 +442,7 @@ impl MIDIVoiceRegister {
                         ],
                     );
                     out.push_channel_message(mute, &[first_byte, MIDICC_RPN_DATA_ENTRY_MSB, 0]);
-                    ch_status.program = program;
+                    ch_status.pitch_bend_sensitibity = param.pitch_bend_sensitibity;
                 }
             }
             // ボリューム・パン
@@ -702,6 +707,7 @@ impl SPCDSP for MIDIDSP {
                 chorus_send: 0,
                 expression: 0,
                 pitch_bend: NOTEON_PITCH_BEND,
+                pitch_bend_sensitibity: 2, // GM/GS/XGのよくある初期設定値
                 program: 0,
             }; 16],
             global_counter: 0,
@@ -922,11 +928,11 @@ impl SPCDSP for MIDIDSP {
                         self.voice[ch].volume[1] = value as i8;
                     }
                     DSP_ADDRESS_V0PITCHL => {
-                        self.voice[ch].pitch = (self.voice[ch].pitch & 0xFF00) | (value as u16);
+                        self.voice[ch].pitch = ((self.voice[ch].pitch & 0xFF00) | (value as u16)) & 0x3FFF;
                     }
                     DSP_ADDRESS_V0PITCHH => {
                         self.voice[ch].pitch =
-                            ((value as u16) << 8) | (self.voice[ch].pitch & 0x00FF);
+                            (((value as u16) << 8) | (self.voice[ch].pitch & 0x00FF)) & 0x3FFF;
                     }
                     DSP_ADDRESS_V0SRCN => {
                         self.voice[ch].sample_source = value as usize;
