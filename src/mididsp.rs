@@ -4,9 +4,6 @@ use core::f32::consts::PI;
 use libm;
 use log::trace;
 
-/// パーカッションパートのチャンネル
-const MIDI_PERCUSSION_CHANNEL: u8 = 0x09;
-
 /// MIDIメッセージ：ノートオン
 const MIDIMSG_NOTE_ON: u8 = 0x90;
 /// MIDIメッセージ：ノートオフ
@@ -415,11 +412,8 @@ impl MIDIVoiceRegister {
             let param = &srn_map[self.sample_source];
             let program = param.program;
             let ch_routing = param.channel_routing[self.channel as usize];
-            let channel = if program <= 0x7F {
-                ch_routing & 0x7F
-            } else {
-                MIDI_PERCUSSION_CHANNEL
-            };
+            let channel = ch_routing & 0x7F;
+            assert!(((channel == 9) && (program >= 0x80)) || (channel != 9));
             let mute = self.ch_mute || param.mute || (ch_routing & 0x80) != 0;
             let ch_status = &mut channel_status[channel as usize];
             if program <= 0x7F {
