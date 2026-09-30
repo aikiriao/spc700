@@ -50,7 +50,7 @@ where
     /// DSP
     pub dsp: T,
     /// RAM(ARAM)
-    ram: [u8; 65536],
+    pub ram: [u8; 65536],
     /// CPU入力ポート（未使用！）
     cpu_port_in: [u8; 4],
     /// CPU出力ポート（未使用！）
