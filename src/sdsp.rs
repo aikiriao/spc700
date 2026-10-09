@@ -3,6 +3,13 @@ use crate::eg::*;
 use crate::types::*;
 use log::trace;
 
+/// 各サンプルに対応する追加再生パラメータ
+#[derive(Copy, Clone, Debug)]
+struct SRCNParameter {
+    /// ミュートするか
+    mute: bool,
+}
+
 /// ボイス
 #[derive(Copy, Clone, Debug)]
 struct VoiceRegister {
@@ -69,7 +76,14 @@ pub struct SDSP {
     global_counter: u16,
     /// 各チャンネルのボイス
     voice: [VoiceRegister; 8],
+    /// 設定対象のサンプル番号
+    sample_source_target: usize,
+    /// 各サンプル番号に対応するマップ
+    sample_source_map: [SRCNParameter; 256],
 }
+
+/// デフォルトのサンプル対応マップ
+const DEFAULT_SRCN_PARAMETER: SRCNParameter = SRCNParameter { mute: false };
 
 impl VoiceRegister {
     fn new() -> Self {
@@ -90,7 +104,7 @@ impl VoiceRegister {
     }
 
     /// 1ステレオサンプル計算
-    fn tick(&mut self, ram: &[u8], global_counter: u16, prev_voice_out: i16) -> [i16; 2] {
+    fn tick(&mut self, ram: &[u8], srn_map: &[SRCNParameter], global_counter: u16, prev_voice_out: i16) -> [i16; 2] {
         // キーオンが入ったとき
         if self.keyon {
             self.keyon = false;
@@ -118,6 +132,11 @@ impl VoiceRegister {
 
         // デコード
         let mut out = self.decoder.process(ram, pitch as u16);
+
+        // サンプル単位ミュート
+        if srn_map[self.sample_source as usize].mute {
+            out = 0;
+        }
 
         // ENDフラグがセットかつループフラグが立っていなければ即時ミュート
         if self.decoder.end {
@@ -184,7 +203,6 @@ impl SDSP {
         }
         self.echo_buffer_pos = (self.echo_buffer_pos + 4) % self.echo_buffer_size;
     }
-
 }
 
 impl SPCDSP for SDSP {
@@ -209,6 +227,8 @@ impl SPCDSP for SDSP {
             fir_buffer: [[0; 8]; 2],
             fir_buffer_pos: 0,
             voice: [VoiceRegister::new(); 8],
+            sample_source_target: 0,
+            sample_source_map: [DEFAULT_SRCN_PARAMETER; 256],
             global_counter: 0,
         }
     }
@@ -217,13 +237,21 @@ impl SPCDSP for SDSP {
     fn initialize(&mut self, ram: &mut [u8], dsp_register: &[u8; 128]) {
         // メンバ初期化
         *self = Self::new();
+        self.sample_source_map = [DEFAULT_SRCN_PARAMETER; 256];
 
         // DIRは先に設定（初期状態でKONがある場合にアドレスを正しくするため）
         self.write_register(ram, DSP_ADDRESS_DIR, dsp_register[DSP_ADDRESS_DIR as usize]);
 
         // すべてのレジスタを設定
         for i in 0..128 {
-            self.write_register(ram, i, dsp_register[i as usize]);
+            match i {
+                DSP_ADDRESS_SRCN_TARGET | DSP_ADDRESS_SRCN_FLAG => {
+                    // 独自追加アドレスに書き込まれると不定動作となるためメンバには書き込まない
+                }
+                _ => {
+                    self.write_register(ram, i, dsp_register[i as usize]);
+                }
+            }
         }
 
         // ENDXは最後に直接設定（通常の設定処理ではすべてクリアされるため）
@@ -233,7 +261,10 @@ impl SPCDSP for SDSP {
         }
 
         // エコーバッファの内容をクリア（初期のRAMに信号が残っている場合がある）
-        if self.echo_buffer_write_enable && self.echo_buffer_address != 0 && self.echo_buffer_size != 0 {
+        if self.echo_buffer_write_enable
+            && self.echo_buffer_address != 0
+            && self.echo_buffer_size != 0
+        {
             for i in 0..self.echo_buffer_size {
                 ram[self.echo_buffer_address + i] = 0;
             }
@@ -320,7 +351,8 @@ impl SPCDSP for SDSP {
                     ((value & 0x0F) as usize) << 11
                 };
             }
-            DSP_ADDRESS_FIR0 | DSP_ADDRESS_FIR1 | DSP_ADDRESS_FIR2 | DSP_ADDRESS_FIR3 | DSP_ADDRESS_FIR4 | DSP_ADDRESS_FIR5 | DSP_ADDRESS_FIR6 | DSP_ADDRESS_FIR7 => {
+            DSP_ADDRESS_FIR0 | DSP_ADDRESS_FIR1 | DSP_ADDRESS_FIR2 | DSP_ADDRESS_FIR3
+            | DSP_ADDRESS_FIR4 | DSP_ADDRESS_FIR5 | DSP_ADDRESS_FIR6 | DSP_ADDRESS_FIR7 => {
                 let index = address >> 4;
                 self.fir_coef[index as usize] = value as i8;
             }
@@ -328,6 +360,13 @@ impl SPCDSP for SDSP {
                 for ch in 0..8 {
                     self.voice[ch].ch_mute = ((value >> ch) & 0x1) != 0;
                 }
+            }
+            DSP_ADDRESS_SRCN_TARGET => {
+                self.sample_source_target = value as usize;
+            }
+            DSP_ADDRESS_SRCN_FLAG => {
+                let param = &mut self.sample_source_map[self.sample_source_target];
+                param.mute = (value & 0x80) != 0;
             }
             address if ((address & 0xF) <= 0x9) => {
                 let ch = (address >> 4) as usize;
@@ -339,7 +378,8 @@ impl SPCDSP for SDSP {
                         self.voice[ch].volume[1] = value as i8;
                     }
                     DSP_ADDRESS_V0PITCHL => {
-                        self.voice[ch].pitch = ((self.voice[ch].pitch & 0xFF00) | (value as u16)) & 0x3FFF;
+                        self.voice[ch].pitch =
+                            ((self.voice[ch].pitch & 0xFF00) | (value as u16)) & 0x3FFF;
                     }
                     DSP_ADDRESS_V0PITCHH => {
                         self.voice[ch].pitch =
@@ -478,6 +518,15 @@ impl SPCDSP for SDSP {
                 }
                 ret
             }
+            DSP_ADDRESS_SRCN_TARGET => self.sample_source_target as u8,
+            DSP_ADDRESS_SRCN_FLAG => {
+                let mut value = 0;
+                let param = &self.sample_source_map[self.sample_source_target];
+                if param.mute {
+                    value |= 0x80;
+                }
+                value
+            }
             address if ((address & 0xF) <= 0x9) => {
                 let ch = (address >> 4) as usize;
                 match address & 0xF {
@@ -509,7 +558,7 @@ impl SPCDSP for SDSP {
         let mut prev_voice_out = 0;
         // 全チャンネルの出力をミックス
         for ch in 0..8 {
-            let vout = self.voice[ch].tick(ram, self.global_counter, prev_voice_out);
+            let vout = self.voice[ch].tick(ram, &self.sample_source_map, self.global_counter, prev_voice_out);
             if !self.voice[ch].ch_mute {
                 out[0] += vout[0] as i32;
                 out[1] += vout[1] as i32;

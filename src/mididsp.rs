@@ -34,47 +34,6 @@ const MIDICC_REVERB_DEPTH: u8 = 0x5B;
 /// MIDIコントロールチェンジ：コーラスデプス
 const MIDICC_CHORUS_DEPTH: u8 = 0x5D;
 
-/// MIDI出力のための独自追加アドレス
-
-/// 設定・取得対象のサンプル番号(SRCN)
-pub const DSP_ADDRESS_SRCN_TARGET: u8 = 0x0A;
-/// SRCNのフラグ MEU00000
-/// M: ミュートフラグ（1ならばメッセージを出力しない）
-/// E: エンベロープをエクスプレッションとして出力
-/// U: ノートオンの後にパン・ボリューム・エクスプレッション・ピッチベンドを変えるか
-/// P: ピッチベンドがピッチベンド幅を越えたときにノートオフ・ノートオンするかどうか
-pub const DSP_ADDRESS_SRCN_FLAG: u8 = 0x0B;
-/// SRCNのプログラム番号 0x00 - 0x7FはGMと同等、0x80-0xFFはドラムキット音色+0x80
-pub const DSP_ADDRESS_SRCN_PROGRAM: u8 = 0x1A;
-/// SRCNのノートオンのベロシティ値
-pub const DSP_ADDRESS_SRCN_NOTEON_VELOCITY: u8 = 0x1B;
-/// SRCNの中央に該当するノート（基準ピッチ）の上位8bit
-pub const DSP_ADDRESS_SRCN_CENTER_NOTE_HIGH: u8 = 0x2A;
-/// SRCNの中央に該当するノート（基準ピッチ）の下位8bit
-pub const DSP_ADDRESS_SRCN_CENTER_NOTE_LOW: u8 = 0x2B;
-/// SRCNのボリューム値（1bitフラグ + 7bit固定ボリューム値）
-pub const DSP_ADDRESS_SRCN_VOLUME: u8 = 0x3A;
-/// SRCNのパン値（1bitフラグ + 7bit固定パン値）
-pub const DSP_ADDRESS_SRCN_PAN: u8 = 0x3B;
-/// SRCNのピッチベンドセンシティビティ（1bitフラグ + 下位ビットで半音単位で幅を指定）
-pub const DSP_ADDRESS_SRCN_PITCHBEND_SENSITIVITY: u8 = 0x4A;
-/// SRCNのリバーブセンド（1bitフラグ + 下位ビットでセンド量を指定）
-pub const DSP_ADDRESS_SRCN_REVERB_SEND: u8 = 0x4B;
-/// SRCNのコーラスセンド（下位ビットでセンド量を指定）
-pub const DSP_ADDRESS_SRCN_CHORUS_SEND: u8 = 0x5A;
-/// SRCNの出力チャンネル MSSSDDDD
-/// M: 送信元チャンネルのミュートフラグ
-/// S: 送信元SPCチャンネル
-/// D: 送信先MIDIチャンネル
-pub const DSP_ADDRESS_SRCN_CHANNEL_ROUTING: u8 = 0x5B;
-/// 全体設定フラグ VV000000
-/// V: ボリュームカーブ（00: 平方根、01: 対数、10: 線形）
-pub const DSP_ADDRESS_CONFIGURE_FLAG: u8 = 0x6B;
-/// ノートオンフラグ
-pub const DSP_ADDRESS_NOTEON: u8 = 0x7A;
-/// エンベロープ・ボリューム・ピッチベンド更新間隔(ms)
-pub const DSP_ADDRESS_PLAYBACK_PARAMETER_UPDATE_PERIOD: u8 = 0x6A;
-
 /// ノートオン時のピッチベンド設定値
 const NOTEON_PITCH_BEND: u16 = 8192;
 
