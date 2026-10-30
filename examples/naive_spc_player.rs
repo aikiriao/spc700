@@ -38,6 +38,7 @@ fn naive_play(
     let mut emu: spc700::spc::SPC<spc700::sdsp::SDSP> = SPC::new();
     emu.initialize(&register, ram, dsp_register);
     let mut cycle_count = 0;
+    let mut clock_64khz_count = 0;
 
     // 再生ストリーム作成
     let mut tmp_buffer = vec![0.0; 8192 * NUM_CHANNELS];
@@ -51,15 +52,19 @@ fn naive_play(
                     let cycle = emu.execute_step();
                     cycle_count += cycle as u32;
                     if cycle_count >= CLOCK_TICK_CYCLE_64KHZ {
-                        cycle_count -= CLOCK_TICK_CYCLE_64KHZ;
-                        if let Some(out) = emu.clock_tick_64k_hz() {
-                            let fout = [
-                                (out[0] as f32) * NORMALIZED_CONST,
-                                (out[1] as f32) * NORMALIZED_CONST,
-                            ];
-                            prod.push_interleaved(&fout);
-                            nsamples = prod.available_frames();
+                        emu.clock_tick_64k_hz();
+                        if clock_64khz_count % 2 == 0 {
+                            if let Some(out) = emu.clock_tick_dsp() {
+                                let fout = [
+                                    (out[0] as f32) * NORMALIZED_CONST,
+                                    (out[1] as f32) * NORMALIZED_CONST,
+                                ];
+                                prod.push_interleaved(&fout);
+                                nsamples = prod.available_frames();
+                            }
                         }
+                        clock_64khz_count += 1;
+                        cycle_count -= CLOCK_TICK_CYCLE_64KHZ;
                     }
                 }
 
